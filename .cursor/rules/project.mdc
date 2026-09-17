@@ -1,0 +1,15 @@
+---
+description: Project rules and tech stack guidelines for Structure Pro
+globs: *
+---
+
+# Structure Pro Guidelines
+
+## Stack
+- Next.js (App Router), TypeScript, Tailwind CSS
+- React Three Fiber, Three.js, `@react-three/drei`
+
+## Architecture Rules
+1. **Data-Driven:** All pricing, material options, and dimension limits MUST be fetched from `src/config/pricing.json`. Never hardcode prices or dimensions inside components.
+2. **Separation of Concerns:** Keep 3D scene elements (Canvas, Mesh, Lighting) in `src/components/canvas/` and 2D UI controls in `src/components/ui/`.
+3. **i18n Ready:** Keep UI strings isolated in a localization dictionary file for English/French support.

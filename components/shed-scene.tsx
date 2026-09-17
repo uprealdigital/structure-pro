@@ -1,0 +1,71 @@
+"use client";
+
+import { Canvas } from "@react-three/fiber";
+import { ContactShadows, OrbitControls } from "@react-three/drei";
+import { ShedModel } from "@/components/shed-model";
+import type { ShedConfig } from "@/lib/shed-config";
+
+type ShedSceneProps = {
+  config: ShedConfig;
+};
+
+export default function ShedScene({ config }: ShedSceneProps) {
+  return (
+    <div className="h-full w-full" role="application" aria-label="3D shed view">
+      <Canvas
+        shadows
+        className="h-full w-full"
+        camera={{
+          position: [18, 14, 28],
+          fov: 40,
+          near: 0.1,
+          far: 200,
+        }}
+      >
+        <color attach="background" args={["#e8ece8"]} />
+        <ambientLight intensity={0.55} />
+        <directionalLight
+          castShadow
+          position={[12, 18, 10]}
+          intensity={1.35}
+          shadow-mapSize-width={2048}
+          shadow-mapSize-height={2048}
+          shadow-camera-far={60}
+          shadow-camera-left={-20}
+          shadow-camera-right={20}
+          shadow-camera-top={20}
+          shadow-camera-bottom={-20}
+        />
+        <hemisphereLight args={["#f4f7fb", "#8a9488", 0.35]} />
+
+        <mesh
+          rotation={[-Math.PI / 2, 0, 0]}
+          position={[0, 0, 0]}
+          receiveShadow
+        >
+          <planeGeometry args={[80, 80]} />
+          <meshStandardMaterial color="#d5ddd4" roughness={1} metalness={0} />
+        </mesh>
+
+        <ShedModel config={config} />
+
+        <ContactShadows
+          position={[0, 0.01, 0]}
+          opacity={0.4}
+          scale={50}
+          blur={2.2}
+          far={18}
+        />
+        <OrbitControls
+          makeDefault
+          minPolarAngle={0.2}
+          maxPolarAngle={Math.PI / 2 - 0.08}
+          minDistance={8}
+          maxDistance={60}
+          target={[0, 4, 0]}
+          enableDamping
+        />
+      </Canvas>
+    </div>
+  );
+}
