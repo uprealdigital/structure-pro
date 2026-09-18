@@ -15,94 +15,11 @@
   "defaultZip": "32091",
   "styles": [
     {
-      "id": "studio",
-      "label": "Studio",
-      "productTitle": "Modern Gable Studio",
-      "pitch": 0.38,
-      "image": "https://lh3.googleusercontent.com/aida-public/AB6AXuC-7o-sniN5Fil73z4yqoYngvqseobcADvD4i8fWp9jmEnOj4FtAcmF_sp2are6itI3Lp0pVLTZBTgq7uz6M1D-ss2WTQztWlbI-M_CHCNaAtSXfah6b-z1vxRWoe-d-rIFvAGNPQKbP9c4e1UZlXU4sYIIfclE9qgJZm9ixJKNTDtjr996H51VA285GWGoBveRaq_jVK5HZDW4BdAS1x-dDaQiVVFEti_hZvxsmy0hEOy6iMooytTjloOy9wHYZmfO-5I"
-    },
-    {
-      "id": "craftsman-dutch-barn",
-      "label": "Craftsman Dutch Barn",
-      "productTitle": "Craftsman Dutch Barn",
-      "pitch": 0.72,
-      "image": "https://lh3.googleusercontent.com/aida-public/AB6AXuD-yBbwjyUxRwytpVcP7idEouR6NdIqBobKuOL6OBN4IcbnMz8z59bIchNDQCbB1RvR6CryQq-UvDUSBBfszetEoizk71kMlEq_UplydmqY7IvgKwEyHpSgAirKXNldYlFEp_dtDyxQOQZRS_ugMwc8yntD_5_CPx08JztmaM2GDSTLGHTL7TsA9EhDwODVdXDWgkNWsc0du3RLt9D_hPHDWUvUqy3L-PIg_9cjvXBstFGvMjdIVoOJRa-6EoCpzIrp6VU"
-    },
-    {
-      "id": "metal-standard-cottage",
-      "label": "Metal Standard Cottage",
-      "productTitle": "Metal Standard Cottage",
-      "pitch": 0.52,
-      "image": "https://lh3.googleusercontent.com/aida-public/AB6AXuAWoGReltAIuVEo59605gO66-v5pfaqoG1vCwIf93iKtzRQ2n-nvhwCTdhVnkJwahvHrozolvvbYOpEnx8SKcF6LK_unWR0J2yhs6U9eeOiKjWdOPs27euBQXzRaR9VCZMIpg_QT2Gc4ZTLyQnWF1CE5lXKAdVEkkcA3nB7a4_MU_axB_hmccVUUTnmxUBZPyFEqDU_Db4rrc8EVufI-VJz3hqSXyEB3FlOiwBiYbwyE99ttEHwa9x6FJYJgNXKVIiL6tE"
-    },
-    {
-      "id": "metal-dutch-barn",
-      "label": "Metal Dutch Barn",
-      "productTitle": "Metal Dutch Barn",
-      "pitch": 0.72,
-      "image": "https://lh3.googleusercontent.com/aida-public/AB6AXuBMB_TGHaSixk7iU5ci4fhnT3-3YVdTik-vFPwGSgv5SUr6fpOCnQ2KsI2e6FZUG5CX5e04hH0zTt9q92C9sV22kldP6W-jMJpVJ_KSVwzLYCtAriX5RnM8wWVdUrbQGDs4xmyZuPb-RMWZJq74MnRZ4l8hs5Jhks9w_5yiwSveGcR55p1xt5vxjpH_A8OXMQYqQz32oa8K_GYYj8v27_fhNBrxhyI1PK-wRnhCZuQANSNGQexfqYJx9ghQ8sq6D7scPZ0"
-    },
-    {
-      "id": "garden-shed",
-      "label": "Garden Shed",
-      "productTitle": "Garden Shed",
-      "pitch": 0.48,
-      "image": "https://lh3.googleusercontent.com/aida-public/AB6AXuBXnwAakabk0u0alVBLOJ3gPL91HCrMKlyXq8kdnIAPikJsACbIsrcMDOLPpWduX5kdNJyfxWLCl4c6RnOW9HQSJoLv1Vibx3hE9uEdReIXVxlHvJeAKeqUYCxgDQrg3bLXotY-r_lU1FJ-jFK4M8XasKADK4yPN7k1Q1QtvvVu90EW6uqollJCEM3Ed3eDxhfj-AM2VVR6oov5wPpCv0IuBC3Hb8zg7o1m08-ljFoR0hrL8QwpndZWcdZ1_bXMBIjxGJ0"
-    },
-    {
-      "id": "mini-barn",
-      "label": "Mini Barn",
-      "productTitle": "Mini Barn",
-      "pitch": 0.68,
-      "image": "https://lh3.googleusercontent.com/aida-public/AB6AXuBj_wBqfAIWxqKI6q5-b3GB1_vvjdzKBsFkAJ41PTc_YgDh8us_DljjEEB49CcbKVeJpgkjI8uHUz43feldxWhFoHCqmeTykd09fLlMOlnRud9RuZB3OqPtzxDSXY9Wdr_aQFk-v2LhXEdu7bOf-f4nYw3TLZV57NGXJ1k_G6CGl3Yq2mNqRGMkMdAgeBGH0Cf8a9xfLH_6Sw4szU2J6CeatDjgN5Va4sMolqaFWq6FeYdEQmT71ECqkLo0Shp9K72Zb5s"
-    },
-    {
-      "id": "craftsman-wood-cottage",
-      "label": "Craftsman Wood Cottage",
-      "productTitle": "Craftsman Wood Cottage",
-      "pitch": 0.5,
-      "image": "https://lh3.googleusercontent.com/aida-public/AB6AXuCMeIaZyuaY0zJEoGzdbIWWextF4_Beo19tV-wGh910S1ZZm5Y5FNUD0Z_Tx7XMdJQSAUt-dXeoMWr30mALRqmgq05ayIiAuEZtP4Qzlkba6nCjEaX8Ppj04TcZcUc6tSuCMJyPuIrjCgeEN62qO7VBEbRrKnxH6IDVJM3Nso6q6Ye4nhZT1rYH1EYZbRyLbD0BUwPveEUDR5YhwvHxKTIu_LleuV5ytm-aUNDsdk56Y5PyTgdOfZy4yijiqbXIO2nAu7c"
-    },
-    {
-      "id": "craftsman-cottage-porch",
-      "label": "Craftsman Cottage with Porch",
-      "productTitle": "Craftsman Cottage with Porch",
-      "pitch": 0.5,
-      "image": "https://lh3.googleusercontent.com/aida-public/AB6AXuAeQPKlAFv1L2fjUVIxUfGWNwxuLTRCpwAu9eHhOkFOqFLfnp_CmlSPz46qjFEZ4XdsY-vKrzyBtadVOZJl3iqqNiAhh4J16imxVtU_Fexz9oLE-_sUEn4tISl6c2p5NaBhRxVoe433KH7HtrdYxjjyaOooP4zxIFkr3Ly5fQmcBeeCnRGAyQjwExuppTpRJQYA6JCrtnTyrUmXBK0GW7W8_VzaelzzdXzo8g3m9fC5msmuJLf1kL5OnzdEauPpcZZOw2k"
-    },
-    {
-      "id": "craftsman-cottage-deluxe-porch",
-      "label": "Craftsman Cottage with Deluxe Porch",
-      "productTitle": "Craftsman Cottage with Deluxe Porch",
-      "pitch": 0.5,
-      "image": "https://lh3.googleusercontent.com/aida-public/AB6AXuB4gk7UObJqwmfUA8tytNcOlcJKCeFCa6B2nK2utIQV0VSmtnnr4hDLYiNn1pYDzuv52aaKpecudy44I44P07YUI9lkaoPc45_HVtqwnjV0mr0hq_r8Jcf_5Kmbahp76qQzC8Jsk6NI3UO1zR8FPbML2GvqWkRPivD3gsxzZLWbAvEuM5MwqDnYU3T7maBmiPFGdgjJE7I-x0LoyAeTC7glPZzY0lot66L1ytjB5g74KGJvWOSaBd05vlPXPj9loBN-oKI"
-    },
-    {
-      "id": "craftsman-barn-deluxe-porch",
-      "label": "Craftsman Barn with Deluxe Porch",
-      "productTitle": "Craftsman Barn with Deluxe Porch",
-      "pitch": 0.7,
-      "image": "https://lh3.googleusercontent.com/aida-public/AB6AXuD8oiH1riz2QuommvddMKFqIMOoW6w50D5TPVxGFvuR1RAIGGlYFOANy_Uz4xne8IE5yUg_vGNYcWfCZdQHq0tBat-Ii9qpMQlAVEoPrVlvSrRwNhvNVTAmcZ2XSrSATTrLe7bzCm5KOkrud70MIlJMiPE25SfRjBZyLwydBm9Om4ZMbTECFR3MintgpowUE8dn-hZ6xADKCx2Kl1leCUixuzG82gYetiyh8aLoDLn68FtP1XeO5u_fRqlDUm--U9IlZtY"
-    },
-    {
-      "id": "chalet",
-      "label": "Chalet",
-      "productTitle": "Chalet",
-      "pitch": 0.62,
-      "image": "https://lh3.googleusercontent.com/aida-public/AB6AXuCX2r7uLIW1uXkHovjyEyBIDy0GpIZBWri0rnPwyH3pMUOomvb2DUPRWF-dE0UORO0L2OxQz7iF5bivLxZ3BT9YY_mrFpEYpwQaJb4-lP5IaJo0s7qREFhRts9RuaMcC6xeyuixskrK2M8NkgIJxPGVYQZHI5tkSnUHnk6OkjjiDL4VPMntfmPHeQwO36nyPuYU0aI8b1CtH7PUFZJLpTTBES8tXtKciNOlUChlH_o7dVII-zITvDDB7B7NDaSdrVYCy30"
-    },
-    {
-      "id": "barn-porch",
-      "label": "Barn with Porch",
-      "productTitle": "Barn with Porch",
-      "pitch": 0.68,
-      "image": "https://lh3.googleusercontent.com/aida-public/AB6AXuDVvzVeBbzIoSvhNU-pVuix9lRNVxaf2pEuo47X8DGriHy1ZvJTUAOtJvIh0xT9LpCjBQtPdPzkKhGn06dVd5IM4FmjAwEk7K6HLx33RBitc2Uk6u5pFgc5IvQlvu1HMcqJrx5ZVlTXiOhzUxYXgNSge3x_npRIWShHE9d1NgiHRR1UScFsrGY0M3jfqOfS-R_DFoPPGFgVY4nm-LI0ef5yAesyHrexWB98llN5Vi_RY3P3DodXbdKsqXbiO6okInWK7hc"
-    },
-    {
       "id": "value-shed",
       "label": "Value Shed",
       "productTitle": "Value Shed",
       "pitch": 0.45,
+      "roofShape": "gable",
       "image": "https://lh3.googleusercontent.com/aida-public/AB6AXuCDXxuxswbLWiioGe2OtXSofCX_C23hpPlRtxlLjZfhJfjweo52_h2nUle1RTGzGMW-pscTv7DEy_yzJCsKPbjiuxnZTIe-FxxDMeWF4GypZUQjCLM_J8RkWMucsgdLlPm_5osig9--9c0QoJG6Ewi1FcPt2iQrJfFtNRQTzgf9ts4QHvxScTCEjoOnCKLAVFOWmKrRmoiRqW19-tO9UvJyoy_OSNValMRV7NVnVIkEf34BFRcD5Ni2YqCbjrRr_OV1hR4"
     },
     {
@@ -110,7 +27,106 @@
       "label": "Value Barn",
       "productTitle": "Value Barn",
       "pitch": 0.68,
+      "roofShape": "gambrel",
+      "breakRatio": 0.5,
+      "breakLift": 1.65,
       "image": "https://lh3.googleusercontent.com/aida-public/AB6AXuCjcoTA7wjI0-PGZgtGIgqcaWYKjDg8xRMEOVzRIuOb5Xq2Ty0JFI6i4B-D0Q6Ed7r_OnJKLvB6OLYghzoqLhE_lpd75k0ceAqTx36NvpByBPZ3f7FwSXp90wlUMmzM_qeZxK8CxMKmqdFFfRAAXbtN_PBVTZr44qBh0XCIixYJI4qrLNfAeWLhgbmL-lLSCULgfVVdsdgbKTFb0EFYI3NXOUU8ueyjgn-Db1SnZtGaXkNWvK547pTXBiYlBTFPqDeHet0"
+    },
+    {
+      "id": "studio",
+      "label": "Studio",
+      "productTitle": "Modern Gable Studio",
+      "pitch": 0.38,
+      "roofShape": "gable",
+      "image": "https://lh3.googleusercontent.com/aida-public/AB6AXuC-7o-sniN5Fil73z4yqoYngvqseobcADvD4i8fWp9jmEnOj4FtAcmF_sp2are6itI3Lp0pVLTZBTgq7uz6M1D-ss2WTQztWlbI-M_CHCNaAtSXfah6b-z1vxRWoe-d-rIFvAGNPQKbP9c4e1UZlXU4sYIIfclE9qgJZm9ixJKNTDtjr996H51VA285GWGoBveRaq_jVK5HZDW4BdAS1x-dDaQiVVFEti_hZvxsmy0hEOy6iMooytTjloOy9wHYZmfO-5I"
+    },
+    {
+      "id": "craftsman-dutch-barn",
+      "label": "Craftsman Dutch Barn",
+      "productTitle": "Craftsman Dutch Barn",
+      "pitch": 0.72,
+      "roofShape": "gable",
+      "image": "https://lh3.googleusercontent.com/aida-public/AB6AXuD-yBbwjyUxRwytpVcP7idEouR6NdIqBobKuOL6OBN4IcbnMz8z59bIchNDQCbB1RvR6CryQq-UvDUSBBfszetEoizk71kMlEq_UplydmqY7IvgKwEyHpSgAirKXNldYlFEp_dtDyxQOQZRS_ugMwc8yntD_5_CPx08JztmaM2GDSTLGHTL7TsA9EhDwODVdXDWgkNWsc0du3RLt9D_hPHDWUvUqy3L-PIg_9cjvXBstFGvMjdIVoOJRa-6EoCpzIrp6VU"
+    },
+    {
+      "id": "metal-standard-cottage",
+      "label": "Metal Standard Cottage",
+      "productTitle": "Metal Standard Cottage",
+      "pitch": 0.52,
+      "roofShape": "gable",
+      "image": "https://lh3.googleusercontent.com/aida-public/AB6AXuAWoGReltAIuVEo59605gO66-v5pfaqoG1vCwIf93iKtzRQ2n-nvhwCTdhVnkJwahvHrozolvvbYOpEnx8SKcF6LK_unWR0J2yhs6U9eeOiKjWdOPs27euBQXzRaR9VCZMIpg_QT2Gc4ZTLyQnWF1CE5lXKAdVEkkcA3nB7a4_MU_axB_hmccVUUTnmxUBZPyFEqDU_Db4rrc8EVufI-VJz3hqSXyEB3FlOiwBiYbwyE99ttEHwa9x6FJYJgNXKVIiL6tE"
+    },
+    {
+      "id": "metal-dutch-barn",
+      "label": "Metal Dutch Barn",
+      "productTitle": "Metal Dutch Barn",
+      "pitch": 0.72,
+      "roofShape": "gable",
+      "image": "https://lh3.googleusercontent.com/aida-public/AB6AXuBMB_TGHaSixk7iU5ci4fhnT3-3YVdTik-vFPwGSgv5SUr6fpOCnQ2KsI2e6FZUG5CX5e04hH0zTt9q92C9sV22kldP6W-jMJpVJ_KSVwzLYCtAriX5RnM8wWVdUrbQGDs4xmyZuPb-RMWZJq74MnRZ4l8hs5Jhks9w_5yiwSveGcR55p1xt5vxjpH_A8OXMQYqQz32oa8K_GYYj8v27_fhNBrxhyI1PK-wRnhCZuQANSNGQexfqYJx9ghQ8sq6D7scPZ0"
+    },
+    {
+      "id": "garden-shed",
+      "label": "Garden Shed",
+      "productTitle": "Garden Shed",
+      "pitch": 0.48,
+      "roofShape": "gable",
+      "image": "https://lh3.googleusercontent.com/aida-public/AB6AXuBXnwAakabk0u0alVBLOJ3gPL91HCrMKlyXq8kdnIAPikJsACbIsrcMDOLPpWduX5kdNJyfxWLCl4c6RnOW9HQSJoLv1Vibx3hE9uEdReIXVxlHvJeAKeqUYCxgDQrg3bLXotY-r_lU1FJ-jFK4M8XasKADK4yPN7k1Q1QtvvVu90EW6uqollJCEM3Ed3eDxhfj-AM2VVR6oov5wPpCv0IuBC3Hb8zg7o1m08-ljFoR0hrL8QwpndZWcdZ1_bXMBIjxGJ0"
+    },
+    {
+      "id": "mini-barn",
+      "label": "Mini Barn",
+      "productTitle": "Mini Barn",
+      "pitch": 0.68,
+      "roofShape": "gable",
+      "image": "https://lh3.googleusercontent.com/aida-public/AB6AXuBj_wBqfAIWxqKI6q5-b3GB1_vvjdzKBsFkAJ41PTc_YgDh8us_DljjEEB49CcbKVeJpgkjI8uHUz43feldxWhFoHCqmeTykd09fLlMOlnRud9RuZB3OqPtzxDSXY9Wdr_aQFk-v2LhXEdu7bOf-f4nYw3TLZV57NGXJ1k_G6CGl3Yq2mNqRGMkMdAgeBGH0Cf8a9xfLH_6Sw4szU2J6CeatDjgN5Va4sMolqaFWq6FeYdEQmT71ECqkLo0Shp9K72Zb5s"
+    },
+    {
+      "id": "craftsman-wood-cottage",
+      "label": "Craftsman Wood Cottage",
+      "productTitle": "Craftsman Wood Cottage",
+      "pitch": 0.5,
+      "roofShape": "gable",
+      "image": "https://lh3.googleusercontent.com/aida-public/AB6AXuCMeIaZyuaY0zJEoGzdbIWWextF4_Beo19tV-wGh910S1ZZm5Y5FNUD0Z_Tx7XMdJQSAUt-dXeoMWr30mALRqmgq05ayIiAuEZtP4Qzlkba6nCjEaX8Ppj04TcZcUc6tSuCMJyPuIrjCgeEN62qO7VBEbRrKnxH6IDVJM3Nso6q6Ye4nhZT1rYH1EYZbRyLbD0BUwPveEUDR5YhwvHxKTIu_LleuV5ytm-aUNDsdk56Y5PyTgdOfZy4yijiqbXIO2nAu7c"
+    },
+    {
+      "id": "craftsman-cottage-porch",
+      "label": "Craftsman Cottage with Porch",
+      "productTitle": "Craftsman Cottage with Porch",
+      "pitch": 0.5,
+      "roofShape": "gable",
+      "image": "https://lh3.googleusercontent.com/aida-public/AB6AXuAeQPKlAFv1L2fjUVIxUfGWNwxuLTRCpwAu9eHhOkFOqFLfnp_CmlSPz46qjFEZ4XdsY-vKrzyBtadVOZJl3iqqNiAhh4J16imxVtU_Fexz9oLE-_sUEn4tISl6c2p5NaBhRxVoe433KH7HtrdYxjjyaOooP4zxIFkr3Ly5fQmcBeeCnRGAyQjwExuppTpRJQYA6JCrtnTyrUmXBK0GW7W8_VzaelzzdXzo8g3m9fC5msmuJLf1kL5OnzdEauPpcZZOw2k"
+    },
+    {
+      "id": "craftsman-cottage-deluxe-porch",
+      "label": "Craftsman Cottage with Deluxe Porch",
+      "productTitle": "Craftsman Cottage with Deluxe Porch",
+      "pitch": 0.5,
+      "roofShape": "gable",
+      "image": "https://lh3.googleusercontent.com/aida-public/AB6AXuB4gk7UObJqwmfUA8tytNcOlcJKCeFCa6B2nK2utIQV0VSmtnnr4hDLYiNn1pYDzuv52aaKpecudy44I44P07YUI9lkaoPc45_HVtqwnjV0mr0hq_r8Jcf_5Kmbahp76qQzC8Jsk6NI3UO1zR8FPbML2GvqWkRPivD3gsxzZLWbAvEuM5MwqDnYU3T7maBmiPFGdgjJE7I-x0LoyAeTC7glPZzY0lot66L1ytjB5g74KGJvWOSaBd05vlPXPj9loBN-oKI"
+    },
+    {
+      "id": "craftsman-barn-deluxe-porch",
+      "label": "Craftsman Barn with Deluxe Porch",
+      "productTitle": "Craftsman Barn with Deluxe Porch",
+      "pitch": 0.7,
+      "roofShape": "gable",
+      "image": "https://lh3.googleusercontent.com/aida-public/AB6AXuD8oiH1riz2QuommvddMKFqIMOoW6w50D5TPVxGFvuR1RAIGGlYFOANy_Uz4xne8IE5yUg_vGNYcWfCZdQHq0tBat-Ii9qpMQlAVEoPrVlvSrRwNhvNVTAmcZ2XSrSATTrLe7bzCm5KOkrud70MIlJMiPE25SfRjBZyLwydBm9Om4ZMbTECFR3MintgpowUE8dn-hZ6xADKCx2Kl1leCUixuzG82gYetiyh8aLoDLn68FtP1XeO5u_fRqlDUm--U9IlZtY"
+    },
+    {
+      "id": "chalet",
+      "label": "Chalet",
+      "productTitle": "Chalet",
+      "pitch": 0.62,
+      "roofShape": "gable",
+      "image": "https://lh3.googleusercontent.com/aida-public/AB6AXuCX2r7uLIW1uXkHovjyEyBIDy0GpIZBWri0rnPwyH3pMUOomvb2DUPRWF-dE0UORO0L2OxQz7iF5bivLxZ3BT9YY_mrFpEYpwQaJb4-lP5IaJo0s7qREFhRts9RuaMcC6xeyuixskrK2M8NkgIJxPGVYQZHI5tkSnUHnk6OkjjiDL4VPMntfmPHeQwO36nyPuYU0aI8b1CtH7PUFZJLpTTBES8tXtKciNOlUChlH_o7dVII-zITvDDB7B7NDaSdrVYCy30"
+    },
+    {
+      "id": "barn-porch",
+      "label": "Barn with Porch",
+      "productTitle": "Barn with Porch",
+      "pitch": 0.68,
+      "roofShape": "gable",
+      "image": "https://lh3.googleusercontent.com/aida-public/AB6AXuDVvzVeBbzIoSvhNU-pVuix9lRNVxaf2pEuo47X8DGriHy1ZvJTUAOtJvIh0xT9LpCjBQtPdPzkKhGn06dVd5IM4FmjAwEk7K6HLx33RBitc2Uk6u5pFgc5IvQlvu1HMcqJrx5ZVlTXiOhzUxYXgNSge3x_npRIWShHE9d1NgiHRR1UScFsrGY0M3jfqOfS-R_DFoPPGFgVY4nm-LI0ef5yAesyHrexWB98llN5Vi_RY3P3DodXbdKsqXbiO6okInWK7hc"
     }
   ],
   "sizes": [
@@ -194,7 +210,7 @@
     { "id": "heavy-duty", "label": "Heavy duty floor (12\" center floor)" }
   ],
   "defaults": {
-    "styleId": "studio",
+    "styleId": "value-shed",
     "width": 12,
     "length": 16,
     "height": 8,

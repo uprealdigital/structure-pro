@@ -40,7 +40,7 @@ export default function ShedScene({ config }: ShedSceneProps) {
 
         <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0, 0]} receiveShadow>
           <planeGeometry args={[80, 80]} />
-          <meshStandardMaterial color="#dfe3e6" roughness={1} metalness={0} />
+          <shadowMaterial transparent opacity={0.35} />
         </mesh>
 
         <ShedModel config={config} />

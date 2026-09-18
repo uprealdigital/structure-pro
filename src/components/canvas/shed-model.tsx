@@ -3,7 +3,11 @@
 import { useMemo } from "react";
 import { DoubleSide, Shape } from "three";
 import {
+  gableRise,
+  gambrelBreakRise,
   getColor,
+  getGambrelParams,
+  getRoofShape,
   getRoofType,
   getSidingType,
   getStyle,
@@ -21,6 +25,58 @@ const DOOR_WIDTH = 3;
 const DOOR_HEIGHT = 6.5;
 const DOOR_THICKNESS = 0.08;
 
+type RoofPlaneSpec = {
+  x: number;
+  y: number;
+  rotation: number;
+  length: number;
+};
+
+function gableRoofPlanes(
+  halfSpan: number,
+  wallHeight: number,
+  pitch: number,
+): RoofPlaneSpec[] {
+  const rise = gableRise(halfSpan, pitch);
+  const slopeLength = halfSpan / Math.cos(pitch);
+  const midY = wallHeight + rise / 2;
+  return [
+    { x: -halfSpan / 2, y: midY, rotation: pitch, length: slopeLength },
+    { x: halfSpan / 2, y: midY, rotation: -pitch, length: slopeLength },
+  ];
+}
+
+function gambrelRoofPlanes(
+  halfSpan: number,
+  wallHeight: number,
+  pitch: number,
+  breakRatio: number,
+  breakLift: number,
+): RoofPlaneSpec[] {
+  const eaveY = wallHeight;
+  const peakY = wallHeight + gableRise(halfSpan, pitch);
+  const breakY =
+    wallHeight + gambrelBreakRise(halfSpan, pitch, breakRatio, breakLift);
+  const breakX = halfSpan * (1 - breakRatio);
+  const segments = [
+    { x1: -halfSpan, y1: eaveY, x2: -breakX, y2: breakY },
+    { x1: -breakX, y1: breakY, x2: 0, y2: peakY },
+    { x1: 0, y1: peakY, x2: breakX, y2: breakY },
+    { x1: breakX, y1: breakY, x2: halfSpan, y2: eaveY },
+  ];
+
+  return segments.map(({ x1, y1, x2, y2 }) => {
+    const dx = x2 - x1;
+    const dy = y2 - y1;
+    return {
+      x: (x1 + x2) / 2,
+      y: (y1 + y2) / 2,
+      rotation: Math.atan2(dy, dx),
+      length: Math.hypot(dx, dy),
+    };
+  });
+}
+
 export function ShedModel({ config }: ShedModelProps) {
   const { width, length, height } = config;
   const style = getStyle(config.styleId);
@@ -31,6 +87,8 @@ export function ShedModel({ config }: ShedModelProps) {
   const sidingType = getSidingType(config.sidingTypeId);
   const roofType = getRoofType(config.roofTypeId);
   const pitch = style.pitch;
+  const roofShape = getRoofShape(style);
+  const { breakRatio, breakLift } = getGambrelParams(style);
 
   const halfWidth = width / 2;
   const halfLength = length / 2;
@@ -41,19 +99,30 @@ export function ShedModel({ config }: ShedModelProps) {
 
   const roofWidth = width + OVERHANG * 2;
   const roofLength = length + OVERHANG * 2;
-  const slopeWidth = roofWidth / 2 / Math.cos(pitch);
-  const roofRise = (roofWidth / 2) * Math.tan(pitch);
-  const roofMidY = height + roofRise / 2;
-  const gableRise = halfWidth * Math.tan(pitch);
+  const roofHalf = roofWidth / 2;
+  const peakRise = gableRise(halfWidth, pitch);
+  const breakRise = gambrelBreakRise(halfWidth, pitch, breakRatio, breakLift);
+  const breakX = halfWidth * (1 - breakRatio);
 
   const gableShape = useMemo(() => {
     const shape = new Shape();
     shape.moveTo(-halfWidth, 0);
     shape.lineTo(halfWidth, 0);
-    shape.lineTo(0, gableRise);
+    if (roofShape === "gambrel") {
+      shape.lineTo(breakX, breakRise);
+      shape.lineTo(0, peakRise);
+      shape.lineTo(-breakX, breakRise);
+    } else {
+      shape.lineTo(0, peakRise);
+    }
     shape.closePath();
     return shape;
-  }, [halfWidth, gableRise]);
+  }, [breakRise, breakX, halfWidth, peakRise, roofShape]);
+
+  const roofPlanes =
+    roofShape === "gambrel"
+      ? gambrelRoofPlanes(roofHalf, height, pitch, breakRatio, breakLift)
+      : gableRoofPlanes(roofHalf, height, pitch);
 
   return (
     <group>
@@ -91,7 +160,7 @@ export function ShedModel({ config }: ShedModelProps) {
       </mesh>
 
       <mesh
-        key={`gable-front-${width}-${height}-${pitch}`}
+        key={`gable-front-${roofShape}-${width}-${height}-${pitch}-${breakRatio}-${breakLift}`}
         position={[0, height, halfLength - WALL_THICKNESS]}
         castShadow
       >
@@ -106,7 +175,7 @@ export function ShedModel({ config }: ShedModelProps) {
         />
       </mesh>
       <mesh
-        key={`gable-back-${width}-${height}-${pitch}`}
+        key={`gable-back-${roofShape}-${width}-${height}-${pitch}-${breakRatio}-${breakLift}`}
         position={[0, height, -halfLength]}
         castShadow
       >
@@ -192,32 +261,22 @@ export function ShedModel({ config }: ShedModelProps) {
         </group>
       ) : null}
 
-      <mesh
-        position={[-roofWidth / 4, roofMidY, 0]}
-        rotation={[0, 0, pitch]}
-        castShadow
-        receiveShadow
-      >
-        <boxGeometry args={[slopeWidth, ROOF_THICKNESS, roofLength]} />
-        <meshStandardMaterial
-          color={roofColor.hex}
-          metalness={roofType.metalness}
-          roughness={roofType.roughness}
-        />
-      </mesh>
-      <mesh
-        position={[roofWidth / 4, roofMidY, 0]}
-        rotation={[0, 0, -pitch]}
-        castShadow
-        receiveShadow
-      >
-        <boxGeometry args={[slopeWidth, ROOF_THICKNESS, roofLength]} />
-        <meshStandardMaterial
-          color={roofColor.hex}
-          metalness={roofType.metalness}
-          roughness={roofType.roughness}
-        />
-      </mesh>
+      {roofPlanes.map((plane, index) => (
+        <mesh
+          key={`roof-${roofShape}-${index}-${width}-${length}-${height}-${pitch}-${breakRatio}-${breakLift}`}
+          position={[plane.x, plane.y, 0]}
+          rotation={[0, 0, plane.rotation]}
+          castShadow
+          receiveShadow
+        >
+          <boxGeometry args={[plane.length, ROOF_THICKNESS, roofLength]} />
+          <meshStandardMaterial
+            color={roofColor.hex}
+            metalness={roofType.metalness}
+            roughness={roofType.roughness}
+          />
+        </mesh>
+      ))}
     </group>
   );
 }

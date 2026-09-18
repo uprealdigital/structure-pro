@@ -21,6 +21,7 @@ import {
   estimateShed,
   formatUsd,
   getStyle,
+  roofPeakHeight,
   type ShedConfig,
 } from "@/src/config/shed-config";
 
@@ -43,7 +44,7 @@ export function ShedConfigurator() {
 
   const style = getStyle(config.styleId);
   const estimate = useMemo(() => estimateShed(config), [config]);
-  const peakHeight = (config.height + (config.width / 2) * Math.tan(style.pitch)).toFixed(1);
+  const peakHeight = roofPeakHeight(style, config.height, config.width).toFixed(1);
 
   function submitPrompt() {
     const result = applyAssistantPrompt(config, prompt);
@@ -55,8 +56,21 @@ export function ShedConfigurator() {
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden lg:flex-row">
       <section className="studio-viewport relative flex min-h-[50vh] flex-1 flex-col overflow-hidden lg:min-h-0">
         <div className="pointer-events-none absolute inset-0 opacity-60 floor-grid" />
-        <div className="relative z-20 flex items-center justify-between px-6 py-5">
-          <div className="flex items-center space-x-3">
+        <div className="relative min-h-0 flex-1">
+          <ShedScene config={config} />
+          <div className="pointer-events-none absolute top-20 left-1/2 z-10 -translate-x-1/2 rounded-full bg-black/85 px-2.5 py-0.5 font-mono text-[11px] text-white">
+            {peakHeight}&apos; Peak Height
+          </div>
+          <div className="pointer-events-none absolute right-6 bottom-24 z-10 rounded border border-gray-300 bg-white/90 px-2 py-0.5 font-mono text-[11px] text-gray-800">
+            {config.width}&apos; 0&quot; Front Length
+          </div>
+          <div className="pointer-events-none absolute bottom-36 left-6 z-10 rounded border border-gray-300 bg-white/90 px-2 py-0.5 font-mono text-[11px] text-gray-800">
+            {config.length}&apos; 0&quot; Studio Depth
+          </div>
+        </div>
+
+        <div className="pointer-events-none absolute inset-x-0 top-0 z-20 flex items-center justify-between px-6 py-5">
+          <div className="pointer-events-auto flex items-center space-x-3">
             <div className="rounded-sm bg-black p-2 font-serif text-base leading-none font-bold tracking-widest text-white shadow-md">
               {CATALOG.brand.mark}
             </div>
@@ -69,7 +83,7 @@ export function ShedConfigurator() {
               </span>
             </div>
           </div>
-          <div className="flex items-center space-x-2.5">
+          <div className="pointer-events-auto flex items-center space-x-2.5">
             <IconButton
               label="Fullscreen"
               onClick={() => void document.documentElement.requestFullscreen()}
@@ -99,19 +113,6 @@ export function ShedConfigurator() {
             <IconButton label="Save">
               <Heart className="h-4 w-4" />
             </IconButton>
-          </div>
-        </div>
-
-        <div className="relative min-h-0 flex-1">
-          <ShedScene config={config} />
-          <div className="pointer-events-none absolute top-3 left-1/2 z-10 -translate-x-1/2 rounded-full bg-black/85 px-2.5 py-0.5 font-mono text-[11px] text-white">
-            {peakHeight}&apos; Peak Height
-          </div>
-          <div className="pointer-events-none absolute right-6 bottom-24 z-10 rounded border border-gray-300 bg-white/90 px-2 py-0.5 font-mono text-[11px] text-gray-800">
-            {config.width}&apos; 0&quot; Front Length
-          </div>
-          <div className="pointer-events-none absolute bottom-36 left-6 z-10 rounded border border-gray-300 bg-white/90 px-2 py-0.5 font-mono text-[11px] text-gray-800">
-            {config.length}&apos; 0&quot; Studio Depth
           </div>
         </div>
 
