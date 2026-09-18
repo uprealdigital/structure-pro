@@ -1,104 +1,182 @@
-export const SIZE_RANGES = {
-  width: { min: 6, max: 16, step: 1 },
-  length: { min: 8, max: 20, step: 1 },
-  height: { min: 7, max: 10, step: 1 },
-} as const;
+import catalog from "@/src/config/pricing.json";
 
-export type SidingId = "white-vinyl" | "barn-red" | "cedar" | "charcoal";
-export type RoofId = "charcoal-shingle" | "evergreen-metal" | "tan";
-
-export type SidingOption = {
-  id: SidingId;
-  label: string;
-  color: string;
-  roughness: number;
-};
-
-export type RoofOption = {
-  id: RoofId;
-  label: string;
-  color: string;
-  metalness: number;
-  roughness: number;
-};
+export type StyleOption = (typeof catalog.styles)[number];
+export type ColorOption = (typeof catalog.colors)[number];
+export type SidingType = (typeof catalog.sidingTypes)[number];
+export type RoofType = (typeof catalog.roofTypes)[number];
+export type DoorStyle = "single" | "double" | "none";
 
 export type ShedConfig = {
+  styleId: string;
   width: number;
   length: number;
   height: number;
-  sidingId: SidingId;
-  roofId: RoofId;
+  sidingTypeId: string;
+  roofTypeId: string;
+  sidingColorId: string;
+  trimColorId: string;
+  roofColorId: string;
+  shutterColorId: string;
+  flooringId: string;
+  hasLoft: boolean;
+  hasWindow: boolean;
+  doorStyle: DoorStyle;
+  wallFace: "front" | "left" | "back" | "right";
 };
 
-export const SIDING_OPTIONS: readonly SidingOption[] = [
-  {
-    id: "white-vinyl",
-    label: "White vinyl",
-    color: "#f4f1ea",
-    roughness: 0.62,
-  },
-  {
-    id: "barn-red",
-    label: "Barn red",
-    color: "#8b2e2e",
-    roughness: 0.68,
-  },
-  {
-    id: "cedar",
-    label: "Cedar",
-    color: "#c4784a",
-    roughness: 0.82,
-  },
-  {
-    id: "charcoal",
-    label: "Charcoal",
-    color: "#3a3d42",
-    roughness: 0.58,
-  },
-];
-
-export const ROOF_OPTIONS: readonly RoofOption[] = [
-  {
-    id: "charcoal-shingle",
-    label: "Charcoal shingle",
-    color: "#2f3238",
-    metalness: 0.04,
-    roughness: 0.92,
-  },
-  {
-    id: "evergreen-metal",
-    label: "Evergreen metal",
-    color: "#2d5a45",
-    metalness: 0.72,
-    roughness: 0.32,
-  },
-  {
-    id: "tan",
-    label: "Tan",
-    color: "#c4a574",
-    metalness: 0.12,
-    roughness: 0.78,
-  },
-];
+export const CATALOG = catalog;
 
 export const DEFAULT_SHED_CONFIG: ShedConfig = {
-  width: 10,
-  length: 12,
-  height: 8,
-  sidingId: "cedar",
-  roofId: "charcoal-shingle",
+  ...catalog.defaults,
+  doorStyle: catalog.defaults.doorStyle as DoorStyle,
+  wallFace: catalog.defaults.wallFace as ShedConfig["wallFace"],
 };
 
-export function getSiding(id: SidingId): SidingOption {
-  return SIDING_OPTIONS.find((option) => option.id === id) ?? SIDING_OPTIONS[0];
+export function getStyle(id: string): StyleOption {
+  return catalog.styles.find((item) => item.id === id) ?? catalog.styles[0];
 }
 
-export function getRoof(id: RoofId): RoofOption {
-  return ROOF_OPTIONS.find((option) => option.id === id) ?? ROOF_OPTIONS[0];
+export function getColor(id: string): ColorOption {
+  return catalog.colors.find((item) => item.id === id) ?? catalog.colors[0];
 }
 
-export function formatShedSummary(config: ShedConfig): string {
-  const siding = getSiding(config.sidingId);
-  const roof = getRoof(config.roofId);
-  return `${config.width}×${config.length} ft · ${siding.label} · ${roof.label}`;
+export function getSidingType(id: string): SidingType {
+  return (
+    catalog.sidingTypes.find((item) => item.id === id) ?? catalog.sidingTypes[0]
+  );
+}
+
+export function getRoofType(id: string): RoofType {
+  return catalog.roofTypes.find((item) => item.id === id) ?? catalog.roofTypes[0];
+}
+
+export function getFlooring(id: string) {
+  return catalog.flooring.find((item) => item.id === id) ?? catalog.flooring[0];
+}
+
+export function formatUsd(amount: number): string {
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+    maximumFractionDigits: 0,
+  }).format(amount);
+}
+
+export function estimateShed(config: ShedConfig) {
+  const { pricing } = catalog;
+  const base = Math.round(config.width * config.length * pricing.basePerSqFt);
+  const interior = config.hasLoft ? pricing.interior : 0;
+  const openings =
+    config.doorStyle === "none" && !config.hasWindow
+      ? 0
+      : pricing.doorsWindows;
+  const total =
+    base +
+    pricing.sidingFinish +
+    openings +
+    interior +
+    pricing.delivery;
+  const monthly = Math.round(total / 53.4);
+  const financeMonthly = Math.round(total / pricing.financeMonths);
+  const style = getStyle(config.styleId);
+  const siding = getColor(config.sidingColorId);
+  const roof = getColor(config.roofColorId);
+
+  return {
+    total,
+    monthly,
+    financeMonthly,
+    lines: [
+      {
+        label: `Base Studio (${config.width}×${config.length} ${style.productTitle})`,
+        amount: base,
+      },
+      {
+        label: `Siding & Finish (${siding.label} + ${roof.label} Roof)`,
+        amount: pricing.sidingFinish,
+      },
+      {
+        label: "Doors & Windows (Full-Lite French Glass + Casement)",
+        amount: openings,
+      },
+      { label: "Interior & Electrical Rough-in", amount: interior },
+      { label: "Delivery & Stamped Engineering", amount: pricing.delivery },
+    ],
+  };
+}
+
+export function applyAssistantPrompt(
+  config: ShedConfig,
+  prompt: string,
+): { config: ShedConfig; message: string } {
+  const text = prompt.trim().toLowerCase();
+  if (!text) {
+    return { config, message: "Tell me a color, size, roof, or style to change." };
+  }
+
+  let next = { ...config };
+  const notes: string[] = [];
+
+  const sizeMatch = text.match(/(\d{1,2})\s*[x×]\s*(\d{1,2})/);
+  if (sizeMatch) {
+    const width = Number(sizeMatch[1]);
+    const length = Number(sizeMatch[2]);
+    const size = catalog.sizes.find(
+      (item) => item.width === width && item.length === length,
+    );
+    if (size) {
+      next = { ...next, width: size.width, length: size.length };
+      notes.push(`size ${size.width}×${size.length}`);
+    }
+  }
+
+  for (const style of catalog.styles) {
+    if (text.includes(style.label.toLowerCase()) || text.includes(style.id.replace(/-/g, " "))) {
+      next = { ...next, styleId: style.id };
+      notes.push(style.label);
+      break;
+    }
+  }
+
+  if (text.includes("metal roof") || /\bmetal\b/.test(text)) {
+    next = { ...next, roofTypeId: "metal" };
+    notes.push("metal roof");
+  }
+  if (text.includes("shingle")) {
+    next = { ...next, roofTypeId: "shingle" };
+    notes.push("shingle roof");
+  }
+
+  const colorHits = [...catalog.colors]
+    .sort((a, b) => b.label.length - a.label.length)
+    .filter((color) => text.includes(color.label.toLowerCase()));
+
+  if (colorHits.length) {
+    const color = colorHits[0];
+    if (text.includes("roof")) {
+      next = { ...next, roofColorId: color.id };
+      notes.push(`${color.label} roof`);
+    } else if (text.includes("trim")) {
+      next = { ...next, trimColorId: color.id };
+      notes.push(`${color.label} trim`);
+    } else if (text.includes("shutter")) {
+      next = { ...next, shutterColorId: color.id };
+      notes.push(`${color.label} shutters`);
+    } else {
+      next = { ...next, sidingColorId: color.id };
+      notes.push(`${color.label} siding`);
+    }
+  }
+
+  if (!notes.length) {
+    return {
+      config,
+      message: "I can change style, size, siding color, trim, or roof. Try “red barn siding”.",
+    };
+  }
+
+  return {
+    config: next,
+    message: `Updated ${notes.join(", ")}.`,
+  };
 }

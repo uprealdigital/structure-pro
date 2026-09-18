@@ -1,27 +1,27 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Domine, Inter } from "next/font/google";
 import "./globals.css";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
+const inter = Inter({
+  variable: "--font-inter",
   subsets: ["latin"],
 });
 
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
+const domine = Domine({
+  variable: "--font-domine",
   subsets: ["latin"],
 });
 
 export const metadata: Metadata = {
-  title: "Structure Pro",
-  description: "Configure a shed in 3D — siding, roof, and size.",
+  title: "TimberCraft 3D Studio",
+  description: "Configure a shed in 3D — style, siding, roof, and size.",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html
       lang="en"
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+      className={`${inter.variable} ${domine.variable} h-full antialiased`}
     >
       <body className="flex h-full min-h-full flex-col">{children}</body>
     </html>

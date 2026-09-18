@@ -1,4 +1,4 @@
-import { ShedConfigurator } from "@/components/shed-configurator";
+import { ShedConfigurator } from "@/src/components/ui/shed-configurator";
 
 export default function Home() {
   return (

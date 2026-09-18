@@ -2,8 +2,8 @@
 
 import { Canvas } from "@react-three/fiber";
 import { ContactShadows, OrbitControls } from "@react-three/drei";
-import { ShedModel } from "@/components/shed-model";
-import type { ShedConfig } from "@/lib/shed-config";
+import { ShedModel } from "@/src/components/canvas/shed-model";
+import type { ShedConfig } from "@/src/config/shed-config";
 
 type ShedSceneProps = {
   config: ShedConfig;
@@ -16,13 +16,13 @@ export default function ShedScene({ config }: ShedSceneProps) {
         shadows
         className="h-full w-full"
         camera={{
-          position: [18, 14, 28],
+          position: [20, 12, 24],
           fov: 40,
           near: 0.1,
           far: 200,
         }}
       >
-        <color attach="background" args={["#e8ece8"]} />
+        <color attach="background" args={["#e6e8ea"]} />
         <ambientLight intensity={0.55} />
         <directionalLight
           castShadow
@@ -38,13 +38,9 @@ export default function ShedScene({ config }: ShedSceneProps) {
         />
         <hemisphereLight args={["#f4f7fb", "#8a9488", 0.35]} />
 
-        <mesh
-          rotation={[-Math.PI / 2, 0, 0]}
-          position={[0, 0, 0]}
-          receiveShadow
-        >
+        <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0, 0]} receiveShadow>
           <planeGeometry args={[80, 80]} />
-          <meshStandardMaterial color="#d5ddd4" roughness={1} metalness={0} />
+          <meshStandardMaterial color="#dfe3e6" roughness={1} metalness={0} />
         </mesh>
 
         <ShedModel config={config} />
