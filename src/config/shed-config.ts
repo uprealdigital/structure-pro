@@ -50,8 +50,86 @@ export function getSidingType(id: string): SidingType {
   );
 }
 
+export type SidingMaps = {
+  albedo: string;
+  normal: string;
+  roughness: string;
+  metalness: string;
+};
+
+export function getSidingMaps(type: SidingType): SidingMaps | null {
+  if (!("maps" in type) || !type.maps) {
+    return null;
+  }
+  return type.maps;
+}
+
+export function getSidingTileFeet(type: SidingType): [number, number] {
+  if (
+    "tileFeet" in type &&
+    Array.isArray(type.tileFeet) &&
+    type.tileFeet.length === 2
+  ) {
+    return [type.tileFeet[0], type.tileFeet[1]];
+  }
+  return [4, 4];
+}
+
+export function getSidingMetalness(type: SidingType): number {
+  return "metalness" in type && typeof type.metalness === "number"
+    ? type.metalness
+    : 0.04;
+}
+
+export function getSidingNormalScale(type: SidingType): [number, number] {
+  if (
+    "normalScale" in type &&
+    Array.isArray(type.normalScale) &&
+    type.normalScale.length === 2
+  ) {
+    return [type.normalScale[0], type.normalScale[1]];
+  }
+  return [1, 1];
+}
+
 export function getRoofType(id: string): RoofType {
   return catalog.roofTypes.find((item) => item.id === id) ?? catalog.roofTypes[0];
+}
+
+export type RoofMaps = {
+  albedo: string;
+  normal: string;
+  ao: string;
+  height: string;
+};
+
+export function getRoofMaps(type: RoofType): RoofMaps | null {
+  if (!("maps" in type) || !type.maps) {
+    return null;
+  }
+  return type.maps;
+}
+
+export function getRoofTileFeet(type: RoofType): [number, number] {
+  if (
+    "tileFeet" in type &&
+    Array.isArray(type.tileFeet) &&
+    type.tileFeet.length === 2
+  ) {
+    return [type.tileFeet[0], type.tileFeet[1]];
+  }
+  return [4, 4];
+}
+
+export function getRoofNormalScale(type: RoofType): [number, number] {
+  if (
+    "normalScale" in type &&
+    Array.isArray(type.normalScale) &&
+    type.normalScale.length === 2
+  ) {
+    return [type.normalScale[0], type.normalScale[1]];
+  }
+  return [1, 1];
 }
 
 export function getFlooring(id: string) {
@@ -116,7 +194,16 @@ export function formatUsd(amount: number): string {
 
 export function estimateShed(config: ShedConfig) {
   const { pricing } = catalog;
-  const base = Math.round(config.width * config.length * pricing.basePerSqFt);
+  const style = getStyle(config.styleId);
+  const perSqFt =
+    "basePerSqFt" in style && typeof style.basePerSqFt === "number"
+      ? style.basePerSqFt
+      : pricing.basePerSqFt;
+  const styleAdjustment =
+    "baseAdjustment" in style && typeof style.baseAdjustment === "number"
+      ? style.baseAdjustment
+      : 0;
+  const base = Math.round(config.width * config.length * perSqFt) + styleAdjustment;
   const interior = config.hasLoft ? pricing.interior : 0;
   const openings =
     config.doorStyle === "none" && !config.hasWindow
@@ -130,7 +217,6 @@ export function estimateShed(config: ShedConfig) {
     pricing.delivery;
   const monthly = Math.round(total / 53.4);
   const financeMonthly = Math.round(total / pricing.financeMonths);
-  const style = getStyle(config.styleId);
   const siding = getColor(config.sidingColorId);
   const roof = getColor(config.roofColorId);
 

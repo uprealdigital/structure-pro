@@ -18,6 +18,7 @@
       "id": "value-shed",
       "label": "Value Shed",
       "productTitle": "Value Shed",
+      "basePerSqFt": 52.5,
       "pitch": 0.45,
       "roofShape": "gable",
       "image": "https://lh3.googleusercontent.com/aida-public/AB6AXuCDXxuxswbLWiioGe2OtXSofCX_C23hpPlRtxlLjZfhJfjweo52_h2nUle1RTGzGMW-pscTv7DEy_yzJCsKPbjiuxnZTIe-FxxDMeWF4GypZUQjCLM_J8RkWMucsgdLlPm_5osig9--9c0QoJG6Ewi1FcPt2iQrJfFtNRQTzgf9ts4QHvxScTCEjoOnCKLAVFOWmKrRmoiRqW19-tO9UvJyoy_OSNValMRV7NVnVIkEf34BFRcD5Ni2YqCbjrRr_OV1hR4"
@@ -26,6 +27,7 @@
       "id": "value-barn",
       "label": "Value Barn",
       "productTitle": "Value Barn",
+      "baseAdjustment": 2000,
       "pitch": 0.68,
       "roofShape": "gambrel",
       "breakRatio": 0.5,
@@ -152,7 +154,16 @@
     {
       "id": "lp-smart",
       "label": "LP Smart",
-      "roughness": 0.62,
+      "roughness": 1,
+      "metalness": 1,
+      "normalScale": [2, 2],
+      "tileFeet": [4, 4],
+      "maps": {
+        "albedo": "/textures/siding/LP%20Smart/LP%20Smart%20Siding_Basecolor.png",
+        "normal": "/textures/siding/LP%20Smart/LP%20Smart%20Siding_Normal.png",
+        "roughness": "/textures/siding/LP%20Smart/LP%20Smart%20Siding_Specularroughness.png",
+        "metalness": "/textures/siding/LP%20Smart/LP%20Smart%20Siding_Basemetalness.png"
+      },
       "image": "https://lh3.googleusercontent.com/aida-public/AB6AXuAl9XHuRPkvQQNAg7fnzgsLs-y2u5yLX5NDt_ZMdsW8G8sIALRNbPfqPjmvmUTtMtyj6ssvv9jbhjCxkl0Mpzv9hmv9AvVgELcVCRCWpVSzH1NNsN6peQ_K0_ADKkHMwYhaAagqmCzs1JJpeS8NWjpH4T3-0DgVbJY_EuWXZmEHCjnP-ttlNzGPVr_q_56oiLNj6MDDU8QvHKd-Bj4e3S7ZR7O3_y30pz1wvroDR9-Ud8MlOttGgEEzeSQyVdjTIMFF83k"
     },
     {
@@ -174,7 +185,15 @@
       "id": "shingle",
       "label": "Shingle (Architectural)",
       "metalness": 0.04,
-      "roughness": 0.92,
+      "roughness": 1,
+      "normalScale": [1, 1],
+      "tileFeet": [4, 4],
+      "maps": {
+        "albedo": "/textures/roof/alternating-asphalt-shingle/1k/alternating-asphalt-shingle_albedo_1k.png",
+        "normal": "/textures/roof/alternating-asphalt-shingle/1k/alternating-asphalt-shingle_normal-ogl_1k.png",
+        "ao": "/textures/roof/alternating-asphalt-shingle/1k/alternating-asphalt-shingle_ao_1k.png",
+        "height": "/textures/roof/alternating-asphalt-shingle/1k/alternating-asphalt-shingle_height_1k.png"
+      },
       "image": "https://lh3.googleusercontent.com/aida-public/AB6AXuBuVV1ttU4798RcCA8A7L-CY4pMDFxBW9Onm4tFpvJDa6pX1I7ONQrCqreVfNTqgn4pCNFJa0K5XvkNgaxm63VEWhsgWBAfnwJ3Q_d71sEKa_zZP60yVYJboVgTQNYrklrUS6EUC_rQFqun8gYmc_VJ6JJSwp0B_uJM0GORkeKLKFokNDp3sv0LymsaZYFqP0N0woLBGcmtHkbYC3Z48alOUm7tcYQbNLMHUdsOjh6Pib-z0ArETN5J-L4bSNFzQQRHVOk"
     }
   ],

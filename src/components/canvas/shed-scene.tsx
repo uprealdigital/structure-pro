@@ -1,7 +1,8 @@
 "use client";
 
+import { Suspense } from "react";
 import { Canvas } from "@react-three/fiber";
-import { ContactShadows, OrbitControls } from "@react-three/drei";
+import { ContactShadows, Environment, OrbitControls } from "@react-three/drei";
 import { ShedModel } from "@/src/components/canvas/shed-model";
 import type { ShedConfig } from "@/src/config/shed-config";
 
@@ -43,7 +44,10 @@ export default function ShedScene({ config }: ShedSceneProps) {
           <shadowMaterial transparent opacity={0.35} />
         </mesh>
 
-        <ShedModel config={config} />
+        <Suspense fallback={null}>
+          <Environment preset="warehouse" environmentIntensity={0.4} />
+          <ShedModel config={config} />
+        </Suspense>
 
         <ContactShadows
           position={[0, 0.01, 0]}
