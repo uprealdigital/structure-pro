@@ -1,7 +1,7 @@
 "use client";
 
-import { memo, Suspense } from "react";
-import { Canvas } from "@react-three/fiber";
+import { memo, Suspense, useEffect, useLayoutEffect, useState } from "react";
+import { Canvas, useThree } from "@react-three/fiber";
 import { ContactShadows, Environment, OrbitControls } from "@react-three/drei";
 import { ShedModel } from "@/src/components/canvas/shed-model";
 import type { ShedConfig } from "@/src/config/shed-config";
@@ -10,14 +10,51 @@ type ShedSceneProps = {
   config: ShedConfig;
 };
 
+const DESKTOP_CAMERA: [number, number, number] = [20, 12, 24];
+const MOBILE_CAMERA: [number, number, number] = [30, 16, 36];
+const MOBILE_QUERY = "(max-width: 1023px)";
+
+function useIsMobile() {
+  const [isMobile, setIsMobile] = useState(() =>
+    typeof window !== "undefined" ? window.matchMedia(MOBILE_QUERY).matches : false,
+  );
+
+  useEffect(() => {
+    const media = window.matchMedia(MOBILE_QUERY);
+    const sync = () => setIsMobile(media.matches);
+    sync();
+    media.addEventListener("change", sync);
+    return () => media.removeEventListener("change", sync);
+  }, []);
+
+  return isMobile;
+}
+
+function SceneCamera({ isMobile }: { isMobile: boolean }) {
+  const camera = useThree((state) => state.camera);
+  const controls = useThree((state) => state.controls);
+
+  useLayoutEffect(() => {
+    const position = isMobile ? MOBILE_CAMERA : DESKTOP_CAMERA;
+    camera.position.set(...position);
+    if (controls && "update" in controls) {
+      (controls as { update: () => void }).update();
+    }
+  }, [camera, controls, isMobile]);
+
+  return null;
+}
+
 function ShedScene({ config }: ShedSceneProps) {
+  const isMobile = useIsMobile();
+
   return (
     <div className="h-full w-full" role="application" aria-label="3D shed view">
       <Canvas
         shadows
         className="h-full w-full"
         camera={{
-          position: [20, 12, 24],
+          position: isMobile ? MOBILE_CAMERA : DESKTOP_CAMERA,
           fov: 40,
           near: 0.1,
           far: 200,
@@ -65,6 +102,7 @@ function ShedScene({ config }: ShedSceneProps) {
           target={[0, 4, 0]}
           enableDamping
         />
+        <SceneCamera isMobile={isMobile} />
       </Canvas>
     </div>
   );

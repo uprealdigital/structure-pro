@@ -50,3 +50,7 @@ body {
   background: #d1d5db;
   border-radius: 9999px;
 }
+
+.assistant-note-clock {
+  background: conic-gradient(#6b7280 var(--note-clock, 0deg), #e5e7eb 0deg);
+}

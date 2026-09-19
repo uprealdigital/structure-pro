@@ -95,5 +95,6 @@ export const copy = {
   phone: "Phone",
   email: "Email",
   close: "Close",
+  dismissAssistantNote: "Dismiss message",
   loadingScene: "Loading 3D view…",
 } as const;

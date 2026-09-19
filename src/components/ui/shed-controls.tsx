@@ -77,7 +77,7 @@ export function ShedControls({
 
   useLayoutEffect(() => {
     if (isDesktopViewport()) {
-      setOpenById({ style: true });
+      setOpenById({});
     }
   }, []);
 
@@ -589,58 +589,57 @@ function MobileSectionNav({
     const item = itemRefs.current[activeId];
     if (!scroller || !item) return;
 
-    const spacer = scroller.querySelector<HTMLElement>("[data-nav-end-spacer]");
-    if (spacer) {
-      spacer.style.width = `${Math.max(scroller.clientWidth - item.offsetWidth, 0)}px`;
-    }
-
+    const maxLeft = Math.max(scroller.scrollWidth - scroller.clientWidth, 0);
     scroller.scrollTo({
-      left: Math.max(item.offsetLeft - 24, 0),
+      left: Math.min(Math.max(item.offsetLeft - 24, 0), maxLeft),
       behavior: "smooth",
     });
   }, [activeId]);
 
   return (
-    <nav
+    <div
       ref={(node) => {
-        scrollerRef.current = node;
         if (typeof ref === "function") {
           ref(node);
         } else if (ref) {
           ref.current = node;
         }
       }}
-      aria-label={copy.sectionNav}
-      className="mobile-section-nav sticky top-0 z-20 flex shrink-0 items-end overflow-x-auto border-b border-[#E5E7EB] bg-white lg:hidden"
+      className="sticky top-[-2px] z-20 bg-white pt-0.5 lg:hidden"
     >
-      <span className="w-6 shrink-0" aria-hidden="true" />
-      {CONTROL_SECTIONS.map((section) => {
-        const selected = section.id === activeId;
-        return (
-          <button
-            key={section.id}
-            ref={(node) => {
-              itemRefs.current[section.id] = node;
-            }}
-            type="button"
-            aria-current={selected ? "true" : undefined}
-            className="-mb-px shrink-0 pr-6 text-sm whitespace-nowrap"
-            onClick={() => onSelect(section.id)}
-          >
-            <span
-              className={`inline-block border-b-2 py-3 transition-colors ${
-                selected
-                  ? "border-gray-900 font-medium text-gray-900"
-                  : "border-transparent text-gray-400"
-              }`}
+      <nav
+        ref={scrollerRef}
+        aria-label={copy.sectionNav}
+        className="mobile-section-nav relative flex items-end overflow-x-auto overscroll-x-contain border-b border-[#E5E7EB] bg-white"
+      >
+        <span className="w-6 shrink-0" aria-hidden="true" />
+        {CONTROL_SECTIONS.map((section) => {
+          const selected = section.id === activeId;
+          return (
+            <button
+              key={section.id}
+              ref={(node) => {
+                itemRefs.current[section.id] = node;
+              }}
+              type="button"
+              aria-current={selected ? "true" : undefined}
+              className="-mb-px shrink-0 pr-6 text-sm whitespace-nowrap"
+              onClick={() => onSelect(section.id)}
             >
-              {section.title}
-            </span>
-          </button>
-        );
-      })}
-      <span data-nav-end-spacer className="shrink-0" aria-hidden="true" />
-    </nav>
+              <span
+                className={`inline-block border-b-2 py-3 transition-colors ${
+                  selected
+                    ? "border-gray-900 font-medium text-gray-900"
+                    : "border-transparent text-gray-400"
+                }`}
+              >
+                {section.title}
+              </span>
+            </button>
+          );
+        })}
+      </nav>
+    </div>
   );
 }
 

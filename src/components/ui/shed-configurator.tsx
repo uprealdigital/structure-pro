@@ -39,6 +39,7 @@ const ShedScene = dynamic(() => import("@/src/components/canvas/shed-scene"), {
 export function ShedConfigurator() {
   const [config, setConfig] = useState<ShedConfig>(DEFAULT_SHED_CONFIG);
   const [assistantNote, setAssistantNote] = useState("");
+  const [assistantNoteId, setAssistantNoteId] = useState(0);
   const [yardOpen, setYardOpen] = useState(false);
   const [quoteOpen, setQuoteOpen] = useState(false);
   const [zip, setZip] = useState(CATALOG.defaultZip);
@@ -50,11 +51,12 @@ export function ShedConfigurator() {
     const result = applyAssistantPrompt(config, prompt);
     setConfig(result.config);
     setAssistantNote(result.message);
+    setAssistantNoteId((id) => id + 1);
   }
 
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden lg:flex-row">
-      <section className="studio-viewport relative flex min-h-[50vh] flex-1 flex-col overflow-hidden lg:min-h-0">
+      <section className="studio-viewport relative flex h-[40vh] shrink-0 flex-col overflow-hidden lg:h-auto lg:min-h-0 lg:flex-1">
         <div className="pointer-events-none absolute inset-0 opacity-60 floor-grid" />
         <div className="relative min-h-0 flex-1">
           <ShedScene config={config} />
@@ -107,10 +109,14 @@ export function ShedConfigurator() {
           </div>
         </div>
 
-        <AssistantPromptForm note={assistantNote} onSubmitPrompt={submitPrompt} />
+        <AssistantPromptForm
+          note={assistantNote}
+          noteId={assistantNoteId}
+          onSubmitPrompt={submitPrompt}
+        />
       </section>
 
-      <aside className="z-30 flex h-[46vh] w-full shrink-0 flex-col overflow-hidden border-t border-[#E5E7EB] bg-white shadow-xl md:h-auto lg:h-full lg:w-[420px] lg:border-t-0 lg:border-l">
+      <aside className="z-30 flex min-h-0 w-full flex-1 flex-col overflow-hidden border-t border-[#E5E7EB] bg-white shadow-xl lg:h-full lg:w-[420px] lg:flex-none lg:border-t-0 lg:border-l">
         <ShedControls
           config={config}
           onChange={setConfig}
@@ -254,25 +260,46 @@ function getSpeechRecognitionCtor(): SpeechRecognitionCtor | undefined {
   return speechWindow.SpeechRecognition ?? speechWindow.webkitSpeechRecognition;
 }
 
+const ASSISTANT_NOTE_MS = 5000;
+
 function AssistantPromptForm({
   note,
+  noteId,
   onSubmitPrompt,
 }: {
   note: string;
+  noteId: number;
   onSubmitPrompt: (prompt: string) => void;
 }) {
   const [prompt, setPrompt] = useState("");
   const [listening, setListening] = useState(false);
   const [voiceNote, setVoiceNote] = useState("");
+  const [voiceNoteId, setVoiceNoteId] = useState(0);
+  const [noteDismissed, setNoteDismissed] = useState(false);
+  const noteClockRef = useRef<HTMLSpanElement>(null);
   const recognitionRef = useRef<BrowserSpeechRecognition | null>(null);
   const listeningRef = useRef(false);
   const promptRef = useRef("");
   const basePromptRef = useRef("");
   const ignoreSendUntilRef = useRef(0);
-  const revealSendTimeoutRef = useRef<number | null>(null);
   const hasText = prompt.trim().length > 0;
   const showSend = hasText && !listening;
   const statusNote = voiceNote || note;
+  const showStatusNote = Boolean(statusNote) && !noteDismissed;
+  const noteClockKey = `${noteId}-${voiceNoteId}`;
+
+  function setVoiceFeedback(next: string) {
+    setVoiceNote(next);
+    if (next) {
+      setNoteDismissed(false);
+      setVoiceNoteId((id) => id + 1);
+    }
+  }
+
+  function dismissStatusNote() {
+    setNoteDismissed(true);
+    setVoiceNote("");
+  }
 
   function setPromptValue(next: string) {
     promptRef.current = next;
@@ -284,6 +311,7 @@ function AssistantPromptForm({
     if (Date.now() < ignoreSendUntilRef.current) return;
     const nextPrompt = promptRef.current.trim();
     if (!nextPrompt) return;
+    setNoteDismissed(false);
     onSubmitPrompt(nextPrompt);
     setPromptValue("");
     setVoiceNote("");
@@ -294,13 +322,7 @@ function AssistantPromptForm({
     ignoreSendUntilRef.current = Date.now() + 500;
     recognitionRef.current?.stop();
     recognitionRef.current = null;
-    if (revealSendTimeoutRef.current !== null) {
-      window.clearTimeout(revealSendTimeoutRef.current);
-    }
-    revealSendTimeoutRef.current = window.setTimeout(() => {
-      revealSendTimeoutRef.current = null;
-      setListening(false);
-    }, 0);
+    setListening(false);
   }
 
   function startRecognitionSession() {
@@ -323,7 +345,7 @@ function AssistantPromptForm({
       if (event.error === "not-allowed" || event.error === "service-not-allowed") {
         listeningRef.current = false;
         setListening(false);
-        setVoiceNote(copy.voiceDenied);
+        setVoiceFeedback(copy.voiceDenied);
         recognitionRef.current = null;
       }
     };
@@ -349,11 +371,11 @@ function AssistantPromptForm({
   async function startListening() {
     const SpeechRecognition = getSpeechRecognitionCtor();
     if (!SpeechRecognition) {
-      setVoiceNote(copy.voiceUnsupported);
+      setVoiceFeedback(copy.voiceUnsupported);
       return;
     }
     if (!navigator.mediaDevices?.getUserMedia) {
-      setVoiceNote(copy.voiceDenied);
+      setVoiceFeedback(copy.voiceDenied);
       return;
     }
 
@@ -368,7 +390,7 @@ function AssistantPromptForm({
     } catch {
       listeningRef.current = false;
       setListening(false);
-      setVoiceNote(copy.voiceDenied);
+      setVoiceFeedback(copy.voiceDenied);
       return;
     }
 
@@ -381,11 +403,36 @@ function AssistantPromptForm({
       listeningRef.current = false;
       recognitionRef.current?.abort();
       recognitionRef.current = null;
-      if (revealSendTimeoutRef.current !== null) {
-        window.clearTimeout(revealSendTimeoutRef.current);
-      }
     };
   }, []);
+
+  useEffect(() => {
+    if (!statusNote) return;
+    setNoteDismissed(false);
+    const timeoutId = window.setTimeout(() => {
+      setNoteDismissed(true);
+      setVoiceNote("");
+    }, ASSISTANT_NOTE_MS);
+    return () => window.clearTimeout(timeoutId);
+  }, [noteId, voiceNoteId, statusNote]);
+
+  useEffect(() => {
+    if (!showStatusNote) return;
+    const clock = noteClockRef.current;
+    if (!clock) return;
+
+    let frameId = 0;
+    const startedAt = performance.now();
+    const tick = (now: number) => {
+      const progress = Math.min(1, (now - startedAt) / ASSISTANT_NOTE_MS);
+      clock.style.setProperty("--note-clock", `${progress * 360}deg`);
+      if (progress < 1) {
+        frameId = window.requestAnimationFrame(tick);
+      }
+    };
+    frameId = window.requestAnimationFrame(tick);
+    return () => window.cancelAnimationFrame(frameId);
+  }, [noteClockKey, showStatusNote]);
 
   function toggleVoice() {
     if (listeningRef.current) {
@@ -396,11 +443,27 @@ function AssistantPromptForm({
   }
 
   return (
-    <div className="absolute bottom-8 left-1/2 z-30 w-[min(90%,calc(100%-2.75rem))] max-w-md -translate-x-1/2">
+    <div className="absolute bottom-3 left-1/2 z-30 w-[min(90%,calc(100%-2.75rem))] max-w-md -translate-x-1/2 lg:bottom-8">
+      {showStatusNote ? (
+        <div className="mb-2 flex items-start justify-center gap-2">
+          <p className="min-w-0 flex-1 text-center text-xs text-gray-600">{statusNote}</p>
+          <button
+            aria-label={copy.dismissAssistantNote}
+            className="relative mt-px flex h-6 w-6 shrink-0 items-center justify-center overflow-hidden rounded-full shadow-sm"
+            type="button"
+            onClick={dismissStatusNote}
+          >
+            <span
+              ref={noteClockRef}
+              key={noteClockKey}
+              className="assistant-note-clock absolute inset-0 rounded-full"
+            />
+            <X className="relative h-3 w-3 text-gray-700" strokeWidth={2.5} />
+          </button>
+        </div>
+      ) : null}
       <form
-        className={`transition-[width] duration-200 ease-out ${
-          listening ? "w-[calc(100%+2.75rem)]" : "w-full"
-        }`}
+        className="w-full"
         onSubmit={(event) => {
           event.preventDefault();
           sendCurrentPrompt();
@@ -416,63 +479,41 @@ function AssistantPromptForm({
             value={prompt}
             onChange={(event) => setPromptValue(event.target.value)}
           />
-          <div className="flex shrink-0 items-center">
-            {listening ? (
-              <button
-                aria-label={copy.stopVoiceInput}
-                aria-pressed="true"
-                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-red-600 text-white"
-                type="button"
-                onClick={(event) => {
-                  event.preventDefault();
-                  event.stopPropagation();
-                  toggleVoice();
-                }}
-              >
-                <Square className="h-3.5 w-3.5 fill-current" />
-              </button>
-            ) : showSend ? (
-              <button
-                aria-label={copy.sendPrompt}
-                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-black text-white"
-                type="button"
-                onClick={sendCurrentPrompt}
-              >
-                <Send className="h-4 w-4" />
-              </button>
-            ) : (
-              <button
-                aria-label={copy.voiceInput}
-                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-black text-white"
-                type="button"
-                onClick={toggleVoice}
-              >
-                <Mic className="h-5 w-5" />
-              </button>
-            )}
-            <div
-              className={`grid overflow-hidden transition-[grid-template-columns] duration-200 ease-out ${
-                listening ? "grid-cols-[0.5rem_2.25rem]" : "grid-cols-[0rem_0rem]"
-              }`}
+          {listening ? (
+            <button
+              aria-label={copy.stopVoiceInput}
+              aria-pressed="true"
+              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-red-600 text-white"
+              type="button"
+              onClick={(event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                toggleVoice();
+              }}
             >
-              <span aria-hidden="true" />
-              <button
-                aria-hidden={!listening}
-                aria-label={listening ? copy.sendPrompt : undefined}
-                className="flex h-9 w-9 items-center justify-center rounded-full bg-black text-white disabled:cursor-not-allowed disabled:bg-gray-300 disabled:text-gray-500"
-                disabled
-                tabIndex={-1}
-                type="button"
-              >
-                <Send className="h-4 w-4" />
-              </button>
-            </div>
-          </div>
+              <Square className="h-3.5 w-3.5 fill-current" />
+            </button>
+          ) : showSend ? (
+            <button
+              aria-label={copy.sendPrompt}
+              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-black text-white"
+              type="button"
+              onClick={sendCurrentPrompt}
+            >
+              <Send className="h-4 w-4" />
+            </button>
+          ) : (
+            <button
+              aria-label={copy.voiceInput}
+              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-black text-white"
+              type="button"
+              onClick={toggleVoice}
+            >
+              <Mic className="h-5 w-5" />
+            </button>
+          )}
         </div>
       </form>
-      {statusNote ? (
-        <p className="mt-2 text-center text-xs text-gray-600">{statusNote}</p>
-      ) : null}
     </div>
   );
 }
