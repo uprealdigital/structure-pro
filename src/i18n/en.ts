@@ -28,7 +28,13 @@ export const copy = {
   viewInSpace: "View in your space",
   viewInYard: "View in your yard",
   newBadge: "New",
-  aiPlaceholder: "Type a change or tap mic to speak…",
+  aiPlaceholder: "What would you like to change?",
+  aiListeningPlaceholder: "Tell me what you would want me to change.",
+  sendPrompt: "Send change",
+  voiceInput: "Voice input",
+  stopVoiceInput: "Stop recording",
+  voiceUnsupported: "Voice input isn’t available in this browser. Try Chrome or Edge.",
+  voiceDenied: "Microphone access was blocked. Allow it to speak a change.",
   doorsHint:
     "Add items using the buttons below. Then, select the item on the wall to change its style, size, or features. Drag to arrange items on the wall. Note that wall layout may be adjusted based on construction requirements.",
   interiorHint:

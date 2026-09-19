@@ -1,15 +1,17 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Box,
   Expand,
   Heart,
   Home,
   Mic,
+  Send,
   Share,
   Sparkles,
+  Square,
   X,
 } from "lucide-react";
 import { ShedControls } from "@/src/components/ui/shed-controls";
@@ -260,6 +262,33 @@ export function ShedConfigurator() {
   );
 }
 
+type SpeechRecognitionCtor = new () => BrowserSpeechRecognition;
+
+type BrowserSpeechRecognition = {
+  continuous: boolean;
+  interimResults: boolean;
+  lang: string;
+  start: () => void;
+  abort: () => void;
+  stop: () => void;
+  onresult: ((event: BrowserSpeechRecognitionEvent) => void) | null;
+  onerror: ((event: { error: string }) => void) | null;
+  onend: (() => void) | null;
+};
+
+type BrowserSpeechRecognitionEvent = {
+  results: ArrayLike<ArrayLike<{ transcript: string }>>;
+};
+
+function getSpeechRecognitionCtor(): SpeechRecognitionCtor | undefined {
+  if (typeof window === "undefined") return undefined;
+  const speechWindow = window as Window & {
+    SpeechRecognition?: SpeechRecognitionCtor;
+    webkitSpeechRecognition?: SpeechRecognitionCtor;
+  };
+  return speechWindow.SpeechRecognition ?? speechWindow.webkitSpeechRecognition;
+}
+
 function AssistantPromptForm({
   note,
   onSubmitPrompt,
@@ -268,37 +297,218 @@ function AssistantPromptForm({
   onSubmitPrompt: (prompt: string) => void;
 }) {
   const [prompt, setPrompt] = useState("");
+  const [listening, setListening] = useState(false);
+  const [voiceNote, setVoiceNote] = useState("");
+  const recognitionRef = useRef<BrowserSpeechRecognition | null>(null);
+  const listeningRef = useRef(false);
+  const promptRef = useRef("");
+  const basePromptRef = useRef("");
+  const ignoreSendUntilRef = useRef(0);
+  const revealSendTimeoutRef = useRef<number | null>(null);
+  const hasText = prompt.trim().length > 0;
+  const showSend = hasText && !listening;
+  const statusNote = voiceNote || note;
+
+  function setPromptValue(next: string) {
+    promptRef.current = next;
+    setPrompt(next);
+  }
+
+  function sendCurrentPrompt() {
+    if (listeningRef.current) return;
+    if (Date.now() < ignoreSendUntilRef.current) return;
+    const nextPrompt = promptRef.current.trim();
+    if (!nextPrompt) return;
+    onSubmitPrompt(nextPrompt);
+    setPromptValue("");
+    setVoiceNote("");
+  }
+
+  function stopListening() {
+    listeningRef.current = false;
+    ignoreSendUntilRef.current = Date.now() + 500;
+    recognitionRef.current?.stop();
+    recognitionRef.current = null;
+    if (revealSendTimeoutRef.current !== null) {
+      window.clearTimeout(revealSendTimeoutRef.current);
+    }
+    revealSendTimeoutRef.current = window.setTimeout(() => {
+      revealSendTimeoutRef.current = null;
+      setListening(false);
+    }, 0);
+  }
+
+  function startRecognitionSession() {
+    const SpeechRecognition = getSpeechRecognitionCtor();
+    if (!SpeechRecognition || !listeningRef.current || recognitionRef.current) return;
+
+    const recognition = new SpeechRecognition();
+    recognition.continuous = true;
+    recognition.interimResults = true;
+    recognition.lang = "en-US";
+    recognition.onresult = (event) => {
+      let spoken = "";
+      for (let index = 0; index < event.results.length; index += 1) {
+        spoken += event.results[index][0]?.transcript ?? "";
+      }
+      const next = [basePromptRef.current, spoken.trim()].filter(Boolean).join(" ");
+      setPromptValue(next);
+    };
+    recognition.onerror = (event) => {
+      if (event.error === "not-allowed" || event.error === "service-not-allowed") {
+        listeningRef.current = false;
+        setListening(false);
+        setVoiceNote(copy.voiceDenied);
+        recognitionRef.current = null;
+      }
+    };
+    recognition.onend = () => {
+      if (recognitionRef.current === recognition) {
+        recognitionRef.current = null;
+      }
+      if (!listeningRef.current) return;
+      window.setTimeout(() => {
+        if (!listeningRef.current || recognitionRef.current) return;
+        basePromptRef.current = promptRef.current.trim();
+        startRecognitionSession();
+      }, 200);
+    };
+    recognitionRef.current = recognition;
+    try {
+      recognition.start();
+    } catch {
+      recognitionRef.current = null;
+    }
+  }
+
+  async function startListening() {
+    const SpeechRecognition = getSpeechRecognitionCtor();
+    if (!SpeechRecognition) {
+      setVoiceNote(copy.voiceUnsupported);
+      return;
+    }
+    if (!navigator.mediaDevices?.getUserMedia) {
+      setVoiceNote(copy.voiceDenied);
+      return;
+    }
+
+    listeningRef.current = true;
+    basePromptRef.current = promptRef.current.trim();
+    setVoiceNote("");
+    setListening(true);
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      stream.getTracks().forEach((track) => track.stop());
+    } catch {
+      listeningRef.current = false;
+      setListening(false);
+      setVoiceNote(copy.voiceDenied);
+      return;
+    }
+
+    if (!listeningRef.current) return;
+    startRecognitionSession();
+  }
+
+  useEffect(() => {
+    return () => {
+      listeningRef.current = false;
+      recognitionRef.current?.abort();
+      recognitionRef.current = null;
+      if (revealSendTimeoutRef.current !== null) {
+        window.clearTimeout(revealSendTimeoutRef.current);
+      }
+    };
+  }, []);
+
+  function toggleVoice() {
+    if (listeningRef.current) {
+      stopListening();
+      return;
+    }
+    void startListening();
+  }
 
   return (
-    <form
-      className="absolute bottom-8 left-1/2 z-30 w-[90%] max-w-md -translate-x-1/2"
-      onSubmit={(event) => {
-        event.preventDefault();
-        onSubmitPrompt(prompt);
-      }}
-    >
-      <div className="flex items-center gap-3 rounded-full border border-gray-200/80 bg-white/95 px-4 py-2 shadow-[0_4px_20px_-2px_rgba(0,0,0,0.08)] backdrop-blur">
-        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-gray-300 bg-gray-50 text-gray-700">
-          <Sparkles className="h-4 w-4" />
+    <div className="absolute bottom-8 left-1/2 z-30 w-[min(90%,calc(100%-2.75rem))] max-w-md -translate-x-1/2">
+      <form
+        className={`transition-[width] duration-200 ease-out ${
+          listening ? "w-[calc(100%+2.75rem)]" : "w-full"
+        }`}
+        onSubmit={(event) => {
+          event.preventDefault();
+          sendCurrentPrompt();
+        }}
+      >
+        <div className="flex items-center gap-3 rounded-full border border-gray-200/80 bg-white/95 px-4 py-2 shadow-[0_4px_20px_-2px_rgba(0,0,0,0.08)] backdrop-blur">
+          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-gray-300 bg-gray-50 text-gray-700">
+            <Sparkles className="h-4 w-4" />
+          </div>
+          <input
+            className="min-w-0 flex-1 border-0 bg-transparent p-0 text-sm text-gray-800 outline-none placeholder:text-gray-400"
+            placeholder={listening ? copy.aiListeningPlaceholder : copy.aiPlaceholder}
+            value={prompt}
+            onChange={(event) => setPromptValue(event.target.value)}
+          />
+          <div className="flex shrink-0 items-center">
+            {listening ? (
+              <button
+                aria-label={copy.stopVoiceInput}
+                aria-pressed="true"
+                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-red-600 text-white"
+                type="button"
+                onClick={(event) => {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  toggleVoice();
+                }}
+              >
+                <Square className="h-3.5 w-3.5 fill-current" />
+              </button>
+            ) : showSend ? (
+              <button
+                aria-label={copy.sendPrompt}
+                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-black text-white"
+                type="button"
+                onClick={sendCurrentPrompt}
+              >
+                <Send className="h-4 w-4" />
+              </button>
+            ) : (
+              <button
+                aria-label={copy.voiceInput}
+                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-black text-white"
+                type="button"
+                onClick={toggleVoice}
+              >
+                <Mic className="h-5 w-5" />
+              </button>
+            )}
+            <div
+              className={`grid overflow-hidden transition-[grid-template-columns] duration-200 ease-out ${
+                listening ? "grid-cols-[0.5rem_2.25rem]" : "grid-cols-[0rem_0rem]"
+              }`}
+            >
+              <span aria-hidden="true" />
+              <button
+                aria-hidden={!listening}
+                aria-label={listening ? copy.sendPrompt : undefined}
+                className="flex h-9 w-9 items-center justify-center rounded-full bg-black text-white disabled:cursor-not-allowed disabled:bg-gray-300 disabled:text-gray-500"
+                disabled
+                tabIndex={-1}
+                type="button"
+              >
+                <Send className="h-4 w-4" />
+              </button>
+            </div>
+          </div>
         </div>
-        <input
-          className="min-w-0 flex-1 border-0 bg-transparent p-0 text-sm text-gray-800 outline-none placeholder:text-gray-400"
-          placeholder={copy.aiPlaceholder}
-          value={prompt}
-          onChange={(event) => setPrompt(event.target.value)}
-        />
-        <button
-          aria-label="Voice input"
-          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-black text-white"
-          type="submit"
-        >
-          <Mic className="h-5 w-5" />
-        </button>
-      </div>
-      {note ? (
-        <p className="mt-2 text-center text-xs text-gray-600">{note}</p>
+      </form>
+      {statusNote ? (
+        <p className="mt-2 text-center text-xs text-gray-600">{statusNote}</p>
       ) : null}
-    </form>
+    </div>
   );
 }
 
