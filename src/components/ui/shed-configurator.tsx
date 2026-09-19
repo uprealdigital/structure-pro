@@ -134,7 +134,7 @@ export function ShedConfigurator() {
               onClick={() => setQuoteOpen(true)}
               className="rounded-full bg-[#1A1A1A] px-8 py-3.5 text-sm leading-none font-medium whitespace-nowrap text-white hover:bg-black"
             >
-              {copy.submitRequest}
+              {copy.submitQuote}
             </button>
           </div>
         </header>
@@ -234,30 +234,7 @@ export function ShedConfigurator() {
         </Modal>
       ) : null}
 
-      {quoteOpen ? (
-        <Modal title={copy.quoteTitle} onClose={() => setQuoteOpen(false)}>
-          <p className="text-sm text-gray-600">{copy.quoteBody}</p>
-          <p className="mt-3 font-serif text-lg font-semibold">{style.productTitle}</p>
-          <p className="text-sm text-gray-500">
-            {config.width}×{config.length} ft · {formatUsd(estimate.total)}
-          </p>
-          <label className="mt-4 block text-xs font-medium text-gray-700">
-            {copy.deliveryTo}
-            <input
-              className="mt-1 w-full rounded border border-gray-300 px-3 py-2 text-sm"
-              value={zip}
-              onChange={(event) => setZip(event.target.value)}
-            />
-          </label>
-          <button
-            type="button"
-            className="mt-4 w-full rounded-full bg-black py-3 text-sm font-medium text-white"
-            onClick={() => setQuoteOpen(false)}
-          >
-            {copy.submitQuote}
-          </button>
-        </Modal>
-      ) : null}
+      {quoteOpen ? <QuoteModal onClose={() => setQuoteOpen(false)} /> : null}
     </div>
   );
 }
@@ -531,6 +508,97 @@ function IconButton({
     >
       {children}
     </button>
+  );
+}
+
+const quoteFieldClassName =
+  "w-full rounded-lg border border-neutral-200 bg-neutral-50 px-3.5 py-2.5 text-sm text-neutral-800 placeholder-neutral-400 outline-none transition-colors focus:border-black focus:bg-white";
+
+function QuoteModal({ onClose }: { onClose: () => void }) {
+  const [fullName, setFullName] = useState("");
+  const [phone, setPhone] = useState("");
+  const [email, setEmail] = useState("");
+
+  function requiredPlaceholder(label: string) {
+    return `${label}*`;
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-black/50 p-4 backdrop-blur-sm">
+      <button
+        type="button"
+        className="absolute inset-0"
+        aria-label={copy.close}
+        onClick={onClose}
+      />
+      <div className="relative z-10 my-auto w-full max-w-xl rounded-xl border border-gray-200 bg-white p-6 text-gray-900 shadow-2xl sm:p-8">
+        <div className="flex items-start justify-between border-b border-gray-100 pb-4">
+          <div className="space-y-0.5">
+            <h2 className="font-serif text-xl font-bold tracking-tight text-gray-950">
+              {copy.quoteTitle}
+            </h2>
+            <p className="text-xs text-gray-500">
+              {copy.quoteRequiredHint}{" "}
+              <span className="font-medium text-stone-800">*</span>
+            </p>
+          </div>
+          <button
+            type="button"
+            aria-label={copy.close}
+            onClick={onClose}
+            className="flex h-8 w-8 items-center justify-center rounded-full text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-700"
+          >
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+
+        <form
+          className="space-y-4 pt-4"
+          onSubmit={(event) => {
+            event.preventDefault();
+            onClose();
+          }}
+        >
+          <div className="space-y-3">
+            <input
+              type="text"
+              required
+              autoComplete="name"
+              placeholder={requiredPlaceholder(copy.fullName)}
+              value={fullName}
+              onChange={(event) => setFullName(event.target.value)}
+              className={quoteFieldClassName}
+            />
+            <input
+              type="tel"
+              required
+              autoComplete="tel"
+              placeholder={requiredPlaceholder(copy.phone)}
+              value={phone}
+              onChange={(event) => setPhone(event.target.value)}
+              className={quoteFieldClassName}
+            />
+            <input
+              type="email"
+              required
+              autoComplete="email"
+              placeholder={requiredPlaceholder(copy.email)}
+              value={email}
+              onChange={(event) => setEmail(event.target.value)}
+              className={quoteFieldClassName}
+            />
+          </div>
+          <div className="pt-2">
+            <button
+              type="submit"
+              className="w-full rounded-full bg-black px-6 py-3.5 text-center text-sm font-medium text-white shadow-md transition-all hover:bg-stone-900 active:scale-95"
+            >
+              {copy.submitQuote}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
   );
 }
 
