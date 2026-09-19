@@ -124,13 +124,13 @@ export function ShedConfigurator() {
           estimate={estimate}
           zip={zip}
         >
-          <header className="shrink-0 border-b border-[#E5E7EB] bg-white p-6">
-            <div className="flex items-center justify-between gap-4">
-              <div>
+          <header className="shrink-0 border-b border-[#E5E7EB] bg-white px-4 py-5 lg:p-6">
+            <div className="flex items-center justify-between gap-3">
+              <div className="min-w-0 flex-1">
                 <h1 className="font-serif text-2xl leading-tight font-bold tracking-tight text-gray-950">
                   {style.productTitle}
                 </h1>
-                <div className="mt-1 flex items-baseline space-x-2">
+                <div className="mt-1 flex items-baseline gap-2 whitespace-nowrap">
                   <span className="text-sm text-gray-500">{copy.estPrice}</span>
                   <span className="text-xl font-semibold text-gray-900">
                     {formatUsd(estimate.total)}
@@ -146,7 +146,7 @@ export function ShedConfigurator() {
               <button
                 type="button"
                 onClick={() => setQuoteOpen(true)}
-                className="rounded-full bg-[#1A1A1A] px-8 py-3.5 text-sm leading-none font-medium whitespace-nowrap text-white hover:bg-black"
+                className="shrink-0 rounded-full bg-[#1A1A1A] px-5 py-3 text-[13px] leading-none font-medium whitespace-nowrap text-white hover:bg-black lg:px-8 lg:py-3.5 lg:text-sm"
               >
                 {copy.submitQuote}
               </button>
@@ -445,11 +445,13 @@ function AssistantPromptForm({
   return (
     <div className="absolute bottom-3 left-1/2 z-30 w-[min(90%,calc(100%-2.75rem))] max-w-md -translate-x-1/2 lg:bottom-8">
       {showStatusNote ? (
-        <div className="mb-2 flex items-start justify-center gap-2">
-          <p className="min-w-0 flex-1 text-center text-xs text-gray-600">{statusNote}</p>
+        <div className="mb-2 flex items-start gap-2 rounded-2xl border border-white/35 bg-white/10 px-3.5 py-2.5 shadow-[0_4px_20px_-2px_rgba(0,0,0,0.08)] backdrop-blur-md">
+          <p className="min-w-0 flex-1 text-center text-xs leading-relaxed text-gray-800">
+            {statusNote}
+          </p>
           <button
             aria-label={copy.dismissAssistantNote}
-            className="relative mt-px flex h-6 w-6 shrink-0 items-center justify-center overflow-hidden rounded-full shadow-sm"
+            className="relative mt-px flex h-6 w-6 shrink-0 items-center justify-center overflow-hidden rounded-full"
             type="button"
             onClick={dismissStatusNote}
           >
