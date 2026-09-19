@@ -62,7 +62,7 @@ export function ShedConfigurator() {
           <ShedScene config={config} />
         </div>
 
-        <div className="pointer-events-none absolute inset-x-0 top-0 z-20 flex items-center justify-between px-6 py-5">
+        <div className="pointer-events-none absolute inset-x-0 top-0 z-20 flex items-start justify-between px-3 py-3 lg:items-center lg:px-6 lg:py-5">
           <div className="pointer-events-auto flex items-center space-x-3">
             <div className="rounded-sm bg-black p-2 font-serif text-base leading-none font-bold tracking-widest text-white shadow-md">
               {CATALOG.brand.mark}
@@ -76,7 +76,7 @@ export function ShedConfigurator() {
               </span>
             </div>
           </div>
-          <div className="pointer-events-auto flex items-center space-x-2.5">
+          <div className="pointer-events-auto flex flex-col items-center space-y-2 lg:flex-row lg:space-y-0 lg:space-x-2.5">
             <IconButton
               label="Fullscreen"
               onClick={() => void document.documentElement.requestFullscreen()}
@@ -89,10 +89,12 @@ export function ShedConfigurator() {
             <button
               type="button"
               onClick={() => setYardOpen(true)}
-              className="relative flex h-10 items-center space-x-2 rounded-full border border-gray-300 bg-white/90 px-4 text-xs font-medium text-gray-800 shadow-[0_4px_20px_-2px_rgba(0,0,0,0.08)]"
+              aria-label={copy.viewInYard}
+              title={copy.viewInYard}
+              className="relative flex h-8 w-8 items-center justify-center rounded-full border border-gray-300 bg-white/90 text-gray-800 shadow-[0_4px_20px_-2px_rgba(0,0,0,0.08)] lg:h-10 lg:w-auto lg:space-x-2 lg:px-4"
             >
               <Home className="h-4 w-4" />
-              <span>{copy.viewInYard}</span>
+              <span className="hidden text-xs font-medium lg:inline">{copy.viewInYard}</span>
               <span className="absolute -top-1.5 -right-1.5 rounded-full bg-black px-1.5 py-0.5 text-[10px] leading-none font-bold text-white uppercase">
                 {copy.newBadge}
               </span>
@@ -535,7 +537,7 @@ function IconButton({
       aria-label={label}
       title={label}
       onClick={onClick}
-      className="flex h-10 w-10 items-center justify-center rounded-full bg-white text-gray-700 shadow-[0_4px_20px_-2px_rgba(0,0,0,0.08)] hover:bg-gray-50"
+      className="flex h-8 w-8 items-center justify-center rounded-full bg-white text-gray-700 shadow-[0_4px_20px_-2px_rgba(0,0,0,0.08)] hover:bg-gray-50 lg:h-10 lg:w-10"
     >
       {children}
     </button>
