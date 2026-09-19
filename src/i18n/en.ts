@@ -62,12 +62,22 @@ export const copy = {
     "Pricing and options shown are subject to change at any time and may vary based upon current promotions, specials, or annual pricing adjustments. Current pricing will be included in the final quote and will require your review and approval prior to order.",
   satisfaction:
     "We will do all we can to ensure your complete satisfaction. Please contact us for questions, concerns, or custom styles or sizes. Due to DOT purpose 12', 14', 16' are measured Roof Eave to Roof Eave.",
-  yardTitle: "AI Yard Visualizer",
+  yardTitle: "View in Your Yard",
+  aiPowered: "AI Powered",
   yardBody:
-    "See your customized TimberCraft studio placed realistically in your own backyard using AI.",
-  dropPhoto: "Drop a photo of your backyard here, or browse photo",
-  photoHint: "Supports PNG, JPG up to 25MB • Clear daylight photo recommended",
+    "Upload a photo of your backyard or patio. Our AI visualizer will realistically place your custom shed into your space and email you the high-resolution render.",
+  dropPhoto: "Drag and drop your yard photo here, or",
+  browseFiles: "browse files",
+  photoHint:
+    "PNG, JPG or HEIC up to 25MB. For best results, take a wide-angle shot from where you plan to install.",
+  photoUploaded: "Photo uploaded",
+  replacePhoto: "Replace",
+  removePhoto: "Remove photo",
   generateYard: "Generate AI Backyard Preview",
+  yardPhotoRequired:
+    "Add a yard photo before we can generate your backyard preview.",
+  yardPrivacy:
+    "We respect your privacy. Yard photos are used strictly for 3D perspective alignment and rendering.",
   quoteTitle: "Submit For Quote",
   quoteRequiredHint: "Required fields are marked with a",
   fullName: "Full Name",

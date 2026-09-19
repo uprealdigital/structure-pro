@@ -15,6 +15,7 @@ import {
   X,
 } from "lucide-react";
 import { ShedControls } from "@/src/components/ui/shed-controls";
+import { YardModal } from "@/src/components/ui/yard-modal";
 import { copy } from "@/src/i18n/en";
 import {
   applyAssistantPrompt,
@@ -217,22 +218,7 @@ export function ShedConfigurator() {
         </details>
       </aside>
 
-      {yardOpen ? (
-        <Modal title={copy.yardTitle} onClose={() => setYardOpen(false)}>
-          <p className="text-xs leading-relaxed text-gray-500">{copy.yardBody}</p>
-          <div className="mt-4 rounded-lg border-2 border-dashed border-gray-300 bg-gray-50/50 p-6 text-center">
-            <p className="text-xs font-semibold text-gray-800">{copy.dropPhoto}</p>
-            <p className="mt-1 text-[11px] text-gray-400">{copy.photoHint}</p>
-          </div>
-          <button
-            type="button"
-            className="mt-4 w-full rounded-full bg-black py-3 text-xs font-semibold text-white"
-            onClick={() => setYardOpen(false)}
-          >
-            {copy.generateYard}
-          </button>
-        </Modal>
-      ) : null}
+      {yardOpen ? <YardModal onClose={() => setYardOpen(false)} /> : null}
 
       {quoteOpen ? <QuoteModal onClose={() => setQuoteOpen(false)} /> : null}
     </div>
@@ -602,36 +588,3 @@ function QuoteModal({ onClose }: { onClose: () => void }) {
   );
 }
 
-function Modal({
-  title,
-  onClose,
-  children,
-}: {
-  title: string;
-  onClose: () => void;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <button
-        type="button"
-        className="absolute inset-0 bg-black/50 backdrop-blur-sm"
-        aria-label={copy.close}
-        onClick={onClose}
-      />
-      <div className="relative z-10 w-full max-w-lg overflow-hidden rounded-xl border border-gray-200 bg-white text-left shadow-2xl">
-        <div className="flex items-start justify-between border-b border-gray-100 bg-gray-50/70 p-6">
-          <h3 className="font-serif text-lg font-bold text-gray-900">{title}</h3>
-          <button
-            type="button"
-            onClick={onClose}
-            className="flex h-8 w-8 items-center justify-center rounded-full text-gray-400 hover:bg-gray-200/60 hover:text-gray-700"
-          >
-            <X className="h-5 w-5" />
-          </button>
-        </div>
-        <div className="p-6">{children}</div>
-      </div>
-    </div>
-  );
-}
