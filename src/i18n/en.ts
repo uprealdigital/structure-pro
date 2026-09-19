@@ -78,6 +78,15 @@ export const copy = {
     "Add a yard photo before we can generate your backyard preview.",
   yardPrivacy:
     "We respect your privacy. Yard photos are used strictly for 3D perspective alignment and rendering.",
+  yardPreviewInProgress: "Your backyard preview is in progress...",
+  sendPreviewWhere: "Where should we send your backyard preview?",
+  sendPreviewNotify:
+    "We'll notify you as soon as the high-res 3D architectural render completes.",
+  sendPreviewCta: "Send me the backyard preview when it's ready",
+  yardPreviewSentTitle: "You're all set",
+  yardPreviewSentBody:
+    "We'll send your backyard preview to {email} as soon as the render is ready.",
+  yardPreviewDone: "Done",
   quoteTitle: "Submit For Quote",
   quoteRequiredHint: "Required fields are marked with a",
   fullName: "Full Name",
