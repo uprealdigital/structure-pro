@@ -6,6 +6,8 @@ export const copy = {
   doorsWindows: "Doors & Windows",
   interior: "Interior",
   flooring: "Flooring",
+  details: "Details",
+  sectionNav: "Configuration sections",
   sidingTrim: "Siding & Trim",
   roof: "Roof",
   sidingColor: "Siding Color",

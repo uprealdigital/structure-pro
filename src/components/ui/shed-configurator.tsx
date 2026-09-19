@@ -111,42 +111,44 @@ export function ShedConfigurator() {
       </section>
 
       <aside className="z-30 flex h-[46vh] w-full shrink-0 flex-col overflow-hidden border-t border-[#E5E7EB] bg-white shadow-xl md:h-auto lg:h-full lg:w-[420px] lg:border-t-0 lg:border-l">
-        <header className="sticky top-0 z-20 border-b border-[#E5E7EB] bg-white p-6">
-          <div className="flex items-center justify-between gap-4">
-            <div>
-              <h1 className="font-serif text-2xl leading-tight font-bold tracking-tight text-gray-950">
-                {style.productTitle}
-              </h1>
-              <div className="mt-1 flex items-baseline space-x-2">
-                <span className="text-sm text-gray-500">{copy.estPrice}</span>
-                <span className="text-xl font-semibold text-gray-900">
-                  {formatUsd(estimate.total)}
-                </span>
-              </div>
-              <div className="mt-2 flex items-center gap-1 text-xs text-gray-600">
-                <span className="text-gray-500">{copy.payAsLowAs}</span>
-                <span className="rounded-sm border border-amber-800/80 bg-amber-100/30 px-1.5 py-0.5 text-[11px] leading-none font-semibold text-amber-800/80">
-                  {formatUsd(estimate.monthly)}/mo
-                </span>
-              </div>
-            </div>
-            <button
-              type="button"
-              onClick={() => setQuoteOpen(true)}
-              className="rounded-full bg-[#1A1A1A] px-8 py-3.5 text-sm leading-none font-medium whitespace-nowrap text-white hover:bg-black"
-            >
-              {copy.submitQuote}
-            </button>
-          </div>
-        </header>
-
         <ShedControls
           config={config}
           onChange={setConfig}
           onSubmit={() => setQuoteOpen(true)}
-        />
+          estimate={estimate}
+          zip={zip}
+        >
+          <header className="shrink-0 border-b border-[#E5E7EB] bg-white p-6">
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <h1 className="font-serif text-2xl leading-tight font-bold tracking-tight text-gray-950">
+                  {style.productTitle}
+                </h1>
+                <div className="mt-1 flex items-baseline space-x-2">
+                  <span className="text-sm text-gray-500">{copy.estPrice}</span>
+                  <span className="text-xl font-semibold text-gray-900">
+                    {formatUsd(estimate.total)}
+                  </span>
+                </div>
+                <div className="mt-2 flex items-center gap-1 text-xs text-gray-600">
+                  <span className="text-gray-500">{copy.payAsLowAs}</span>
+                  <span className="rounded-sm border border-amber-800/80 bg-amber-100/30 px-1.5 py-0.5 text-[11px] leading-none font-semibold text-amber-800/80">
+                    {formatUsd(estimate.monthly)}/mo
+                  </span>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setQuoteOpen(true)}
+                className="rounded-full bg-[#1A1A1A] px-8 py-3.5 text-sm leading-none font-medium whitespace-nowrap text-white hover:bg-black"
+              >
+                {copy.submitQuote}
+              </button>
+            </div>
+          </header>
+        </ShedControls>
 
-        <details className="group z-20 border-t border-[#E5E7EB] bg-white">
+        <details className="group z-20 hidden border-t border-[#E5E7EB] bg-white lg:block">
           <summary className="flex cursor-pointer items-center justify-between px-6 py-6 hover:bg-gray-50">
             <div className="flex items-center space-x-3">
               <div className="flex h-9 w-9 items-center justify-center rounded-full bg-gray-100 text-gray-700">

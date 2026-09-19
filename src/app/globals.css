@@ -30,6 +30,14 @@ body {
   transform-origin: center 70%;
 }
 
+.mobile-section-nav {
+  scrollbar-width: none;
+}
+
+.mobile-section-nav::-webkit-scrollbar {
+  display: none;
+}
+
 ::-webkit-scrollbar {
   width: 5px;
 }

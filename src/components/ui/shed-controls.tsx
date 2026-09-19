@@ -1,31 +1,174 @@
 "use client";
 
 import { Check, ChevronDown } from "lucide-react";
-import { useState, type ReactNode } from "react";
+import {
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type ReactNode,
+  type Ref,
+} from "react";
 import { copy } from "@/src/i18n/en";
 import { ColorSwatch } from "@/src/components/ui/color-swatch";
 import {
   CATALOG,
+  formatUsd,
   getColor,
   type ShedConfig,
 } from "@/src/config/shed-config";
+
+const CONTROL_SECTIONS = [
+  { id: "style", title: copy.style },
+  { id: "size", title: copy.size },
+  { id: "material", title: copy.material },
+  { id: "colors", title: copy.colors },
+  { id: "doors-windows", title: copy.doorsWindows },
+  { id: "interior", title: copy.interior },
+  { id: "flooring", title: copy.flooring },
+  { id: "details", title: copy.details },
+] as const;
+
+type SectionId = (typeof CONTROL_SECTIONS)[number]["id"];
+
+const ALL_SECTIONS_OPEN = Object.fromEntries(
+  CONTROL_SECTIONS.map((section) => [section.id, true]),
+) as Record<SectionId, boolean>;
 
 type ShedControlsProps = {
   config: ShedConfig;
   onChange: (next: ShedConfig) => void;
   onSubmit: () => void;
+  children?: ReactNode;
+  estimate: {
+    total: number;
+    financeMonthly: number;
+    lines: { label: string; amount: number }[];
+  };
+  zip: string;
 };
 
-export function ShedControls({ config, onChange, onSubmit }: ShedControlsProps) {
+function isDesktopViewport() {
+  return window.matchMedia("(min-width: 1024px)").matches;
+}
+
+export function ShedControls({
+  config,
+  onChange,
+  onSubmit,
+  children,
+  estimate,
+  zip,
+}: ShedControlsProps) {
   const sidingColor = getColor(config.sidingColorId);
   const trimColor = getColor(config.trimColorId);
   const roofColor = getColor(config.roofColorId);
   const shutterColor = getColor(config.shutterColorId);
+  const panelRef = useRef<HTMLDivElement>(null);
+  const listRef = useRef<HTMLDivElement>(null);
+  const navRef = useRef<HTMLElement>(null);
+  const ignoreScrollUntilRef = useRef(0);
+  const pendingScrollRef = useRef<SectionId | null>(null);
+  const [activeSection, setActiveSection] = useState<SectionId>("style");
+  const [scrollRequest, setScrollRequest] = useState(0);
+  const [openById, setOpenById] =
+    useState<Partial<Record<SectionId, boolean>>>(ALL_SECTIONS_OPEN);
+
+  useLayoutEffect(() => {
+    if (isDesktopViewport()) {
+      setOpenById({ style: true });
+    }
+  }, []);
+
+  function toggleSection(id: SectionId) {
+    setOpenById((current) => ({ ...current, [id]: !current[id] }));
+  }
+
+  function getVerticalScroller() {
+    return isDesktopViewport() ? listRef.current : panelRef.current;
+  }
+
+  function scrollToSection(id: SectionId) {
+    const container = getVerticalScroller();
+    const target = container?.querySelector<HTMLElement>(`#section-${id}`);
+    if (!container || !target) return;
+
+    ignoreScrollUntilRef.current = Date.now() + 700;
+    const stickyOffset = isDesktopViewport() ? 0 : (navRef.current?.offsetHeight ?? 0);
+    const top =
+      target.getBoundingClientRect().top -
+      container.getBoundingClientRect().top +
+      container.scrollTop -
+      stickyOffset;
+    container.scrollTo({ top: Math.max(top, 0), behavior: "smooth" });
+  }
+
+  function selectSection(id: SectionId) {
+    setActiveSection(id);
+    pendingScrollRef.current = id;
+    setOpenById((current) => ({ ...current, [id]: true }));
+    setScrollRequest((value) => value + 1);
+  }
+
+  useEffect(() => {
+    const id = pendingScrollRef.current;
+    if (!id) return;
+    pendingScrollRef.current = null;
+    scrollToSection(id);
+  }, [openById, scrollRequest]);
+
+  useEffect(() => {
+    const panel = panelRef.current;
+    const list = listRef.current;
+
+    function syncActiveSection() {
+      if (Date.now() < ignoreScrollUntilRef.current) return;
+      const scroller = getVerticalScroller();
+      if (!scroller) return;
+
+      const stickyOffset = isDesktopViewport()
+        ? 24
+        : (navRef.current?.offsetHeight ?? 24);
+      const marker = scroller.getBoundingClientRect().top + stickyOffset + 1;
+      let next: SectionId = CONTROL_SECTIONS[0].id;
+      for (const section of CONTROL_SECTIONS) {
+        const el = scroller.querySelector<HTMLElement>(`#section-${section.id}`);
+        if (el && el.getBoundingClientRect().top <= marker) {
+          next = section.id;
+        }
+      }
+      setActiveSection((current) => (current === next ? current : next));
+    }
+
+    panel?.addEventListener("scroll", syncActiveSection, { passive: true });
+    list?.addEventListener("scroll", syncActiveSection, { passive: true });
+    return () => {
+      panel?.removeEventListener("scroll", syncActiveSection);
+      list?.removeEventListener("scroll", syncActiveSection);
+    };
+  }, []);
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-      <div className="min-h-0 flex-1 divide-y divide-[#E5E7EB] overflow-y-auto">
-        <Accordion title={copy.style} defaultOpen>
+    <div
+      ref={panelRef}
+      className="flex min-h-0 flex-1 flex-col overflow-y-auto lg:overflow-hidden"
+    >
+      {children}
+      <MobileSectionNav
+        ref={navRef}
+        activeId={activeSection}
+        onSelect={selectSection}
+      />
+      <div
+        ref={listRef}
+        className="divide-y divide-[#E5E7EB] lg:min-h-0 lg:flex-1 lg:overflow-y-auto"
+      >
+        <Accordion
+          id="style"
+          title={copy.style}
+          open={Boolean(openById.style)}
+          onToggle={() => toggleSection("style")}
+        >
           <div className="grid grid-cols-3 gap-2.5">
             {CATALOG.styles.map((style) => {
               const selected = config.styleId === style.id;
@@ -59,7 +202,12 @@ export function ShedControls({ config, onChange, onSubmit }: ShedControlsProps) 
           </div>
         </Accordion>
 
-        <Accordion title={copy.size}>
+        <Accordion
+          id="size"
+          title={copy.size}
+          open={Boolean(openById.size)}
+          onToggle={() => toggleSection("size")}
+        >
           <div className="grid grid-cols-2 gap-2.5">
             {CATALOG.sizes.map((size) => {
               const selected =
@@ -92,7 +240,12 @@ export function ShedControls({ config, onChange, onSubmit }: ShedControlsProps) 
           </div>
         </Accordion>
 
-        <Accordion title={copy.material}>
+        <Accordion
+          id="material"
+          title={copy.material}
+          open={Boolean(openById.material)}
+          onToggle={() => toggleSection("material")}
+        >
           <div className="space-y-5">
             <div className="space-y-3">
               <h3 className="font-serif text-sm font-semibold text-gray-900">
@@ -133,7 +286,12 @@ export function ShedControls({ config, onChange, onSubmit }: ShedControlsProps) 
           </div>
         </Accordion>
 
-        <Accordion title={copy.colors}>
+        <Accordion
+          id="colors"
+          title={copy.colors}
+          open={Boolean(openById.colors)}
+          onToggle={() => toggleSection("colors")}
+        >
           <ColorSection
             title={copy.sidingColor}
             selectedLabel={sidingColor.label}
@@ -165,7 +323,12 @@ export function ShedControls({ config, onChange, onSubmit }: ShedControlsProps) 
           />
         </Accordion>
 
-        <Accordion title={copy.doorsWindows}>
+        <Accordion
+          id="doors-windows"
+          title={copy.doorsWindows}
+          open={Boolean(openById["doors-windows"])}
+          onToggle={() => toggleSection("doors-windows")}
+        >
           <p className="text-xs leading-relaxed text-gray-500">{copy.doorsHint}</p>
           <div className="flex items-center space-x-2 border-b border-gray-100 pt-1 pb-3">
             {(["front", "left", "back", "right"] as const).map((face) => (
@@ -243,7 +406,12 @@ export function ShedControls({ config, onChange, onSubmit }: ShedControlsProps) 
           </div>
         </Accordion>
 
-        <Accordion title={copy.interior}>
+        <Accordion
+          id="interior"
+          title={copy.interior}
+          open={Boolean(openById.interior)}
+          onToggle={() => toggleSection("interior")}
+        >
           <p className="text-xs leading-relaxed text-gray-500">
             {copy.interiorHint}
           </p>
@@ -271,7 +439,12 @@ export function ShedControls({ config, onChange, onSubmit }: ShedControlsProps) 
           </label>
         </Accordion>
 
-        <Accordion title={copy.flooring}>
+        <Accordion
+          id="flooring"
+          title={copy.flooring}
+          open={Boolean(openById.flooring)}
+          onToggle={() => toggleSection("flooring")}
+        >
           <p className="border-b border-gray-200 pb-3 text-xs leading-relaxed text-gray-500">
             {copy.flooringHint}
           </p>
@@ -301,6 +474,20 @@ export function ShedControls({ config, onChange, onSubmit }: ShedControlsProps) 
             ))}
           </div>
         </Accordion>
+
+        <Accordion
+          id="details"
+          title={copy.details}
+          open={Boolean(openById.details)}
+          onToggle={() => toggleSection("details")}
+          className="lg:hidden"
+        >
+          <EstimateBreakdownBody
+            estimate={estimate}
+            zip={zip}
+            onQuote={onSubmit}
+          />
+        </Accordion>
       </div>
       <button type="button" className="sr-only" onClick={onSubmit}>
         {copy.submitQuote}
@@ -309,23 +496,100 @@ export function ShedControls({ config, onChange, onSubmit }: ShedControlsProps) 
   );
 }
 
-function Accordion({
-  title,
-  defaultOpen = false,
-  children,
+function MobileSectionNav({
+  activeId,
+  onSelect,
+  ref,
 }: {
-  title: string;
-  defaultOpen?: boolean;
-  children: ReactNode;
+  activeId: SectionId;
+  onSelect: (id: SectionId) => void;
+  ref?: Ref<HTMLElement>;
 }) {
-  const [open, setOpen] = useState(defaultOpen);
+  const scrollerRef = useRef<HTMLElement>(null);
+  const itemRefs = useRef<Partial<Record<SectionId, HTMLButtonElement | null>>>({});
+
+  useEffect(() => {
+    const scroller = scrollerRef.current;
+    const item = itemRefs.current[activeId];
+    if (!scroller || !item) return;
+
+    const spacer = scroller.querySelector<HTMLElement>("[data-nav-end-spacer]");
+    if (spacer) {
+      spacer.style.width = `${Math.max(scroller.clientWidth - item.offsetWidth, 0)}px`;
+    }
+
+    scroller.scrollTo({
+      left: Math.max(item.offsetLeft - 24, 0),
+      behavior: "smooth",
+    });
+  }, [activeId]);
+
   return (
-    <div className="select-none">
+    <nav
+      ref={(node) => {
+        scrollerRef.current = node;
+        if (typeof ref === "function") {
+          ref(node);
+        } else if (ref) {
+          ref.current = node;
+        }
+      }}
+      aria-label={copy.sectionNav}
+      className="mobile-section-nav sticky top-0 z-20 flex shrink-0 items-end overflow-x-auto border-b border-[#E5E7EB] bg-white lg:hidden"
+    >
+      <span className="w-6 shrink-0" aria-hidden="true" />
+      {CONTROL_SECTIONS.map((section) => {
+        const selected = section.id === activeId;
+        return (
+          <button
+            key={section.id}
+            ref={(node) => {
+              itemRefs.current[section.id] = node;
+            }}
+            type="button"
+            aria-current={selected ? "true" : undefined}
+            className="-mb-px shrink-0 pr-6 text-sm whitespace-nowrap"
+            onClick={() => onSelect(section.id)}
+          >
+            <span
+              className={`inline-block border-b-2 py-3 transition-colors ${
+                selected
+                  ? "border-gray-900 font-medium text-gray-900"
+                  : "border-transparent text-gray-400"
+              }`}
+            >
+              {section.title}
+            </span>
+          </button>
+        );
+      })}
+      <span data-nav-end-spacer className="shrink-0" aria-hidden="true" />
+    </nav>
+  );
+}
+
+function Accordion({
+  id,
+  title,
+  open,
+  onToggle,
+  children,
+  className = "",
+}: {
+  id: SectionId;
+  title: string;
+  open: boolean;
+  onToggle: () => void;
+  children: ReactNode;
+  className?: string;
+}) {
+  return (
+    <div id={`section-${id}`} className={`select-none ${className}`.trim()}>
       <button
         type="button"
         className="flex w-full cursor-pointer items-center justify-between p-6 hover:bg-gray-50/70"
         aria-expanded={open}
-        onClick={() => setOpen((value) => !value)}
+        onClick={onToggle}
       >
         <span className="font-serif text-base font-semibold tracking-normal text-gray-900">
           {title}
@@ -335,6 +599,87 @@ function Accordion({
         />
       </button>
       {open ? <div className="space-y-6 px-6 pt-1 pb-6">{children}</div> : null}
+    </div>
+  );
+}
+
+function EstimateBreakdownBody({
+  estimate,
+  zip,
+  onQuote,
+}: {
+  estimate: {
+    total: number;
+    financeMonthly: number;
+    lines: { label: string; amount: number }[];
+  };
+  zip: string;
+  onQuote: () => void;
+}) {
+  return (
+    <div className="space-y-2.5">
+      <div className="flex items-center justify-between gap-4">
+        <div className="flex items-center space-x-3">
+          <div className="flex h-9 w-9 items-center justify-center rounded-full bg-gray-100 text-gray-700">
+            $
+          </div>
+          <div>
+            <span className="block text-base leading-tight font-semibold text-gray-900">
+              {copy.estimateBreakdown}
+            </span>
+            <span className="mt-0.5 block text-xs text-gray-500">
+              {copy.tapItemized}
+            </span>
+          </div>
+        </div>
+        <span className="font-mono text-xl font-bold text-gray-900">
+          {formatUsd(estimate.total)}
+        </span>
+      </div>
+      <div className="flex flex-wrap items-center gap-1.5 border-b border-gray-200/70 py-2.5 text-xs text-gray-600">
+        <span>{copy.paymentOptions}</span>
+        <span>{copy.fromAsLowAs}</span>
+        <span className="rounded-sm border border-amber-800/80 bg-amber-100/30 px-2 py-0.5 text-[11px] font-semibold text-amber-800/80">
+          {formatUsd(estimate.financeMonthly)}/mo
+        </span>
+        <span>{copy.forMonths}</span>
+      </div>
+      <div className="divide-y divide-gray-200/70 text-xs">
+        {estimate.lines.map((line) => (
+          <div key={line.label} className="flex items-center justify-between py-1.5">
+            <span className="font-medium text-gray-700">{line.label}</span>
+            <span className="font-mono font-semibold text-gray-900">
+              {formatUsd(line.amount)}
+            </span>
+          </div>
+        ))}
+        <div className="flex items-baseline justify-between pt-2.5 font-bold text-gray-950">
+          <span className="text-xs tracking-wide uppercase">{copy.totalEstimate}</span>
+          <span className="font-mono text-sm">{formatUsd(estimate.total)}</span>
+        </div>
+      </div>
+      <p className="pt-3 text-[11px] leading-relaxed text-gray-500">
+        {copy.quoteDisclaimer}
+      </p>
+      <p className="text-[11px] leading-relaxed text-gray-500">{copy.satisfaction}</p>
+      <button
+        type="button"
+        onClick={onQuote}
+        className="mt-2 block w-full rounded-full bg-black py-3 text-center text-sm font-medium text-white"
+      >
+        {copy.submitQuote}
+      </button>
+      <div className="flex items-center space-x-2 pt-3 text-xs text-gray-600">
+        <span>
+          {copy.deliveryTo}{" "}
+          <button type="button" className="font-medium underline">
+            {zip}
+          </button>
+        </span>
+      </div>
+      <button type="button" className="text-left text-xs font-medium text-gray-800 underline">
+        {copy.installation}
+      </button>
     </div>
   );
 }
