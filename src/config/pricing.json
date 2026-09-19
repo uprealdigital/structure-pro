@@ -158,11 +158,13 @@
       "metalness": 1,
       "normalScale": [2, 2],
       "tileFeet": [4, 4],
+      "aoMapIntensity": 1,
       "maps": {
         "albedo": "/textures/siding/LP%20Smart/LP%20Smart%20Siding_Basecolor.png",
         "normal": "/textures/siding/LP%20Smart/LP%20Smart%20Siding_Normal.png",
         "roughness": "/textures/siding/LP%20Smart/LP%20Smart%20Siding_Specularroughness.png",
-        "metalness": "/textures/siding/LP%20Smart/LP%20Smart%20Siding_Basemetalness.png"
+        "metalness": "/textures/siding/LP%20Smart/LP%20Smart%20Siding_Basemetalness.png",
+        "ao": "/textures/siding/LP%20Smart/LP%20Smart%20Siding_AO.png"
       },
       "image": "https://lh3.googleusercontent.com/aida-public/AB6AXuAl9XHuRPkvQQNAg7fnzgsLs-y2u5yLX5NDt_ZMdsW8G8sIALRNbPfqPjmvmUTtMtyj6ssvv9jbhjCxkl0Mpzv9hmv9AvVgELcVCRCWpVSzH1NNsN6peQ_K0_ADKkHMwYhaAagqmCzs1JJpeS8NWjpH4T3-0DgVbJY_EuWXZmEHCjnP-ttlNzGPVr_q_56oiLNj6MDDU8QvHKd-Bj4e3S7ZR7O3_y30pz1wvroDR9-Ud8MlOttGgEEzeSQyVdjTIMFF83k"
     },
@@ -179,6 +181,14 @@
       "label": "Metal",
       "metalness": 0.72,
       "roughness": 0.32,
+      "normalScale": [1.5, 1.5],
+      "tileFeet": [8, 8],
+      "maps": {
+        "albedo": "/textures/roof/metal-roof/1k/metal-roof_albedo_1k.png",
+        "normal": "/textures/roof/metal-roof/1k/metal-roof_normal-ogl_1k.png",
+        "ao": "/textures/roof/metal-roof/1k/metal-roof_ao_1k.png",
+        "height": "/textures/roof/metal-roof/1k/metal-roof_height_1k.png"
+      },
       "image": "https://lh3.googleusercontent.com/aida-public/AB6AXuDJ0AzUwvUrdkgBpF9aUEQsW2cdgBqWnL6nw1IY9MlUpfywSGOEFwZQxoMnVggUZPR6JjeSlF3huG-ylPwq7oLNcbSSh90D9mWY_3-7mrGOSnkA79nofWNdL5mW9ZAEEXLcU7st98rsWMkI43_mZFCEIVwHb_y9k6eTAkfbwDvdxmQXVjaLgXvV4ZsdAUtONd0U_VXxJ3988vBuD4RZnEaB8KbXATLlQ9b5UmMyQAtOr9Wem38yJMBheR0KwkVwJmwXUHs"
     },
     {
@@ -187,7 +197,7 @@
       "metalness": 0.04,
       "roughness": 1,
       "normalScale": [1, 1],
-      "tileFeet": [4, 4],
+      "tileFeet": [5.625, 5.625],
       "maps": {
         "albedo": "/textures/roof/alternating-asphalt-shingle/1k/alternating-asphalt-shingle_albedo_1k.png",
         "normal": "/textures/roof/alternating-asphalt-shingle/1k/alternating-asphalt-shingle_normal-ogl_1k.png",
@@ -234,14 +244,15 @@
     "length": 16,
     "height": 8,
     "sidingTypeId": "lp-smart",
-    "roofTypeId": "metal",
-    "sidingColorId": "favorite-tan",
-    "trimColorId": "ice-cube-white",
+    "roofTypeId": "shingle",
+    "sidingColorId": "serious-gray",
+    "trimColorId": "serious-gray",
     "roofColorId": "cyberspace",
     "shutterColorId": "ice-cube-white",
     "flooringId": "tg-prostruct",
     "hasLoft": true,
-    "hasWindow": true,
+    "hasWindow": false,
+    "hasVent": true,
     "doorStyle": "double",
     "wallFace": "front"
   }

@@ -24,6 +24,7 @@ export type ShedConfig = {
   flooringId: string;
   hasLoft: boolean;
   hasWindow: boolean;
+  hasVent: boolean;
   doorStyle: DoorStyle;
   wallFace: "front" | "left" | "back" | "right";
 };
@@ -55,6 +56,7 @@ export type SidingMaps = {
   normal: string;
   roughness: string;
   metalness: string;
+  ao: string;
 };
 
 export function getSidingMaps(type: SidingType): SidingMaps | null {
@@ -90,6 +92,12 @@ export function getSidingNormalScale(type: SidingType): [number, number] {
     return [type.normalScale[0], type.normalScale[1]];
   }
   return [1, 1];
+}
+
+export function getSidingAoIntensity(type: SidingType): number {
+  return "aoMapIntensity" in type && typeof type.aoMapIntensity === "number"
+    ? type.aoMapIntensity
+    : 1;
 }
 
 export function getRoofType(id: string): RoofType {
@@ -301,8 +309,8 @@ export function applyAssistantPrompt(
       next = { ...next, shutterColorId: color.id };
       notes.push(`${color.label} shutters`);
     } else {
-      next = { ...next, sidingColorId: color.id };
-      notes.push(`${color.label} siding`);
+      next = { ...next, sidingColorId: color.id, trimColorId: color.id };
+      notes.push(`${color.label} siding and trim`);
     }
   }
 

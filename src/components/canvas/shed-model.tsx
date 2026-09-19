@@ -1,12 +1,13 @@
 "use client";
 
-import { useLayoutEffect, useMemo } from "react";
+import { useMemo } from "react";
 import { useTexture } from "@react-three/drei";
 import {
   NoColorSpace,
   RepeatWrapping,
   Shape,
   SRGBColorSpace,
+  Vector2,
   type BufferGeometry,
   type Texture,
 } from "three";
@@ -21,6 +22,7 @@ import {
   getRoofShape,
   getRoofTileFeet,
   getRoofType,
+  getSidingAoIntensity,
   getSidingMaps,
   getSidingMetalness,
   getSidingNormalScale,
@@ -35,6 +37,10 @@ type ShedModelProps = {
 };
 
 const WALL_THICKNESS = 0.15;
+const SKID_HEIGHT = 0.5;
+const SKID_WIDTH = 0.55;
+/** Distance from each sidewall as a fraction of width; a bit less than 1/3. */
+const SKID_SIDE_RATIO = 0.24;
 const DECK_THICKNESS = 0.06;
 const ROOFING_THICKNESS = 0.035;
 const OVERHANG = 0.16;
@@ -42,9 +48,15 @@ const ROOFING_DRIP = 0.045;
 const SEAM_OVERLAP = 0.05;
 const TRIM_WIDTH = 0.18;
 const TRIM_THICKNESS = 0.05;
-const DOOR_WIDTH = 3;
+const SINGLE_DOOR_WIDTH = 3;
+const DOUBLE_DOOR_WIDTH = 6;
 const DOOR_HEIGHT = 6.5;
 const DOOR_THICKNESS = 0.08;
+const DOOR_GAP = 0.04;
+const DOOR_HEADER_HEIGHT = 0.22;
+const HARDWARE_COLOR = "#1c1c1c";
+const VENT_FRAME = 0.065;
+const VENT_DEPTH = 0.045;
 
 type Point2 = { x: number; y: number };
 
@@ -54,6 +66,14 @@ type RoofPlaneSpec = {
   rotation: number;
   length: number;
 };
+
+function skidCenterXs(width: number, doorWidth = 0): number[] {
+  const maxX = width / 2 - SKID_WIDTH / 2 - 0.08;
+  const fromSide = width / 2 - width * SKID_SIDE_RATIO;
+  const besideDoor = doorWidth > 0 ? doorWidth / 2 + SKID_WIDTH * 0.3 : 0;
+  const x = Math.min(maxX, Math.max(fromSide, besideDoor));
+  return [-x, x];
+}
 
 function extendHorizontal(from: Point2, through: Point2, extraX: number): Point2 {
   const dx = through.x - from.x;
@@ -199,6 +219,18 @@ const LP_SMART_MAP_URLS = LP_SMART_MAPS ?? {
   roughness:
     "/textures/siding/LP%20Smart/LP%20Smart%20Siding_Specularroughness.png",
   metalness: "/textures/siding/LP%20Smart/LP%20Smart%20Siding_Basemetalness.png",
+  ao: "/textures/siding/LP%20Smart/LP%20Smart%20Siding_AO.png",
+};
+
+const METAL_ROOF_MAPS = getRoofMaps(
+  CATALOG.roofTypes.find((item) => item.id === "metal") ?? CATALOG.roofTypes[0],
+);
+
+const METAL_ROOF_MAP_URLS = METAL_ROOF_MAPS ?? {
+  albedo: "/textures/roof/metal-roof/1k/metal-roof_albedo_1k.png",
+  normal: "/textures/roof/metal-roof/1k/metal-roof_normal-ogl_1k.png",
+  ao: "/textures/roof/metal-roof/1k/metal-roof_ao_1k.png",
+  height: "/textures/roof/metal-roof/1k/metal-roof_height_1k.png",
 };
 
 const SHINGLE_MAPS = getRoofMaps(
@@ -223,24 +255,88 @@ function ensureUv2(geometry: BufferGeometry) {
   geometry.setAttribute("uv2", uv.clone());
 }
 
+/**
+ * Map gable-cap vertices into the same 0–1 UV space as the rectangular
+ * front/back wall so vertical siding planks continue through the eave line.
+ * `flipU` matches BoxGeometry's -Z face, which reverses U across world X.
+ */
+function createGableWallUVGenerator(
+  span: number,
+  wallHeight: number,
+  flipU: boolean,
+) {
+  const toUv = (x: number, y: number) =>
+    new Vector2(
+      flipU ? (span / 2 - x) / span : (x + span / 2) / span,
+      (wallHeight + y) / wallHeight,
+    );
+  const uvAt = (vertices: number[], index: number) =>
+    toUv(vertices[index * 3], vertices[index * 3 + 1]);
+
+  return {
+    generateTopUV(
+      _geometry: BufferGeometry,
+      vertices: number[],
+      indexA: number,
+      indexB: number,
+      indexC: number,
+    ) {
+      return [uvAt(vertices, indexA), uvAt(vertices, indexB), uvAt(vertices, indexC)];
+    },
+    generateSideWallUV(
+      _geometry: BufferGeometry,
+      vertices: number[],
+      indexA: number,
+      indexB: number,
+      indexC: number,
+      indexD: number,
+    ) {
+      return [
+        uvAt(vertices, indexA),
+        uvAt(vertices, indexB),
+        uvAt(vertices, indexC),
+        uvAt(vertices, indexD),
+      ];
+    },
+  };
+}
+
 type SidingTextureSet = {
   albedo: Texture;
   normal: Texture;
   roughness: Texture;
   metalness: Texture;
+  ao: Texture;
 };
+
+function configureTiledTexture(
+  source: Texture,
+  repeatX: number,
+  repeatY: number,
+  colorSpace: typeof SRGBColorSpace | typeof NoColorSpace,
+  rotation = 0,
+): Texture {
+  const texture = source.clone();
+  texture.wrapS = RepeatWrapping;
+  texture.wrapT = RepeatWrapping;
+  texture.center.set(0.5, 0.5);
+  texture.rotation = rotation;
+  texture.repeat.set(repeatX, repeatY);
+  texture.colorSpace = colorSpace;
+  texture.needsUpdate = true;
+  return texture;
+}
 
 function configureSidingTexture(
   source: Texture,
   repeatX: number,
   repeatY: number,
   colorSpace: typeof SRGBColorSpace | typeof NoColorSpace,
+  offsetX = 0,
+  offsetY = 0,
 ): Texture {
-  const texture = source.clone();
-  texture.wrapS = RepeatWrapping;
-  texture.wrapT = RepeatWrapping;
-  texture.repeat.set(repeatX, repeatY);
-  texture.colorSpace = colorSpace;
+  const texture = configureTiledTexture(source, repeatX, repeatY, colorSpace);
+  texture.offset.set(offsetX, offsetY);
   texture.needsUpdate = true;
   return texture;
 }
@@ -249,6 +345,8 @@ function tileSidingMaps(
   source: SidingTextureSet,
   repeatX: number,
   repeatY: number,
+  offsetX = 0,
+  offsetY = 0,
 ): SidingTextureSet {
   return {
     albedo: configureSidingTexture(
@@ -256,21 +354,152 @@ function tileSidingMaps(
       repeatX,
       repeatY,
       SRGBColorSpace,
+      offsetX,
+      offsetY,
     ),
-    normal: configureSidingTexture(source.normal, repeatX, repeatY, NoColorSpace),
+    normal: configureSidingTexture(
+      source.normal,
+      repeatX,
+      repeatY,
+      NoColorSpace,
+      offsetX,
+      offsetY,
+    ),
     roughness: configureSidingTexture(
       source.roughness,
       repeatX,
       repeatY,
       NoColorSpace,
+      offsetX,
+      offsetY,
     ),
     metalness: configureSidingTexture(
       source.metalness,
       repeatX,
       repeatY,
       NoColorSpace,
+      offsetX,
+      offsetY,
+    ),
+    ao: configureSidingTexture(
+      source.ao,
+      repeatX,
+      repeatY,
+      NoColorSpace,
+      offsetX,
+      offsetY,
     ),
   };
+}
+
+function HardwareMaterial() {
+  return (
+    <meshStandardMaterial color={HARDWARE_COLOR} roughness={0.4} metalness={0.45} />
+  );
+}
+
+function VentMetalMaterial({ color }: { color: string }) {
+  return (
+    <meshStandardMaterial
+      color={color}
+      roughness={0.28}
+      metalness={0.82}
+      envMapIntensity={1.15}
+    />
+  );
+}
+
+function gableVentLayout(peakRise: number, halfSpan: number) {
+  const sizeScale = 2 / 3;
+  const height = Math.min(1.12 * sizeScale, Math.max(0.38, peakRise * 0.26));
+  const width = Math.min(2.35 * sizeScale, Math.max(0.72, halfSpan * 0.52));
+  const rakePad = 0.42;
+  const neededHalf = width / 2 + rakePad;
+  const yTopMax =
+    peakRise * (1 - neededHalf / Math.max(halfSpan, 0.01));
+  const yTop = Math.min(yTopMax, peakRise - 0.14) - TRIM_WIDTH;
+  const centerY = yTop - height / 2;
+  return { width, height, centerY };
+}
+
+function GableVent({
+  color,
+  width,
+  height,
+}: {
+  color: string;
+  width: number;
+  height: number;
+}) {
+  const innerW = Math.max(0.4, width - VENT_FRAME * 2);
+  const innerH = Math.max(0.28, height - VENT_FRAME * 2);
+  const louverCount = Math.max(6, Math.round(innerH / 0.11));
+  const spacing = innerH / louverCount;
+
+  return (
+    <group>
+      <mesh position={[0, 0, -VENT_DEPTH * 0.15]} castShadow>
+        <boxGeometry args={[innerW, innerH, 0.02]} />
+        <VentMetalMaterial color={color} />
+      </mesh>
+      <mesh position={[0, height / 2 - VENT_FRAME / 2, 0]} castShadow>
+        <boxGeometry args={[width, VENT_FRAME, VENT_DEPTH]} />
+        <VentMetalMaterial color={color} />
+      </mesh>
+      <mesh position={[0, -height / 2 + VENT_FRAME / 2, 0]} castShadow>
+        <boxGeometry args={[width, VENT_FRAME, VENT_DEPTH]} />
+        <VentMetalMaterial color={color} />
+      </mesh>
+      <mesh position={[-width / 2 + VENT_FRAME / 2, 0, 0]} castShadow>
+        <boxGeometry args={[VENT_FRAME, innerH, VENT_DEPTH]} />
+        <VentMetalMaterial color={color} />
+      </mesh>
+      <mesh position={[width / 2 - VENT_FRAME / 2, 0, 0]} castShadow>
+        <boxGeometry args={[VENT_FRAME, innerH, VENT_DEPTH]} />
+        <VentMetalMaterial color={color} />
+      </mesh>
+      {Array.from({ length: louverCount }, (_, index) => {
+        const y = -innerH / 2 + spacing * (index + 0.55);
+        return (
+          <mesh
+            key={`louver-${index}`}
+            position={[0, y, 0.01]}
+            rotation={[0.48, 0, 0]}
+            castShadow
+          >
+            <boxGeometry args={[innerW - 0.016, 0.022, 0.05]} />
+            <VentMetalMaterial color={color} />
+          </mesh>
+        );
+      })}
+    </group>
+  );
+}
+
+function DoorHinge({
+  x,
+  y,
+  z,
+  flip,
+}: {
+  x: number;
+  y: number;
+  z: number;
+  flip: boolean;
+}) {
+  const dir = flip ? -1 : 1;
+  return (
+    <group position={[x, y, z]}>
+      <mesh position={[dir * 0.04, 0, 0]} castShadow>
+        <boxGeometry args={[0.1, 0.22, 0.025]} />
+        <HardwareMaterial />
+      </mesh>
+      <mesh position={[dir * 0.34, 0, 0]} castShadow>
+        <boxGeometry args={[0.56, 0.09, 0.025]} />
+        <HardwareMaterial />
+      </mesh>
+    </group>
+  );
 }
 
 function SidingMaterial({
@@ -278,12 +507,14 @@ function SidingMaterial({
   roughness,
   metalness,
   normalScale,
+  aoMapIntensity,
   maps,
 }: {
   color: string;
   roughness: number;
   metalness: number;
   normalScale: [number, number];
+  aoMapIntensity: number;
   maps: SidingTextureSet | null;
 }) {
   return (
@@ -293,9 +524,11 @@ function SidingMaterial({
       normalMap={maps?.normal ?? null}
       roughnessMap={maps?.roughness ?? null}
       metalnessMap={maps?.metalness ?? null}
+      aoMap={maps?.ao ?? null}
       roughness={roughness}
       metalness={metalness}
       normalScale={maps ? normalScale : [0, 0]}
+      aoMapIntensity={maps ? aoMapIntensity : 0}
     />
   );
 }
@@ -306,6 +539,46 @@ type RoofTextureSet = {
   ao: Texture;
   height: Texture;
 };
+
+/** Roof box UVs: U along slope (plane.length), V along eaves (roofingLength). */
+const ROOF_TEXTURE_ROTATION = Math.PI / 2;
+
+function tileRoofMaps(
+  source: RoofTextureSet,
+  repeatAlongEaves: number,
+  repeatAlongSlope: number,
+): RoofTextureSet {
+  return {
+    albedo: configureTiledTexture(
+      source.albedo,
+      repeatAlongEaves,
+      repeatAlongSlope,
+      SRGBColorSpace,
+      ROOF_TEXTURE_ROTATION,
+    ),
+    normal: configureTiledTexture(
+      source.normal,
+      repeatAlongEaves,
+      repeatAlongSlope,
+      NoColorSpace,
+      ROOF_TEXTURE_ROTATION,
+    ),
+    ao: configureTiledTexture(
+      source.ao,
+      repeatAlongEaves,
+      repeatAlongSlope,
+      NoColorSpace,
+      ROOF_TEXTURE_ROTATION,
+    ),
+    height: configureTiledTexture(
+      source.height,
+      repeatAlongEaves,
+      repeatAlongSlope,
+      NoColorSpace,
+      ROOF_TEXTURE_ROTATION,
+    ),
+  };
+}
 
 function RoofingMaterial({
   color,
@@ -322,8 +595,8 @@ function RoofingMaterial({
 }) {
   return (
     <meshStandardMaterial
-      key={maps ? "shingle" : "metal"}
-      color={maps ? "#ffffff" : color}
+      key={maps ? "mapped" : "flat"}
+      color={color}
       roughness={roughness}
       metalness={metalness}
       normalScale={maps ? normalScale : [0, 0]}
@@ -385,13 +658,13 @@ export function ShedModel({ config }: ShedModelProps) {
   const siding = getColor(config.sidingColorId);
   const trim = getColor(config.trimColorId);
   const roofColor = getColor(config.roofColorId);
-  const shutter = getColor(config.shutterColorId);
   const sidingType = getSidingType(config.sidingTypeId);
   const roofType = getRoofType(config.roofTypeId);
   const sidingMaps = getSidingMaps(sidingType);
   const [sidingTileW, sidingTileH] = getSidingTileFeet(sidingType);
   const sidingMetalness = getSidingMetalness(sidingType);
   const sidingNormalScale = getSidingNormalScale(sidingType);
+  const sidingAoIntensity = getSidingAoIntensity(sidingType);
   const roofMaps = getRoofMaps(roofType);
   const [roofTileW, roofTileH] = getRoofTileFeet(roofType);
   const roofNormalScale = getRoofNormalScale(roofType);
@@ -400,6 +673,7 @@ export function ShedModel({ config }: ShedModelProps) {
     normal: LP_SMART_MAP_URLS.normal,
     roughness: LP_SMART_MAP_URLS.roughness,
     metalness: LP_SMART_MAP_URLS.metalness,
+    ao: LP_SMART_MAP_URLS.ao,
   });
   const loadedShingle = useTexture({
     albedo: SHINGLE_MAP_URLS.albedo,
@@ -407,6 +681,14 @@ export function ShedModel({ config }: ShedModelProps) {
     ao: SHINGLE_MAP_URLS.ao,
     height: SHINGLE_MAP_URLS.height,
   });
+  const loadedMetalRoof = useTexture({
+    albedo: METAL_ROOF_MAP_URLS.albedo,
+    normal: METAL_ROOF_MAP_URLS.normal,
+    ao: METAL_ROOF_MAP_URLS.ao,
+    height: METAL_ROOF_MAP_URLS.height,
+  });
+  const loadedRoof =
+    config.roofTypeId === "metal" ? loadedMetalRoof : loadedShingle;
   const applyRoofMaps = Boolean(roofMaps);
   const applySidingMaps = Boolean(sidingMaps);
   const frontSidingMaps = useMemo(
@@ -418,6 +700,7 @@ export function ShedModel({ config }: ShedModelProps) {
       applySidingMaps,
       height,
       loadedSiding.albedo,
+      loadedSiding.ao,
       loadedSiding.metalness,
       loadedSiding.normal,
       loadedSiding.roughness,
@@ -436,6 +719,7 @@ export function ShedModel({ config }: ShedModelProps) {
       height,
       length,
       loadedSiding.albedo,
+      loadedSiding.ao,
       loadedSiding.metalness,
       loadedSiding.normal,
       loadedSiding.roughness,
@@ -443,20 +727,13 @@ export function ShedModel({ config }: ShedModelProps) {
       sidingTileW,
     ],
   );
-  const gableSidingMaps = useMemo(
-    () =>
-      applySidingMaps
-        ? tileSidingMaps(loadedSiding, 1 / sidingTileW, 1 / sidingTileH)
-        : null,
-    [
-      applySidingMaps,
-      loadedSiding.albedo,
-      loadedSiding.metalness,
-      loadedSiding.normal,
-      loadedSiding.roughness,
-      sidingTileH,
-      sidingTileW,
-    ],
+  const gableFrontUVGenerator = useMemo(
+    () => createGableWallUVGenerator(width, height, false),
+    [height, width],
+  );
+  const gableBackUVGenerator = useMemo(
+    () => createGableWallUVGenerator(width, height, true),
+    [height, width],
   );
   const pitch = style.pitch;
   const roofShape = getRoofShape(style);
@@ -467,39 +744,45 @@ export function ShedModel({ config }: ShedModelProps) {
   const wallY = height / 2;
   const wallT = WALL_THICKNESS;
 
-  const doorWidth = Math.min(DOOR_WIDTH, Math.max(2, width - 2));
+  const isDoubleDoor = config.doorStyle === "double";
+  const nominalDoorWidth = isDoubleDoor ? DOUBLE_DOOR_WIDTH : SINGLE_DOOR_WIDTH;
+  const doorWidth = Math.min(nominalDoorWidth, Math.max(2, width - 2));
   const doorHeight = Math.min(DOOR_HEIGHT, Math.max(5.5, height - 1.2));
+  const doorLeafWidth = isDoubleDoor ? (doorWidth - DOOR_GAP) / 2 : doorWidth;
+  const doorLeafCenters = isDoubleDoor
+    ? [-(doorLeafWidth + DOOR_GAP) / 2, (doorLeafWidth + DOOR_GAP) / 2]
+    : [0];
+  const doorSidingMaps = useMemo(() => {
+    if (!applySidingMaps) {
+      return doorLeafCenters.map(() => null);
+    }
+    return doorLeafCenters.map((centerX) => {
+      const leftEdge = centerX - doorLeafWidth / 2;
+      return tileSidingMaps(
+        loadedSiding,
+        doorLeafWidth / sidingTileW,
+        doorHeight / sidingTileH,
+        (halfWidth + leftEdge) / sidingTileW,
+        0,
+      );
+    });
+  }, [
+    applySidingMaps,
+    doorHeight,
+    doorLeafCenters,
+    doorLeafWidth,
+    halfWidth,
+    loadedSiding.albedo,
+    loadedSiding.ao,
+    loadedSiding.metalness,
+    loadedSiding.normal,
+    loadedSiding.roughness,
+    sidingTileH,
+    sidingTileW,
+  ]);
 
   const deckLength = length + OVERHANG * 2;
   const roofingLength = deckLength + ROOFING_DRIP * 2;
-  useLayoutEffect(() => {
-    const repeatX = roofingLength / roofTileW;
-    const repeatY = roofingLength / roofTileH;
-    const maps = [
-      loadedShingle.albedo,
-      loadedShingle.normal,
-      loadedShingle.ao,
-      loadedShingle.height,
-    ];
-    loadedShingle.albedo.colorSpace = SRGBColorSpace;
-    loadedShingle.normal.colorSpace = NoColorSpace;
-    loadedShingle.ao.colorSpace = NoColorSpace;
-    loadedShingle.height.colorSpace = NoColorSpace;
-    for (const texture of maps) {
-      texture.wrapS = RepeatWrapping;
-      texture.wrapT = RepeatWrapping;
-      texture.repeat.set(repeatX, repeatY);
-      texture.needsUpdate = true;
-    }
-  }, [
-    loadedShingle.albedo,
-    loadedShingle.ao,
-    loadedShingle.height,
-    loadedShingle.normal,
-    roofTileH,
-    roofTileW,
-    roofingLength,
-  ]);
   const peakRise = gableRise(halfWidth, pitch);
   const breakRise = gambrelBreakRise(halfWidth, pitch, breakRatio, breakLift);
   const breakX = halfWidth * (1 - breakRatio);
@@ -541,6 +824,26 @@ export function ShedModel({ config }: ShedModelProps) {
     DECK_THICKNESS + ROOFING_THICKNESS / 2,
     Math.max(DECK_THICKNESS, ROOFING_THICKNESS),
   );
+  const roofingPlaneLengths = roofingPlanes.map((plane) => plane.length).join(",");
+  const tiledRoofMaps = useMemo(() => {
+    if (!applyRoofMaps) {
+      return roofingPlanes.map(() => null);
+    }
+    const repeatAlongEaves = roofingLength / roofTileW;
+    return roofingPlanes.map((plane) =>
+      tileRoofMaps(loadedRoof, repeatAlongEaves, plane.length / roofTileH),
+    );
+  }, [
+    applyRoofMaps,
+    loadedRoof.albedo,
+    loadedRoof.ao,
+    loadedRoof.height,
+    loadedRoof.normal,
+    roofTileH,
+    roofTileW,
+    roofingLength,
+    roofingPlaneLengths,
+  ]);
   const rakePlanes = planesFromPolyline(
     gableWallPolyline(
       halfWidth,
@@ -576,45 +879,62 @@ export function ShedModel({ config }: ShedModelProps) {
     [-1, -1],
   ] as const;
 
+  const skids = skidCenterXs(
+    width,
+    config.doorStyle === "none" ? 0 : doorWidth,
+  );
+  const vent = gableVentLayout(peakRise, halfWidth);
+
   return (
     <group>
+      {skids.map((x) => (
+        <mesh key={`skid-${x}`} position={[x, SKID_HEIGHT / 2, 0]} castShadow receiveShadow>
+          <boxGeometry args={[SKID_WIDTH, SKID_HEIGHT, length]} />
+          <meshStandardMaterial color={siding.hex} roughness={0.72} metalness={0.04} />
+        </mesh>
+      ))}
+      <group position={[0, SKID_HEIGHT, 0]}>
       <mesh position={[0, wallY, halfLength - wallT / 2]} castShadow>
-        <boxGeometry args={[width, height, wallT]} />
+        <boxGeometry args={[width, height, wallT]} onUpdate={ensureUv2} />
         <SidingMaterial
           color={siding.hex}
           roughness={sidingType.roughness}
           metalness={sidingMetalness}
           normalScale={sidingNormalScale}
+          aoMapIntensity={sidingAoIntensity}
           maps={frontSidingMaps}
         />
       </mesh>
       <mesh position={[0, wallY, -halfLength + wallT / 2]} castShadow>
-        <boxGeometry args={[width, height, wallT]} />
+        <boxGeometry args={[width, height, wallT]} onUpdate={ensureUv2} />
         <SidingMaterial
           color={siding.hex}
           roughness={sidingType.roughness}
           metalness={sidingMetalness}
           normalScale={sidingNormalScale}
+          aoMapIntensity={sidingAoIntensity}
           maps={frontSidingMaps}
         />
       </mesh>
       <mesh position={[-halfWidth + wallT / 2, wallY, 0]} castShadow>
-        <boxGeometry args={[wallT, height, length]} />
+        <boxGeometry args={[wallT, height, length]} onUpdate={ensureUv2} />
         <SidingMaterial
           color={siding.hex}
           roughness={sidingType.roughness}
           metalness={sidingMetalness}
           normalScale={sidingNormalScale}
+          aoMapIntensity={sidingAoIntensity}
           maps={sideSidingMaps}
         />
       </mesh>
       <mesh position={[halfWidth - wallT / 2, wallY, 0]} castShadow>
-        <boxGeometry args={[wallT, height, length]} />
+        <boxGeometry args={[wallT, height, length]} onUpdate={ensureUv2} />
         <SidingMaterial
           color={siding.hex}
           roughness={sidingType.roughness}
           metalness={sidingMetalness}
           normalScale={sidingNormalScale}
+          aoMapIntensity={sidingAoIntensity}
           maps={sideSidingMaps}
         />
       </mesh>
@@ -625,14 +945,23 @@ export function ShedModel({ config }: ShedModelProps) {
         castShadow
       >
         <extrudeGeometry
-          args={[gableShape, { depth: wallT, bevelEnabled: false }]}
+          args={[
+            gableShape,
+            {
+              depth: wallT,
+              bevelEnabled: false,
+              UVGenerator: gableFrontUVGenerator,
+            },
+          ]}
+          onUpdate={ensureUv2}
         />
         <SidingMaterial
           color={siding.hex}
           roughness={sidingType.roughness}
           metalness={sidingMetalness}
           normalScale={sidingNormalScale}
-          maps={gableSidingMaps}
+          aoMapIntensity={sidingAoIntensity}
+          maps={frontSidingMaps}
         />
       </mesh>
       <mesh
@@ -641,14 +970,23 @@ export function ShedModel({ config }: ShedModelProps) {
         castShadow
       >
         <extrudeGeometry
-          args={[gableShape, { depth: wallT, bevelEnabled: false }]}
+          args={[
+            gableShape,
+            {
+              depth: wallT,
+              bevelEnabled: false,
+              UVGenerator: gableBackUVGenerator,
+            },
+          ]}
+          onUpdate={ensureUv2}
         />
         <SidingMaterial
           color={siding.hex}
           roughness={sidingType.roughness}
           metalness={sidingMetalness}
           normalScale={sidingNormalScale}
-          maps={gableSidingMaps}
+          aoMapIntensity={sidingAoIntensity}
+          maps={frontSidingMaps}
         />
       </mesh>
 
@@ -720,74 +1058,67 @@ export function ShedModel({ config }: ShedModelProps) {
         </mesh>
       ))}
 
-      {config.doorStyle !== "none" ? (
-        <group position={[0, doorHeight / 2, halfLength + DOOR_THICKNESS / 2]}>
-          <mesh castShadow>
-            <boxGeometry args={[doorWidth + 0.16, doorHeight + 0.16, DOOR_THICKNESS]} />
-            <meshStandardMaterial color={trim.hex} roughness={0.45} metalness={0.08} />
-          </mesh>
-          {config.doorStyle === "double" ? (
-            <>
-              <mesh position={[-doorWidth / 4, 0, 0.02]} castShadow>
-                <boxGeometry args={[doorWidth / 2 - 0.08, doorHeight - 0.2, 0.04]} />
-                <meshStandardMaterial
-                  color="#cfe4ef"
-                  roughness={0.12}
-                  metalness={0.35}
-                  transparent
-                  opacity={0.72}
-                />
-              </mesh>
-              <mesh position={[doorWidth / 4, 0, 0.02]} castShadow>
-                <boxGeometry args={[doorWidth / 2 - 0.08, doorHeight - 0.2, 0.04]} />
-                <meshStandardMaterial
-                  color="#cfe4ef"
-                  roughness={0.12}
-                  metalness={0.35}
-                  transparent
-                  opacity={0.72}
-                />
-              </mesh>
-            </>
-          ) : (
-            <mesh position={[0, 0, 0.02]} castShadow>
-              <boxGeometry args={[doorWidth - 0.16, doorHeight - 0.2, 0.04]} />
-              <meshStandardMaterial color={trim.hex} roughness={0.5} metalness={0.08} />
-            </mesh>
-          )}
+      {config.hasVent ? (
+        <group position={[0, height + vent.centerY, halfLength + VENT_DEPTH / 2]}>
+          <GableVent color={siding.hex} width={vent.width} height={vent.height} />
         </group>
       ) : null}
 
-      {config.hasWindow ? (
-        <group
-          position={[
-            -Math.min(width / 2 - 1.6, 4.2),
-            height * 0.52,
-            halfLength + 0.05,
-          ]}
-        >
-          <mesh castShadow>
-            <boxGeometry args={[2.2, 2.4, 0.1]} />
-            <meshStandardMaterial color={trim.hex} roughness={0.4} metalness={0.08} />
-          </mesh>
-          <mesh position={[0, 0, 0.03]}>
-            <boxGeometry args={[1.85, 2.05, 0.04]} />
-            <meshStandardMaterial
-              color="#d7ebf4"
-              roughness={0.1}
-              metalness={0.3}
-              transparent
-              opacity={0.7}
+      {config.doorStyle !== "none" ? (
+        <group position={[0, doorHeight / 2, halfLength + DOOR_THICKNESS / 2]}>
+          {doorLeafCenters.map((centerX, index) => {
+            const flip = centerX > 0;
+            const hingeX = centerX + (flip ? doorLeafWidth / 2 - 0.08 : -doorLeafWidth / 2 + 0.08);
+            const hingeZ = DOOR_THICKNESS / 2 + 0.015;
+            return (
+              <group key={`door-leaf-${index}`}>
+                <mesh position={[centerX, 0, 0]} castShadow>
+                  <boxGeometry args={[doorLeafWidth, doorHeight, DOOR_THICKNESS]} onUpdate={ensureUv2} />
+                  <SidingMaterial
+                    color={siding.hex}
+                    roughness={sidingType.roughness}
+                    metalness={sidingMetalness}
+                    normalScale={sidingNormalScale}
+                    aoMapIntensity={sidingAoIntensity}
+                    maps={doorSidingMaps[index] ?? null}
+                  />
+                </mesh>
+                <DoorHinge x={hingeX} y={doorHeight * 0.18} z={hingeZ} flip={flip} />
+                <DoorHinge x={hingeX} y={-doorHeight * 0.28} z={hingeZ} flip={flip} />
+              </group>
+            );
+          })}
+          <mesh
+            position={[
+              0,
+              doorHeight / 2 + DOOR_HEADER_HEIGHT / 2 - 0.04,
+              0.02,
+            ]}
+            castShadow
+          >
+            <boxGeometry
+              args={[doorWidth + 0.08, DOOR_HEADER_HEIGHT, DOOR_THICKNESS + 0.02]}
             />
+            <meshStandardMaterial color={trim.hex} roughness={0.45} metalness={0.08} />
           </mesh>
-          <mesh position={[-1.2, 0, 0.02]}>
-            <boxGeometry args={[0.18, 2.2, 0.08]} />
-            <meshStandardMaterial color={shutter.hex} roughness={0.55} metalness={0.05} />
-          </mesh>
-          <mesh position={[1.2, 0, 0.02]}>
-            <boxGeometry args={[0.18, 2.2, 0.08]} />
-            <meshStandardMaterial color={shutter.hex} roughness={0.55} metalness={0.05} />
-          </mesh>
+          {isDoubleDoor ? (
+            <mesh
+              position={[0, 0.12, DOOR_THICKNESS / 2 + 0.02]}
+              rotation={[0, 0, Math.PI / 4]}
+              castShadow
+            >
+              <boxGeometry args={[0.1, 0.1, 0.03]} />
+              <HardwareMaterial />
+            </mesh>
+          ) : (
+            <mesh
+              position={[doorWidth / 2 - 0.18, 0.1, DOOR_THICKNESS / 2 + 0.02]}
+              castShadow
+            >
+              <boxGeometry args={[0.08, 0.22, 0.04]} />
+              <HardwareMaterial />
+            </mesh>
+          )}
         </group>
       ) : null}
 
@@ -814,14 +1145,16 @@ export function ShedModel({ config }: ShedModelProps) {
             onUpdate={ensureUv2}
           />
           <RoofingMaterial
+            key={config.roofTypeId}
             color={roofColor.hex}
             metalness={roofType.metalness}
             roughness={roofType.roughness}
             normalScale={roofNormalScale}
-            maps={applyRoofMaps ? loadedShingle : null}
+            maps={tiledRoofMaps[index] ?? null}
           />
         </mesh>
       ))}
+      </group>
     </group>
   );
 }

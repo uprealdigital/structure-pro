@@ -138,7 +138,9 @@ export function ShedControls({ config, onChange, onSubmit }: ShedControlsProps) 
             title={copy.sidingColor}
             selectedLabel={sidingColor.label}
             selectedId={config.sidingColorId}
-            onSelect={(sidingColorId) => onChange({ ...config, sidingColorId })}
+            onSelect={(sidingColorId) =>
+              onChange({ ...config, sidingColorId, trimColorId: sidingColorId })
+            }
           />
           <ColorSection
             title={copy.trimColor}
@@ -214,7 +216,11 @@ export function ShedControls({ config, onChange, onSubmit }: ShedControlsProps) 
             />
             <OpeningTile label={copy.transom} active={false} onClick={() => undefined} />
             <OpeningTile label={copy.rollup} active={false} onClick={() => undefined} />
-            <OpeningTile label={copy.vent} active={false} onClick={() => undefined} />
+            <OpeningTile
+              label={copy.vent}
+              active={config.hasVent}
+              onClick={() => onChange({ ...config, hasVent: !config.hasVent })}
+            />
           </div>
           <div className="mt-3 border-t border-gray-100 pt-3">
             <h4 className="mb-2 text-xs font-semibold text-gray-800">
@@ -223,7 +229,12 @@ export function ShedControls({ config, onChange, onSubmit }: ShedControlsProps) 
             <button
               type="button"
               onClick={() =>
-                onChange({ ...config, doorStyle: "none", hasWindow: false })
+                onChange({
+                  ...config,
+                  doorStyle: "none",
+                  hasWindow: false,
+                  hasVent: false,
+                })
               }
               className="flex w-full items-center justify-center rounded-full border border-gray-300 py-2 text-xs font-medium text-gray-600"
             >
