@@ -36,7 +36,6 @@ const ShedScene = dynamic(() => import("@/src/components/canvas/shed-scene"), {
 
 export function ShedConfigurator() {
   const [config, setConfig] = useState<ShedConfig>(DEFAULT_SHED_CONFIG);
-  const [prompt, setPrompt] = useState("");
   const [assistantNote, setAssistantNote] = useState("");
   const [yardOpen, setYardOpen] = useState(false);
   const [quoteOpen, setQuoteOpen] = useState(false);
@@ -46,7 +45,7 @@ export function ShedConfigurator() {
   const estimate = useMemo(() => estimateShed(config), [config]);
   const peakHeight = roofPeakHeight(style, config.height, config.width).toFixed(1);
 
-  function submitPrompt() {
+  function submitPrompt(prompt: string) {
     const result = applyAssistantPrompt(config, prompt);
     setConfig(result.config);
     setAssistantNote(result.message);
@@ -116,35 +115,7 @@ export function ShedConfigurator() {
           </div>
         </div>
 
-        <form
-          className="absolute bottom-8 left-1/2 z-30 w-[90%] max-w-md -translate-x-1/2"
-          onSubmit={(event) => {
-            event.preventDefault();
-            submitPrompt();
-          }}
-        >
-          <div className="flex items-center gap-3 rounded-full border border-gray-200/80 bg-white/95 px-4 py-2 shadow-[0_4px_20px_-2px_rgba(0,0,0,0.08)] backdrop-blur">
-            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-gray-300 bg-gray-50 text-gray-700">
-              <Sparkles className="h-4 w-4" />
-            </div>
-            <input
-              className="min-w-0 flex-1 border-0 bg-transparent p-0 text-sm text-gray-800 outline-none placeholder:text-gray-400"
-              placeholder={copy.aiPlaceholder}
-              value={prompt}
-              onChange={(event) => setPrompt(event.target.value)}
-            />
-            <button
-              aria-label="Voice input"
-              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-black text-white"
-              type="submit"
-            >
-              <Mic className="h-5 w-5" />
-            </button>
-          </div>
-          {assistantNote ? (
-            <p className="mt-2 text-center text-xs text-gray-600">{assistantNote}</p>
-          ) : null}
-        </form>
+        <AssistantPromptForm note={assistantNote} onSubmitPrompt={submitPrompt} />
       </section>
 
       <aside className="z-30 flex h-[46vh] w-full shrink-0 flex-col overflow-hidden border-t border-[#E5E7EB] bg-white shadow-xl md:h-auto lg:h-full lg:w-[420px] lg:border-t-0 lg:border-l">
@@ -297,6 +268,48 @@ export function ShedConfigurator() {
         </Modal>
       ) : null}
     </div>
+  );
+}
+
+function AssistantPromptForm({
+  note,
+  onSubmitPrompt,
+}: {
+  note: string;
+  onSubmitPrompt: (prompt: string) => void;
+}) {
+  const [prompt, setPrompt] = useState("");
+
+  return (
+    <form
+      className="absolute bottom-8 left-1/2 z-30 w-[90%] max-w-md -translate-x-1/2"
+      onSubmit={(event) => {
+        event.preventDefault();
+        onSubmitPrompt(prompt);
+      }}
+    >
+      <div className="flex items-center gap-3 rounded-full border border-gray-200/80 bg-white/95 px-4 py-2 shadow-[0_4px_20px_-2px_rgba(0,0,0,0.08)] backdrop-blur">
+        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-gray-300 bg-gray-50 text-gray-700">
+          <Sparkles className="h-4 w-4" />
+        </div>
+        <input
+          className="min-w-0 flex-1 border-0 bg-transparent p-0 text-sm text-gray-800 outline-none placeholder:text-gray-400"
+          placeholder={copy.aiPlaceholder}
+          value={prompt}
+          onChange={(event) => setPrompt(event.target.value)}
+        />
+        <button
+          aria-label="Voice input"
+          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-black text-white"
+          type="submit"
+        >
+          <Mic className="h-5 w-5" />
+        </button>
+      </div>
+      {note ? (
+        <p className="mt-2 text-center text-xs text-gray-600">{note}</p>
+      ) : null}
+    </form>
   );
 }
 

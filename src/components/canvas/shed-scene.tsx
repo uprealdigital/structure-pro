@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense } from "react";
+import { memo, Suspense } from "react";
 import { Canvas } from "@react-three/fiber";
 import { ContactShadows, Environment, OrbitControls } from "@react-three/drei";
 import { ShedModel } from "@/src/components/canvas/shed-model";
@@ -10,7 +10,7 @@ type ShedSceneProps = {
   config: ShedConfig;
 };
 
-export default function ShedScene({ config }: ShedSceneProps) {
+function ShedScene({ config }: ShedSceneProps) {
   return (
     <div className="h-full w-full" role="application" aria-label="3D shed view">
       <Canvas
@@ -69,3 +69,5 @@ export default function ShedScene({ config }: ShedSceneProps) {
     </div>
   );
 }
+
+export default memo(ShedScene);

@@ -109,6 +109,7 @@ export type RoofMaps = {
   normal: string;
   ao: string;
   height: string;
+  roughness?: string;
 };
 
 export function getRoofMaps(type: RoofType): RoofMaps | null {

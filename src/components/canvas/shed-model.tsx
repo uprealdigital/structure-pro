@@ -242,6 +242,8 @@ const SHINGLE_MAP_URLS = SHINGLE_MAPS ?? {
     "/textures/roof/alternating-asphalt-shingle/1k/alternating-asphalt-shingle_albedo_1k.png",
   normal:
     "/textures/roof/alternating-asphalt-shingle/1k/alternating-asphalt-shingle_normal-ogl_1k.png",
+  roughness:
+    "/textures/roof/alternating-asphalt-shingle/1k/alternating-asphalt-shingle_roughness_1k.png",
   ao: "/textures/roof/alternating-asphalt-shingle/1k/alternating-asphalt-shingle_ao_1k.png",
   height:
     "/textures/roof/alternating-asphalt-shingle/1k/alternating-asphalt-shingle_height_1k.png",
@@ -253,6 +255,29 @@ function ensureUv2(geometry: BufferGeometry) {
     return;
   }
   geometry.setAttribute("uv2", uv.clone());
+}
+
+/** World-space roof tiling: U along slope (box X), V along eaves (box Z). */
+function scaleRoofingUVs(
+  geometry: BufferGeometry,
+  repeatAlongSlope: number,
+  repeatAlongEaves: number,
+) {
+  if (geometry.userData.roofUvScaled) {
+    ensureUv2(geometry);
+    return;
+  }
+  const uv = geometry.getAttribute("uv");
+  if (!uv) {
+    return;
+  }
+  geometry.deleteAttribute("uv2");
+  for (let i = 0; i < uv.count; i += 1) {
+    uv.setXY(i, uv.getX(i) * repeatAlongSlope, uv.getY(i) * repeatAlongEaves);
+  }
+  uv.needsUpdate = true;
+  geometry.userData.roofUvScaled = true;
+  ensureUv2(geometry);
 }
 
 /**
@@ -538,46 +563,30 @@ type RoofTextureSet = {
   normal: Texture;
   ao: Texture;
   height: Texture;
+  roughness?: Texture;
 };
 
-/** Roof box UVs: U along slope (plane.length), V along eaves (roofingLength). */
+/** Align shingle/panel direction with box UVs (U = slope, V = eaves). */
 const ROOF_TEXTURE_ROTATION = Math.PI / 2;
 
-function tileRoofMaps(
-  source: RoofTextureSet,
-  repeatAlongEaves: number,
-  repeatAlongSlope: number,
-): RoofTextureSet {
-  return {
-    albedo: configureTiledTexture(
-      source.albedo,
-      repeatAlongEaves,
-      repeatAlongSlope,
-      SRGBColorSpace,
-      ROOF_TEXTURE_ROTATION,
-    ),
-    normal: configureTiledTexture(
-      source.normal,
-      repeatAlongEaves,
-      repeatAlongSlope,
-      NoColorSpace,
-      ROOF_TEXTURE_ROTATION,
-    ),
-    ao: configureTiledTexture(
-      source.ao,
-      repeatAlongEaves,
-      repeatAlongSlope,
-      NoColorSpace,
-      ROOF_TEXTURE_ROTATION,
-    ),
-    height: configureTiledTexture(
-      source.height,
-      repeatAlongEaves,
-      repeatAlongSlope,
-      NoColorSpace,
-      ROOF_TEXTURE_ROTATION,
-    ),
-  };
+function configureSharedRoofMaps(maps: RoofTextureSet) {
+  const layers: [Texture, typeof SRGBColorSpace | typeof NoColorSpace][] = [
+    [maps.albedo, SRGBColorSpace],
+    [maps.normal, NoColorSpace],
+    [maps.ao, NoColorSpace],
+    [maps.height, NoColorSpace],
+  ];
+  if (maps.roughness) {
+    layers.push([maps.roughness, NoColorSpace]);
+  }
+  for (const [texture, colorSpace] of layers) {
+    texture.wrapS = RepeatWrapping;
+    texture.wrapT = RepeatWrapping;
+    texture.center.set(0.5, 0.5);
+    texture.rotation = ROOF_TEXTURE_ROTATION;
+    texture.repeat.set(1, 1);
+    texture.colorSpace = colorSpace;
+  }
 }
 
 function RoofingMaterial({
@@ -610,6 +619,9 @@ function RoofingMaterial({
         <>
           <primitive attach="map" object={maps.albedo} />
           <primitive attach="normalMap" object={maps.normal} />
+          {maps.roughness ? (
+            <primitive attach="roughnessMap" object={maps.roughness} />
+          ) : null}
           <primitive attach="aoMap" object={maps.ao} />
           <primitive attach="bumpMap" object={maps.height} />
         </>
@@ -678,6 +690,9 @@ export function ShedModel({ config }: ShedModelProps) {
   const loadedShingle = useTexture({
     albedo: SHINGLE_MAP_URLS.albedo,
     normal: SHINGLE_MAP_URLS.normal,
+    roughness:
+      SHINGLE_MAP_URLS.roughness ??
+      "/textures/roof/alternating-asphalt-shingle/1k/alternating-asphalt-shingle_roughness_1k.png",
     ao: SHINGLE_MAP_URLS.ao,
     height: SHINGLE_MAP_URLS.height,
   });
@@ -687,6 +702,8 @@ export function ShedModel({ config }: ShedModelProps) {
     ao: METAL_ROOF_MAP_URLS.ao,
     height: METAL_ROOF_MAP_URLS.height,
   });
+  configureSharedRoofMaps(loadedShingle);
+  configureSharedRoofMaps(loadedMetalRoof);
   const loadedRoof =
     config.roofTypeId === "metal" ? loadedMetalRoof : loadedShingle;
   const applyRoofMaps = Boolean(roofMaps);
@@ -824,26 +841,6 @@ export function ShedModel({ config }: ShedModelProps) {
     DECK_THICKNESS + ROOFING_THICKNESS / 2,
     Math.max(DECK_THICKNESS, ROOFING_THICKNESS),
   );
-  const roofingPlaneLengths = roofingPlanes.map((plane) => plane.length).join(",");
-  const tiledRoofMaps = useMemo(() => {
-    if (!applyRoofMaps) {
-      return roofingPlanes.map(() => null);
-    }
-    const repeatAlongEaves = roofingLength / roofTileW;
-    return roofingPlanes.map((plane) =>
-      tileRoofMaps(loadedRoof, repeatAlongEaves, plane.length / roofTileH),
-    );
-  }, [
-    applyRoofMaps,
-    loadedRoof.albedo,
-    loadedRoof.ao,
-    loadedRoof.height,
-    loadedRoof.normal,
-    roofTileH,
-    roofTileW,
-    roofingLength,
-    roofingPlaneLengths,
-  ]);
   const rakePlanes = planesFromPolyline(
     gableWallPolyline(
       halfWidth,
@@ -1142,7 +1139,13 @@ export function ShedModel({ config }: ShedModelProps) {
         >
           <boxGeometry
             args={[plane.length, ROOFING_THICKNESS, roofingLength]}
-            onUpdate={ensureUv2}
+            onUpdate={(geometry) =>
+              scaleRoofingUVs(
+                geometry,
+                plane.length / roofTileH,
+                roofingLength / roofTileW,
+              )
+            }
           />
           <RoofingMaterial
             key={config.roofTypeId}
@@ -1150,7 +1153,7 @@ export function ShedModel({ config }: ShedModelProps) {
             metalness={roofType.metalness}
             roughness={roofType.roughness}
             normalScale={roofNormalScale}
-            maps={tiledRoofMaps[index] ?? null}
+            maps={applyRoofMaps ? loadedRoof : null}
           />
         </mesh>
       ))}

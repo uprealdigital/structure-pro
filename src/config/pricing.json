@@ -196,11 +196,12 @@
       "label": "Shingle (Architectural)",
       "metalness": 0.04,
       "roughness": 1,
-      "normalScale": [1, 1],
+      "normalScale": [2, 2],
       "tileFeet": [5.625, 5.625],
       "maps": {
         "albedo": "/textures/roof/alternating-asphalt-shingle/1k/alternating-asphalt-shingle_albedo_1k.png",
         "normal": "/textures/roof/alternating-asphalt-shingle/1k/alternating-asphalt-shingle_normal-ogl_1k.png",
+        "roughness": "/textures/roof/alternating-asphalt-shingle/1k/alternating-asphalt-shingle_roughness_1k.png",
         "ao": "/textures/roof/alternating-asphalt-shingle/1k/alternating-asphalt-shingle_ao_1k.png",
         "height": "/textures/roof/alternating-asphalt-shingle/1k/alternating-asphalt-shingle_height_1k.png"
       },
