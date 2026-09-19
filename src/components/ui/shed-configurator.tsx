@@ -21,7 +21,6 @@ import {
   estimateShed,
   formatUsd,
   getStyle,
-  roofPeakHeight,
   type ShedConfig,
 } from "@/src/config/shed-config";
 
@@ -43,7 +42,6 @@ export function ShedConfigurator() {
 
   const style = getStyle(config.styleId);
   const estimate = useMemo(() => estimateShed(config), [config]);
-  const peakHeight = roofPeakHeight(style, config.height, config.width).toFixed(1);
 
   function submitPrompt(prompt: string) {
     const result = applyAssistantPrompt(config, prompt);
@@ -57,15 +55,6 @@ export function ShedConfigurator() {
         <div className="pointer-events-none absolute inset-0 opacity-60 floor-grid" />
         <div className="relative min-h-0 flex-1">
           <ShedScene config={config} />
-          <div className="pointer-events-none absolute top-20 left-1/2 z-10 -translate-x-1/2 rounded-full bg-black/85 px-2.5 py-0.5 font-mono text-[11px] text-white">
-            {peakHeight}&apos; Peak Height
-          </div>
-          <div className="pointer-events-none absolute right-6 bottom-24 z-10 rounded border border-gray-300 bg-white/90 px-2 py-0.5 font-mono text-[11px] text-gray-800">
-            {config.width}&apos; 0&quot; Front Length
-          </div>
-          <div className="pointer-events-none absolute bottom-36 left-6 z-10 rounded border border-gray-300 bg-white/90 px-2 py-0.5 font-mono text-[11px] text-gray-800">
-            {config.length}&apos; 0&quot; Studio Depth
-          </div>
         </div>
 
         <div className="pointer-events-none absolute inset-x-0 top-0 z-20 flex items-center justify-between px-6 py-5">
