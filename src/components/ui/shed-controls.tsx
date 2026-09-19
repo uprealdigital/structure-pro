@@ -71,6 +71,7 @@ export function ShedControls({
   const pendingScrollRef = useRef<SectionId | null>(null);
   const [activeSection, setActiveSection] = useState<SectionId>("style");
   const [scrollRequest, setScrollRequest] = useState(0);
+  const [quoteBarVisible, setQuoteBarVisible] = useState(false);
   const [openById, setOpenById] =
     useState<Partial<Record<SectionId, boolean>>>(ALL_SECTIONS_OPEN);
 
@@ -140,25 +141,50 @@ export function ShedControls({
       setActiveSection((current) => (current === next ? current : next));
     }
 
-    panel?.addEventListener("scroll", syncActiveSection, { passive: true });
+    function syncQuoteBar() {
+      if (isDesktopViewport()) {
+        setQuoteBarVisible(false);
+        return;
+      }
+      const scroller = panelRef.current;
+      const header = scroller?.querySelector("header");
+      if (!scroller || !header) {
+        setQuoteBarVisible(false);
+        return;
+      }
+      const visible =
+        header.getBoundingClientRect().bottom <=
+        scroller.getBoundingClientRect().top + 1;
+      setQuoteBarVisible((current) => (current === visible ? current : visible));
+    }
+
+    function onPanelScroll() {
+      syncActiveSection();
+      syncQuoteBar();
+    }
+
+    panel?.addEventListener("scroll", onPanelScroll, { passive: true });
     list?.addEventListener("scroll", syncActiveSection, { passive: true });
     return () => {
-      panel?.removeEventListener("scroll", syncActiveSection);
+      panel?.removeEventListener("scroll", onPanelScroll);
       list?.removeEventListener("scroll", syncActiveSection);
     };
   }, []);
 
   return (
-    <div
-      ref={panelRef}
-      className="flex min-h-0 flex-1 flex-col overflow-y-auto lg:overflow-hidden"
-    >
-      {children}
-      <MobileSectionNav
-        ref={navRef}
-        activeId={activeSection}
-        onSelect={selectSection}
-      />
+    <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden">
+      <div
+        ref={panelRef}
+        className={`min-h-0 flex-1 overflow-y-auto lg:overflow-hidden lg:flex lg:flex-col ${
+          quoteBarVisible ? "pb-24" : ""
+        }`}
+      >
+        {children}
+        <MobileSectionNav
+          ref={navRef}
+          activeId={activeSection}
+          onSelect={selectSection}
+        />
       <div
         ref={listRef}
         className="divide-y divide-[#E5E7EB] lg:min-h-0 lg:flex-1 lg:overflow-y-auto"
@@ -492,6 +518,56 @@ export function ShedControls({
       <button type="button" className="sr-only" onClick={onSubmit}>
         {copy.submitQuote}
       </button>
+      </div>
+      <MobileQuoteBar
+        visible={quoteBarVisible}
+        total={estimate.total}
+        onQuote={onSubmit}
+        onPriceClick={() => selectSection("details")}
+      />
+    </div>
+  );
+}
+
+function MobileQuoteBar({
+  visible,
+  total,
+  onQuote,
+  onPriceClick,
+}: {
+  visible: boolean;
+  total: number;
+  onQuote: () => void;
+  onPriceClick: () => void;
+}) {
+  return (
+    <div
+      aria-hidden={!visible}
+      className={`absolute inset-x-0 bottom-0 z-30 border-t border-gray-200 bg-white px-4 py-3 shadow-[0_-10px_30px_-12px_rgba(0,0,0,0.18)] transition-transform duration-300 ease-out lg:hidden ${
+        visible ? "translate-y-0" : "pointer-events-none translate-y-full"
+      }`}
+    >
+      <div className="flex items-center justify-between gap-3">
+        <div className="min-w-0">
+          <div className="text-2xl leading-none font-semibold tracking-tight text-gray-950">
+            {formatUsd(total)}
+          </div>
+          <button
+            type="button"
+            className="mt-1 text-xs font-medium text-slate-500 underline decoration-slate-400 underline-offset-2"
+            onClick={onPriceClick}
+          >
+            {copy.seeDetails}
+          </button>
+        </div>
+        <button
+          type="button"
+          className="shrink-0 rounded-full bg-black px-5 py-3 text-sm leading-none font-medium whitespace-nowrap text-white"
+          onClick={onQuote}
+        >
+          {copy.submitQuote}
+        </button>
+      </div>
     </div>
   );
 }

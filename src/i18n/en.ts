@@ -16,7 +16,7 @@ export const copy = {
   shutterColor: "Shutter Color",
   estPrice: "Est. price",
   payAsLowAs: "Pay as low as",
-  seeDetails: "See details",
+  seeDetails: "See Details",
   submitQuote: "Submit for Quote",
   estimateBreakdown: "Estimate breakdown",
   tapItemized: "Tap to view itemized costs",
