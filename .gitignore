@@ -25,6 +25,9 @@
 *.pem
 .stitch-ref/
 
+# local Cursor MCP config (may contain API keys)
+.cursor/mcp.json
+
 # debug
 npm-debug.log*
 yarn-debug.log*
