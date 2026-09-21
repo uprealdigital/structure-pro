@@ -65,7 +65,7 @@ export function replyFailureMessage(error: unknown): string {
 
 export async function replyToSms(session: QuoteSession, incoming: string): Promise<string> {
   const ai = getClient();
-  const model = process.env.GEMINI_MODEL?.trim() || "gemini-2.5-flash";
+  const model = process.env.GEMINI_MODEL?.trim() || "gemini-3.6-flash";
   const contents = contentsForReply(session, incoming);
 
   for (let i = 0; i < 3; i += 1) {
