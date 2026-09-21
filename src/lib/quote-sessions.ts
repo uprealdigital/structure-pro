@@ -9,6 +9,7 @@ type QuoteMessageRow = {
 };
 
 type QuoteRow = {
+  id: string;
   full_name: string;
   phone: string;
   email: string;
@@ -43,8 +44,12 @@ function sessionKey(session: QuoteSession): string {
   return session.chatId ?? session.phone;
 }
 
-function throwIfError(error: { message: string } | null): void {
-  if (error) throw new Error(error.message);
+function throwIfError(
+  error: { message: string; code?: string; details?: string; hint?: string } | null,
+): void {
+  if (!error) return;
+  const extra = [error.code, error.details, error.hint].filter(Boolean).join(" — ");
+  throw new Error(extra ? `${error.message} (${extra})` : error.message);
 }
 
 function toMessage(row: QuoteMessageRow): QuoteChatMessage | undefined {
@@ -53,11 +58,23 @@ function toMessage(row: QuoteMessageRow): QuoteChatMessage | undefined {
   return { role: row.role, text: row.body };
 }
 
+function messageRows(value: unknown): QuoteMessageRow[] {
+  if (!Array.isArray(value)) return [];
+  return value.filter((row): row is QuoteMessageRow => {
+    if (!row || typeof row !== "object") return false;
+    const item = row as QuoteMessageRow;
+    return typeof item.role === "string" && typeof item.body === "string";
+  });
+}
+
 function toSession(row: QuoteRow): QuoteSession | undefined {
-  if (!isQuoteSelections(row.selections)) return undefined;
-  const messages = (row.quote_messages ?? [])
+  if (!isQuoteSelections(row.selections)) {
+    console.error("Stored quote selections did not match the expected shape");
+    return undefined;
+  }
+  const messages = messageRows(row.quote_messages)
     .slice()
-    .sort((a, b) => a.position - b.position)
+    .sort((a, b) => Number(a.position) - Number(b.position))
     .map(toMessage)
     .filter((message): message is QuoteChatMessage => message != null);
 
@@ -92,18 +109,36 @@ export async function saveQuoteSession(session: QuoteSession): Promise<void> {
   throwIfError(error);
 }
 
-export async function getQuoteSession(key: string): Promise<QuoteSession | undefined> {
+const QUOTE_COLUMNS =
+  "id, full_name, phone, email, chat_id, selections, invoice_id, contract_sent, opted_out";
+
+async function loadMessages(quoteId: string): Promise<QuoteMessageRow[]> {
   const { data, error } = await supabase()
-    .from("quotes")
-    .select(
-      "full_name, phone, email, chat_id, selections, invoice_id, contract_sent, opted_out, quote_messages(position, role, body)",
-    )
-    .eq("lookup_key", key)
-    .maybeSingle();
+    .from("quote_messages")
+    .select("position, role, body")
+    .eq("quote_id", quoteId)
+    .order("position", { ascending: true });
 
   throwIfError(error);
-  if (!data) return undefined;
-  return toSession(data as QuoteRow);
+  return messageRows(data);
+}
+
+async function findQuote(column: "lookup_key" | "chat_id", key: string): Promise<QuoteRow | undefined> {
+  const { data, error } = await supabase()
+    .from("quotes")
+    .select(QUOTE_COLUMNS)
+    .eq(column, key)
+    .order("updated_at", { ascending: false })
+    .limit(1);
+
+  throwIfError(error);
+  return (data?.[0] as QuoteRow | undefined) ?? undefined;
+}
+
+export async function getQuoteSession(key: string): Promise<QuoteSession | undefined> {
+  const row = (await findQuote("lookup_key", key)) ?? (await findQuote("chat_id", key));
+  if (!row) return undefined;
+  return toSession({ ...row, quote_messages: await loadMessages(row.id) });
 }
 
 export async function deleteQuoteSession(key: string): Promise<void> {
