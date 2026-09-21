@@ -11,9 +11,8 @@ import type { QuoteSession } from "@/src/lib/quote-types";
 const SEND_CONTRACT = "send_contract";
 const PRIMARY_MODEL = "gemini-3.6-flash";
 const FALLBACK_MODELS = ["gemini-3.5-flash"];
-const RETRY_BUDGET_MS = 110_000;
-const ATTEMPT_MS = 20_000;
-const RETRY_WAITS_MS = [3_000, 8_000, 15_000, 20_000];
+const RETRY_BUDGET_MS = 90_000;
+const ATTEMPT_MS = 45_000;
 
 function modelsToTry(): string[] {
   const preferred = process.env.GEMINI_MODEL?.trim() || PRIMARY_MODEL;
@@ -138,13 +137,13 @@ async function generateReply(
   deadline: number,
 ) {
   let lastError: unknown;
-  let waitIndex = 0;
   let modelIndex = 0;
   const models = modelsToTry();
 
   while (Date.now() < deadline) {
-    const model = models[Math.min(modelIndex, models.length - 1)];
+    const model = models[modelIndex % models.length];
     const remaining = deadline - Date.now();
+    if (remaining < 3_000) break;
     try {
       return await withTimeout(
         ai.models.generateContent({ model, contents, config }),
@@ -153,16 +152,11 @@ async function generateReply(
     } catch (error) {
       lastError = error;
       if (!isCapacityError(error) && !isMissingModel(error)) throw error;
-      if (isMissingModel(error) && modelIndex < models.length - 1) {
-        modelIndex += 1;
-        continue;
-      }
       console.error(error);
-      const pause = Math.min(
-        RETRY_WAITS_MS[Math.min(waitIndex, RETRY_WAITS_MS.length - 1)],
-        deadline - Date.now(),
-      );
-      waitIndex += 1;
+      modelIndex += 1;
+      const finishedARound = modelIndex % models.length === 0;
+      if (!finishedARound) continue;
+      const pause = Math.min(5_000, deadline - Date.now());
       if (pause <= 0) break;
       await sleep(pause);
     }
