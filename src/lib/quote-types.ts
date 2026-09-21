@@ -14,6 +14,7 @@ export type QuoteChatMessage = {
 };
 
 export type QuoteSession = QuoteContact & {
+  chatId?: string;
   selections: QuoteSelections;
   invoiceId: string;
   messages: QuoteChatMessage[];

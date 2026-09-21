@@ -24,7 +24,8 @@ function systemInstruction(session: QuoteSession): string {
     .map((spec) => `- ${spec.label}: ${spec.value}`)
     .join("\n");
 
-  return `You are a friendly shed sales assistant texting a customer over SMS for ${described.brand.name}.
+  const channel = session.chatId ? "Telegram" : "SMS";
+  return `You are a friendly shed sales assistant chatting with a customer on ${channel} for ${described.brand.name}.
 Keep every reply under 320 characters. Ask one question at a time.
 Customer: ${session.fullName} (${session.email}, ${session.phone}).
 Configured shed:

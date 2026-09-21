@@ -1,6 +1,12 @@
 import { openingSms, isQuoteSelections } from "@/src/lib/selections";
 import { toE164 } from "@/src/lib/phone";
+import { quoteChannel } from "@/src/lib/quote-channel";
 import { saveQuoteSession } from "@/src/lib/quote-sessions";
+import {
+  demoChatId,
+  ensureTelegramWebhook,
+  sendTelegramMessage,
+} from "@/src/lib/telegram";
 import { sendSms } from "@/src/lib/twilio-sms";
 
 function newInvoiceId(): string {
@@ -39,19 +45,33 @@ export async function POST(request: Request) {
 
   const invoiceId = newInvoiceId();
   const firstMessage = openingSms(fullName, payload.selections);
+  const channel = quoteChannel();
+  let chatId: string | undefined;
 
   try {
-    await sendSms(phone, firstMessage);
+    if (channel === "telegram") {
+      chatId = demoChatId();
+      await ensureTelegramWebhook();
+      await sendTelegramMessage(chatId, firstMessage);
+    } else {
+      await sendSms(phone, firstMessage);
+    }
   } catch (error) {
     const message =
-      error instanceof Error ? error.message : "Could not send SMS";
-    return Response.json({ error: message }, { status: 502 });
+      error instanceof Error ? error.message : `Could not send ${channel} message`;
+    const startedHint =
+      channel === "telegram" &&
+      /bot was blocked|chat not found|Forbidden/i.test(message)
+        ? " Open the Telegram bot and tap Start, then submit again."
+        : "";
+    return Response.json({ error: `${message}.${startedHint}` }, { status: 502 });
   }
 
   saveQuoteSession({
     fullName,
     phone,
     email,
+    chatId,
     selections: payload.selections,
     invoiceId,
     messages: [{ role: "model", text: firstMessage }],
@@ -59,5 +79,5 @@ export async function POST(request: Request) {
     optedOut: false,
   });
 
-  return Response.json({ ok: true, invoiceId });
+  return Response.json({ ok: true, invoiceId, channel });
 }

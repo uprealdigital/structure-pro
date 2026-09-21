@@ -95,7 +95,7 @@ export const copy = {
   phone: "Phone",
   email: "Email",
   quoteSubmitting: "Sending quote…",
-  quoteSubmitSuccess: "Quote sent. Check your phone for a text.",
+  quoteSubmitSuccess: "Quote sent. Check your message thread.",
   quoteSubmitError: "Could not send your quote. Try again.",
   close: "Close",
   dismissAssistantNote: "Dismiss message",
