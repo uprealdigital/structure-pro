@@ -55,7 +55,7 @@ export type SidingMaps = {
   albedo: string;
   normal: string;
   roughness: string;
-  metalness: string;
+  metalness?: string;
   ao: string;
 };
 

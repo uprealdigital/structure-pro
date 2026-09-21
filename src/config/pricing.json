@@ -155,16 +155,15 @@
       "id": "lp-smart",
       "label": "LP Smart",
       "roughness": 1,
-      "metalness": 1,
-      "normalScale": [2, 2],
+      "metalness": 0.04,
+      "normalScale": [1, 1],
       "tileFeet": [4, 4],
-      "aoMapIntensity": 1,
+      "aoMapIntensity": 0,
       "maps": {
-        "albedo": "/textures/siding/LP%20Smart/LP%20Smart%20Siding_Basecolor.png",
-        "normal": "/textures/siding/LP%20Smart/LP%20Smart%20Siding_Normal.png",
-        "roughness": "/textures/siding/LP%20Smart/LP%20Smart%20Siding_Specularroughness.png",
-        "metalness": "/textures/siding/LP%20Smart/LP%20Smart%20Siding_Basemetalness.png",
-        "ao": "/textures/siding/LP%20Smart/LP%20Smart%20Siding_AO.png"
+        "albedo": "/textures/siding/LP%20Smart/LPSmart_1k_map.png",
+        "normal": "/textures/siding/LP%20Smart/LPSmart_1k_normalMap.png",
+        "roughness": "/textures/siding/LP%20Smart/LPSmart_1k_roughnessMap.png",
+        "ao": "/textures/siding/LP%20Smart/LPSmart_1k_aoMap.png"
       },
       "image": "https://lh3.googleusercontent.com/aida-public/AB6AXuAl9XHuRPkvQQNAg7fnzgsLs-y2u5yLX5NDt_ZMdsW8G8sIALRNbPfqPjmvmUTtMtyj6ssvv9jbhjCxkl0Mpzv9hmv9AvVgELcVCRCWpVSzH1NNsN6peQ_K0_ADKkHMwYhaAagqmCzs1JJpeS8NWjpH4T3-0DgVbJY_EuWXZmEHCjnP-ttlNzGPVr_q_56oiLNj6MDDU8QvHKd-Bj4e3S7ZR7O3_y30pz1wvroDR9-Ud8MlOttGgEEzeSQyVdjTIMFF83k"
     },
@@ -172,6 +171,16 @@
       "id": "lp-lap",
       "label": "LP Lap (8\")",
       "roughness": 0.78,
+      "metalness": 0.04,
+      "normalScale": [1, 1],
+      "tileFeet": [5.333, 5.333],
+      "aoMapIntensity": 0,
+      "maps": {
+        "albedo": "/textures/siding/LapSiding/LapSiding_1k_map.png",
+        "normal": "/textures/siding/LapSiding/LapSiding_1k_normalMap.png",
+        "roughness": "/textures/siding/LapSiding/LapSiding_1k_roughnessMap.png",
+        "ao": "/textures/siding/LapSiding/LapSiding_1k_aoMap.png"
+      },
       "image": "https://lh3.googleusercontent.com/aida-public/AB6AXuAQgLIEjodcPH9Oi32INZVZKaOk6P92_JT4kFmhDp1oBug5GstOUPanhM2bu8zQIxd5zuaR-JOZU6MykUXAkK8B31HfADgWI_Pfx4R_2Gnc0Ue-wBJu-NzNamKMYXYlMhtf8kpYGwNqy2HfNqDetBwKFiyyOVMZvWPg5602jaIah2ggs81UsxwYL7FIb1hJ0KtkMeHcU1IQMbCySbpj42QuFQCINe7A2XQ92T9oj0G94WmBCsmOmyKEsnwEkCb09BJS3B0"
     }
   ],

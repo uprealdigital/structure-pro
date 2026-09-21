@@ -208,18 +208,24 @@ function eaveFascia(
   };
 }
 
-const LP_SMART_MAPS = getSidingMaps(
+const LP_SMART_MAP_URLS = getSidingMaps(
   CATALOG.sidingTypes.find((item) => item.id === "lp-smart") ??
     CATALOG.sidingTypes[0],
-);
+) ?? {
+  albedo: "/textures/siding/LP%20Smart/LPSmart_1k_map.png",
+  normal: "/textures/siding/LP%20Smart/LPSmart_1k_normalMap.png",
+  roughness: "/textures/siding/LP%20Smart/LPSmart_1k_roughnessMap.png",
+  ao: "/textures/siding/LP%20Smart/LPSmart_1k_aoMap.png",
+};
 
-const LP_SMART_MAP_URLS = LP_SMART_MAPS ?? {
-  albedo: "/textures/siding/LP%20Smart/LP%20Smart%20Siding_Basecolor.png",
-  normal: "/textures/siding/LP%20Smart/LP%20Smart%20Siding_Normal.png",
-  roughness:
-    "/textures/siding/LP%20Smart/LP%20Smart%20Siding_Specularroughness.png",
-  metalness: "/textures/siding/LP%20Smart/LP%20Smart%20Siding_Basemetalness.png",
-  ao: "/textures/siding/LP%20Smart/LP%20Smart%20Siding_AO.png",
+const LP_LAP_MAP_URLS = getSidingMaps(
+  CATALOG.sidingTypes.find((item) => item.id === "lp-lap") ??
+    CATALOG.sidingTypes[0],
+) ?? {
+  albedo: "/textures/siding/LapSiding/LapSiding_1k_map.png",
+  normal: "/textures/siding/LapSiding/LapSiding_1k_normalMap.png",
+  roughness: "/textures/siding/LapSiding/LapSiding_1k_roughnessMap.png",
+  ao: "/textures/siding/LapSiding/LapSiding_1k_aoMap.png",
 };
 
 const METAL_ROOF_MAPS = getRoofMaps(
@@ -330,7 +336,7 @@ type SidingTextureSet = {
   albedo: Texture;
   normal: Texture;
   roughness: Texture;
-  metalness: Texture;
+  metalness?: Texture;
   ao: Texture;
 };
 
@@ -398,14 +404,16 @@ function tileSidingMaps(
       offsetX,
       offsetY,
     ),
-    metalness: configureSidingTexture(
-      source.metalness,
-      repeatX,
-      repeatY,
-      NoColorSpace,
-      offsetX,
-      offsetY,
-    ),
+    metalness: source.metalness
+      ? configureSidingTexture(
+          source.metalness,
+          repeatX,
+          repeatY,
+          NoColorSpace,
+          offsetX,
+          offsetY,
+        )
+      : undefined,
     ao: configureSidingTexture(
       source.ao,
       repeatX,
@@ -680,13 +688,20 @@ export function ShedModel({ config }: ShedModelProps) {
   const roofMaps = getRoofMaps(roofType);
   const [roofTileW, roofTileH] = getRoofTileFeet(roofType);
   const roofNormalScale = getRoofNormalScale(roofType);
-  const loadedSiding = useTexture({
+  const loadedLpSmart = useTexture({
     albedo: LP_SMART_MAP_URLS.albedo,
     normal: LP_SMART_MAP_URLS.normal,
     roughness: LP_SMART_MAP_URLS.roughness,
-    metalness: LP_SMART_MAP_URLS.metalness,
     ao: LP_SMART_MAP_URLS.ao,
   });
+  const loadedLpLap = useTexture({
+    albedo: LP_LAP_MAP_URLS.albedo,
+    normal: LP_LAP_MAP_URLS.normal,
+    roughness: LP_LAP_MAP_URLS.roughness,
+    ao: LP_LAP_MAP_URLS.ao,
+  });
+  const loadedSiding =
+    config.sidingTypeId === "lp-lap" ? loadedLpLap : loadedLpSmart;
   const loadedShingle = useTexture({
     albedo: SHINGLE_MAP_URLS.albedo,
     normal: SHINGLE_MAP_URLS.normal,
