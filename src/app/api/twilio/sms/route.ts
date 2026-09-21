@@ -4,6 +4,7 @@ import {
   getQuoteSession,
   saveQuoteSession,
 } from "@/src/lib/quote-sessions";
+import type { QuoteSession } from "@/src/lib/quote-types";
 import {
   emptyTwiml,
   isValidTwilioRequest,
@@ -37,7 +38,7 @@ export async function POST(request: Request) {
   }
 
   if (STOP_RE.test(body)) {
-    deleteQuoteSession(from);
+    await deleteQuoteSession(from);
     return xml(
       twimlMessage(
         "You're unsubscribed. Reply START after submitting a new quote if you want to chat again.",
@@ -45,7 +46,18 @@ export async function POST(request: Request) {
     );
   }
 
-  const session = getQuoteSession(from);
+  let session: QuoteSession | undefined;
+  try {
+    session = await getQuoteSession(from);
+  } catch (error) {
+    console.error(error);
+    return xml(
+      twimlMessage(
+        "Sorry, I had trouble loading your quote. Reply again in a moment.",
+      ),
+    );
+  }
+
   if (!session || session.optedOut) {
     return xml(
       twimlMessage(
@@ -56,7 +68,7 @@ export async function POST(request: Request) {
 
   try {
     const reply = await replyToSms(session, body || "Hi");
-    saveQuoteSession(session);
+    await saveQuoteSession(session);
     return xml(twimlMessage(reply));
   } catch (error) {
     console.error(error);

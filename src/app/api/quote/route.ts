@@ -1,7 +1,7 @@
 import { openingSms, isQuoteSelections } from "@/src/lib/selections";
 import { toE164 } from "@/src/lib/phone";
 import { quoteChannel } from "@/src/lib/quote-channel";
-import { saveQuoteSession } from "@/src/lib/quote-sessions";
+import { deleteQuoteSession, saveQuoteSession } from "@/src/lib/quote-sessions";
 import {
   demoChatId,
   ensureTelegramWebhook,
@@ -46,17 +46,33 @@ export async function POST(request: Request) {
   const invoiceId = newInvoiceId();
   const firstMessage = openingSms(fullName, payload.selections);
   const channel = quoteChannel();
-  let chatId: string | undefined;
+  let storedKey = phone;
+  let saved = false;
 
   try {
-    if (channel === "telegram") {
-      chatId = demoChatId();
+    const chatId = channel === "telegram" ? demoChatId() : undefined;
+    storedKey = chatId ?? phone;
+    await saveQuoteSession({
+      fullName,
+      phone,
+      email,
+      chatId,
+      selections: payload.selections,
+      invoiceId,
+      messages: [{ role: "model", text: firstMessage }],
+      contractSent: false,
+      optedOut: false,
+    });
+    saved = true;
+
+    if (chatId) {
       await ensureTelegramWebhook();
       await sendTelegramMessage(chatId, firstMessage);
     } else {
       await sendSms(phone, firstMessage);
     }
   } catch (error) {
+    if (saved) await deleteQuoteSession(storedKey).catch(() => undefined);
     const message =
       error instanceof Error ? error.message : `Could not send ${channel} message`;
     const startedHint =
@@ -66,18 +82,6 @@ export async function POST(request: Request) {
         : "";
     return Response.json({ error: `${message}.${startedHint}` }, { status: 502 });
   }
-
-  saveQuoteSession({
-    fullName,
-    phone,
-    email,
-    chatId,
-    selections: payload.selections,
-    invoiceId,
-    messages: [{ role: "model", text: firstMessage }],
-    contractSent: false,
-    optedOut: false,
-  });
 
   return Response.json({ ok: true, invoiceId, channel });
 }

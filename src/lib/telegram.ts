@@ -26,7 +26,7 @@ type TelegramResult<T> = {
 
 async function telegramCall<T>(
   method: string,
-  body: Record<string, unknown>,
+  body: Record<string, unknown> = {},
 ): Promise<T> {
   const response = await fetch(apiUrl(method), {
     method: "POST",
@@ -86,6 +86,29 @@ export function isValidTelegramWebhook(request: Request): boolean {
   const secret = process.env.TELEGRAM_WEBHOOK_SECRET?.trim();
   if (!secret) return true;
   return request.headers.get("x-telegram-bot-api-secret-token") === secret;
+}
+
+export async function persistQuoteSnapshot(encoded: string): Promise<void> {
+  await telegramCall("setMyDescription", { description: encoded });
+}
+
+export async function loadQuoteSnapshot(): Promise<string | null> {
+  try {
+    const result = await telegramCall<{ description?: string }>(
+      "getMyDescription",
+    );
+    return result.description?.trim() || null;
+  } catch {
+    return null;
+  }
+}
+
+export async function clearQuoteSnapshot(): Promise<void> {
+  try {
+    await telegramCall("setMyDescription", { description: "" });
+  } catch {
+    // Best-effort; memory session is still cleared.
+  }
 }
 
 export type TelegramUpdate = {

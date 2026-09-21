@@ -4,6 +4,7 @@ import {
   getQuoteSession,
   saveQuoteSession,
 } from "@/src/lib/quote-sessions";
+import type { QuoteSession } from "@/src/lib/quote-types";
 import {
   isValidTelegramWebhook,
   sendTelegramMessage,
@@ -43,7 +44,7 @@ export async function POST(request: Request) {
   }
 
   if (STOP_RE.test(text)) {
-    deleteQuoteSession(key);
+    await deleteQuoteSession(key);
     await sendTelegramMessage(
       key,
       "You're unsubscribed. Submit a new quote on the website if you want to chat again.",
@@ -51,7 +52,18 @@ export async function POST(request: Request) {
     return Response.json({ ok: true });
   }
 
-  const session = getQuoteSession(key);
+  let session: QuoteSession | undefined;
+  try {
+    session = await getQuoteSession(key);
+  } catch (error) {
+    console.error(error);
+    await sendTelegramMessage(
+      key,
+      "Sorry, I had trouble loading your quote. Reply again in a moment.",
+    );
+    return Response.json({ ok: true });
+  }
+
   if (!session || session.optedOut) {
     await sendTelegramMessage(
       key,
@@ -62,7 +74,7 @@ export async function POST(request: Request) {
 
   try {
     const reply = await replyToSms(session, text || "Hi");
-    saveQuoteSession(session);
+    await saveQuoteSession(session);
     await sendTelegramMessage(key, reply);
   } catch (error) {
     console.error(error);
