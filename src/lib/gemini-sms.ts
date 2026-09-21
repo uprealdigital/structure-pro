@@ -9,8 +9,8 @@ import { describeSelections } from "@/src/lib/selections";
 import type { QuoteSession } from "@/src/lib/quote-types";
 
 const SEND_CONTRACT = "send_contract";
-const PRIMARY_MODEL = "gemini-3.6-flash";
-const FALLBACK_MODELS = ["gemini-3.5-flash"];
+const PRIMARY_MODEL = "gemini-3.1-flash-lite";
+const FALLBACK_MODELS = ["gemini-3.5-flash-lite"];
 const RETRY_BUDGET_MS = 90_000;
 const ATTEMPT_MS = 45_000;
 
