@@ -1,6 +1,8 @@
 -- Quote storage for Structure Pro.
 -- In the Supabase dashboard: SQL Editor → New query → paste this → Run.
 -- Then open Table Editor to see quotes and quote_messages.
+-- The app reads and writes these tables with the Supabase client.
+-- It does not call database functions.
 
 create table if not exists public.quotes (
   id uuid primary key default gen_random_uuid(),
@@ -36,63 +38,6 @@ alter table public.quote_messages enable row level security;
 -- No policies for anon or authenticated. The server uses the service role,
 -- which bypasses RLS. The Table Editor still shows every row.
 
-create or replace function public.save_quote_session(payload jsonb)
-returns void
-language plpgsql
-security definer
-set search_path = public
-as $$
-declare
-  quote_uuid uuid;
-  messages jsonb;
-  msg jsonb;
-  i integer;
-begin
-  insert into public.quotes (
-    lookup_key,
-    full_name,
-    phone,
-    email,
-    chat_id,
-    selections,
-    invoice_id,
-    contract_sent,
-    opted_out
-  ) values (
-    payload->>'lookup_key',
-    payload->>'full_name',
-    payload->>'phone',
-    payload->>'email',
-    nullif(payload->>'chat_id', ''),
-    payload->'selections',
-    payload->>'invoice_id',
-    coalesce((payload->>'contract_sent')::boolean, false),
-    coalesce((payload->>'opted_out')::boolean, false)
-  )
-  on conflict (lookup_key) do update set
-    full_name = excluded.full_name,
-    phone = excluded.phone,
-    email = excluded.email,
-    chat_id = excluded.chat_id,
-    selections = excluded.selections,
-    invoice_id = excluded.invoice_id,
-    contract_sent = excluded.contract_sent,
-    opted_out = excluded.opted_out,
-    updated_at = now()
-  returning id into quote_uuid;
-
-  delete from public.quote_messages where quote_id = quote_uuid;
-
-  messages := coalesce(payload->'messages', '[]'::jsonb);
-  for i in 0 .. jsonb_array_length(messages) - 1 loop
-    msg := messages->i;
-    insert into public.quote_messages (quote_id, position, role, body)
-    values (quote_uuid, i, msg->>'role', msg->>'text');
-  end loop;
-end;
-$$;
-
-revoke all on function public.save_quote_session(jsonb) from public;
-revoke all on function public.save_quote_session(jsonb) from anon;
-revoke all on function public.save_quote_session(jsonb) from authenticated;
-grant execute on function public.save_quote_session(jsonb) to service_role;
+grant select, insert, update, delete on table public.quotes to service_role;
+grant select, insert, update, delete on table public.quote_messages to service_role;
+grant usage, select on all sequences in schema public to service_role;

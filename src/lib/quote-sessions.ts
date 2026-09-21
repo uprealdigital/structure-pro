@@ -18,7 +18,6 @@ type QuoteRow = {
   invoice_id: string;
   contract_sent: boolean;
   opted_out: boolean;
-  quote_messages: QuoteMessageRow[] | null;
 };
 
 let client: SupabaseClient | undefined;
@@ -30,7 +29,7 @@ function supabase(): SupabaseClient {
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY?.trim();
   if (!url || !key) {
     throw new Error(
-      "Quote follow-ups need Supabase. Set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY, run supabase/schema.sql in the SQL editor, then redeploy.",
+      "Quote follow-ups need Supabase. Set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY.",
     );
   }
 
@@ -58,21 +57,13 @@ function toMessage(row: QuoteMessageRow): QuoteChatMessage | undefined {
   return { role: row.role, text: row.body };
 }
 
-function messageRows(value: unknown): QuoteMessageRow[] {
-  if (!Array.isArray(value)) return [];
-  return value.filter((row): row is QuoteMessageRow => {
-    if (!row || typeof row !== "object") return false;
-    const item = row as QuoteMessageRow;
-    return typeof item.role === "string" && typeof item.body === "string";
-  });
-}
-
-function toSession(row: QuoteRow): QuoteSession | undefined {
+function toSession(row: QuoteRow, messages: QuoteMessageRow[]): QuoteSession | undefined {
   if (!isQuoteSelections(row.selections)) {
     console.error("Stored quote selections did not match the expected shape");
     return undefined;
   }
-  const messages = messageRows(row.quote_messages)
+
+  const history = messages
     .slice()
     .sort((a, b) => Number(a.position) - Number(b.position))
     .map(toMessage)
@@ -85,45 +76,62 @@ function toSession(row: QuoteRow): QuoteSession | undefined {
     chatId: row.chat_id ?? undefined,
     selections: row.selections,
     invoiceId: row.invoice_id,
-    messages,
+    messages: history,
     contractSent: row.contract_sent,
     optedOut: row.opted_out,
   };
 }
 
-export async function saveQuoteSession(session: QuoteSession): Promise<void> {
-  const { error } = await supabase().rpc("save_quote_session", {
-    payload: {
-      lookup_key: sessionKey(session),
-      full_name: session.fullName,
-      phone: session.phone,
-      email: session.email,
-      chat_id: session.chatId ?? "",
-      selections: session.selections,
-      invoice_id: session.invoiceId,
-      contract_sent: session.contractSent,
-      opted_out: session.optedOut,
-      messages: session.messages,
-    },
-  });
-  throwIfError(error);
-}
-
 const QUOTE_COLUMNS =
   "id, full_name, phone, email, chat_id, selections, invoice_id, contract_sent, opted_out";
 
-async function loadMessages(quoteId: string): Promise<QuoteMessageRow[]> {
+export async function saveQuoteSession(session: QuoteSession): Promise<void> {
   const { data, error } = await supabase()
-    .from("quote_messages")
-    .select("position, role, body")
-    .eq("quote_id", quoteId)
-    .order("position", { ascending: true });
+    .from("quotes")
+    .upsert(
+      {
+        lookup_key: sessionKey(session),
+        full_name: session.fullName,
+        phone: session.phone,
+        email: session.email,
+        chat_id: session.chatId ?? null,
+        selections: session.selections,
+        invoice_id: session.invoiceId,
+        contract_sent: session.contractSent,
+        opted_out: session.optedOut,
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: "lookup_key" },
+    )
+    .select("id")
+    .single();
 
   throwIfError(error);
-  return messageRows(data);
+  if (!data?.id) throw new Error("Quote was not saved");
+
+  const removed = await supabase()
+    .from("quote_messages")
+    .delete()
+    .eq("quote_id", data.id);
+  throwIfError(removed.error);
+
+  if (session.messages.length === 0) return;
+
+  const inserted = await supabase().from("quote_messages").insert(
+    session.messages.map((message, position) => ({
+      quote_id: data.id,
+      position,
+      role: message.role,
+      body: message.text,
+    })),
+  );
+  throwIfError(inserted.error);
 }
 
-async function findQuote(column: "lookup_key" | "chat_id", key: string): Promise<QuoteRow | undefined> {
+async function findQuote(
+  column: "lookup_key" | "chat_id",
+  key: string,
+): Promise<QuoteRow | undefined> {
   const { data, error } = await supabase()
     .from("quotes")
     .select(QUOTE_COLUMNS)
@@ -135,13 +143,26 @@ async function findQuote(column: "lookup_key" | "chat_id", key: string): Promise
   return (data?.[0] as QuoteRow | undefined) ?? undefined;
 }
 
+async function loadMessages(quoteId: string): Promise<QuoteMessageRow[]> {
+  const { data, error } = await supabase()
+    .from("quote_messages")
+    .select("position, role, body")
+    .eq("quote_id", quoteId)
+    .order("position", { ascending: true });
+
+  throwIfError(error);
+  return (data ?? []) as QuoteMessageRow[];
+}
+
 export async function getQuoteSession(key: string): Promise<QuoteSession | undefined> {
   const row = (await findQuote("lookup_key", key)) ?? (await findQuote("chat_id", key));
   if (!row) return undefined;
-  return toSession({ ...row, quote_messages: await loadMessages(row.id) });
+  return toSession(row, await loadMessages(row.id));
 }
 
 export async function deleteQuoteSession(key: string): Promise<void> {
-  const { error } = await supabase().from("quotes").delete().eq("lookup_key", key);
-  throwIfError(error);
+  const byKey = await supabase().from("quotes").delete().eq("lookup_key", key);
+  throwIfError(byKey.error);
+  const byChat = await supabase().from("quotes").delete().eq("chat_id", key);
+  throwIfError(byChat.error);
 }
