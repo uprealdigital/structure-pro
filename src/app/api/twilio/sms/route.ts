@@ -1,3 +1,4 @@
+import { after } from "next/server";
 import { replyFailureMessage, replyToSms } from "@/src/lib/gemini-sms";
 import {
   deleteQuoteSession,
@@ -8,10 +9,12 @@ import type { QuoteSession } from "@/src/lib/quote-types";
 import {
   emptyTwiml,
   isValidTwilioRequest,
+  sendSms,
   twimlMessage,
 } from "@/src/lib/twilio-sms";
 
 export const runtime = "nodejs";
+export const maxDuration = 120;
 
 const STOP_RE = /^(stop|stopall|unsubscribe|cancel|end|quit)$/i;
 
@@ -66,18 +69,22 @@ export async function POST(request: Request) {
     );
   }
 
-  let reply: string;
-  try {
-    reply = await replyToSms(session, body || "Hi");
-  } catch (error) {
-    console.error(error);
-    return xml(twimlMessage(replyFailureMessage(error)));
-  }
+  after(async () => {
+    try {
+      const reply = await replyToSms(session, body || "Hi");
+      try {
+        await saveQuoteSession(session);
+      } catch (error) {
+        console.error(error);
+      }
+      await sendSms(from, reply);
+    } catch (error) {
+      console.error(error);
+      await sendSms(from, replyFailureMessage(error)).catch((sendError) => {
+        console.error(sendError);
+      });
+    }
+  });
 
-  try {
-    await saveQuoteSession(session);
-  } catch (error) {
-    console.error(error);
-  }
-  return xml(twimlMessage(reply));
+  return xml(emptyTwiml());
 }

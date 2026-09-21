@@ -1,3 +1,4 @@
+import { after } from "next/server";
 import { replyFailureMessage, replyToSms } from "@/src/lib/gemini-sms";
 import {
   deleteQuoteSession,
@@ -12,6 +13,7 @@ import {
 } from "@/src/lib/telegram";
 
 export const runtime = "nodejs";
+export const maxDuration = 120;
 
 const STOP_RE = /^(stop|stopall|unsubscribe|cancel|end|quit)$/i;
 
@@ -72,21 +74,22 @@ export async function POST(request: Request) {
     return Response.json({ ok: true });
   }
 
-  let reply: string;
-  try {
-    reply = await replyToSms(session, text || "Hi");
-  } catch (error) {
-    console.error(error);
-    await sendTelegramMessage(key, replyFailureMessage(error));
-    return Response.json({ ok: true });
-  }
-
-  await sendTelegramMessage(key, reply);
-  try {
-    await saveQuoteSession(session);
-  } catch (error) {
-    console.error(error);
-  }
+  after(async () => {
+    try {
+      const reply = await replyToSms(session, text || "Hi");
+      await sendTelegramMessage(key, reply);
+      try {
+        await saveQuoteSession(session);
+      } catch (error) {
+        console.error(error);
+      }
+    } catch (error) {
+      console.error(error);
+      await sendTelegramMessage(key, replyFailureMessage(error)).catch((sendError) => {
+        console.error(sendError);
+      });
+    }
+  });
 
   return Response.json({ ok: true });
 }
