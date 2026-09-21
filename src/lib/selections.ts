@@ -124,5 +124,8 @@ export function openingSms(
     maximumFractionDigits: 0,
   }).format(estimate.total);
 
-  return `Hi ${firstName}, thanks for requesting a quote on your ${selections.width}×${selections.length} ${style.productTitle} (about ${total}). Reply here and I'll ask a few questions so we can email your invoice.`;
+  const agent = process.env.COMPANY_CONTACT_NAME?.trim() || "Daniel";
+  const company = CATALOG.brand.name;
+
+  return `Hey ${firstName}, ${agent} from ${company} here. We just received a quote for a ${selections.width}-by-${selections.length} ${style.productTitle}, which comes out to about ${total}. When are you looking to get this done? Trying to get a bit more context so we can send the contract over.`;
 }
