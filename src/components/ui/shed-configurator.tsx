@@ -4,6 +4,7 @@ import dynamic from "next/dynamic";
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import {
   Box,
+  Check,
   Expand,
   Heart,
   Home,
@@ -619,31 +620,54 @@ function QuoteModal({
         disabled={submitting}
       />
       <div className="relative z-10 my-auto w-full max-w-xl rounded-xl border border-gray-200 bg-white p-6 text-gray-900 shadow-2xl sm:p-8">
-        <div className="flex items-start justify-between border-b border-gray-100 pb-4">
-          <div className="space-y-0.5">
-            <h2 className="font-serif text-xl font-bold tracking-tight text-gray-950">
-              {copy.quoteTitle}
-            </h2>
-            <p className="text-xs text-gray-500">
-              {copy.quoteRequiredHint}{" "}
-              <span className="font-medium text-stone-800">*</span>
-            </p>
-          </div>
-          <button
-            type="button"
-            aria-label={copy.close}
-            onClick={onClose}
-            disabled={submitting}
-            className="flex h-8 w-8 items-center justify-center rounded-full text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-700 disabled:opacity-50"
-          >
-            <X className="h-5 w-5" />
-          </button>
-        </div>
-
         {status === "success" ? (
-          <p className="pt-6 text-sm text-gray-700">{copy.quoteSubmitSuccess}</p>
+          <div className="relative">
+            <button
+              type="button"
+              aria-label={copy.close}
+              onClick={onClose}
+              className="absolute top-0 right-0 flex h-8 w-8 items-center justify-center rounded-full text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-700"
+            >
+              <X className="h-5 w-5" />
+            </button>
+            <div className="flex flex-col items-center px-6 pt-8 pb-6 text-center">
+              <Check
+                className="h-24 w-24 text-green-600"
+                strokeWidth={2.25}
+                aria-hidden
+              />
+              <h2 className="mt-6 font-serif text-2xl font-bold tracking-tight text-gray-950">
+                {copy.quoteSubmitSuccessTitle}
+              </h2>
+              <p className="mt-2 max-w-sm text-sm leading-relaxed text-gray-600">
+                {copy.quoteSubmitSuccess}
+              </p>
+            </div>
+          </div>
         ) : (
-          <form className="space-y-4 pt-4" onSubmit={handleSubmit}>
+          <>
+            <div className="flex items-start justify-between border-b border-gray-100 pb-4">
+              <div className="space-y-0.5">
+                <h2 className="font-serif text-xl font-bold tracking-tight text-gray-950">
+                  {copy.quoteTitle}
+                </h2>
+                <p className="text-xs text-gray-500">
+                  {copy.quoteRequiredHint}{" "}
+                  <span className="font-medium text-stone-800">*</span>
+                </p>
+              </div>
+              <button
+                type="button"
+                aria-label={copy.close}
+                onClick={onClose}
+                disabled={submitting}
+                className="flex h-8 w-8 items-center justify-center rounded-full text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-700 disabled:opacity-50"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <form className="space-y-4 pt-4" onSubmit={handleSubmit}>
             <div className="space-y-3">
               <input
                 type="text"
@@ -689,6 +713,7 @@ function QuoteModal({
               </button>
             </div>
           </form>
+          </>
         )}
       </div>
     </div>
