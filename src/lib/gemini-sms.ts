@@ -160,7 +160,38 @@ async function generateReply(
   throw lastError instanceof Error ? lastError : new Error("Gemini is unavailable");
 }
 
+function remember(session: QuoteSession, incoming: string, reply: string): string {
+  session.messages.push({ role: "user", text: incoming });
+  session.messages.push({ role: "model", text: reply });
+  return reply;
+}
+
+async function deliverInvoice(session: QuoteSession): Promise<string> {
+  try {
+    await sendInvoiceEmail(session);
+    session.contractSent = true;
+    return `I emailed invoice ${session.invoiceId} to ${session.email}. Please check your inbox and spam folder, and tell me if it arrived.`;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Email failed";
+    return `I couldn't email the invoice to ${session.email}. ${message}`;
+  }
+}
+
+function claimsInvoiceSent(text: string): boolean {
+  return /sent (the )?(invoice|contract)|check your inbox|emailed the invoice/i.test(text);
+}
+
+function wantsInvoiceAgain(text: string): boolean {
+  return /didn.?t (get|receive)|never (got|received)|no email|not in my inbox|didn.?t arrive|resend/i.test(
+    text,
+  );
+}
+
 export async function replyToSms(session: QuoteSession, incoming: string): Promise<string> {
+  if (wantsInvoiceAgain(incoming)) {
+    return remember(session, incoming, await deliverInvoice(session));
+  }
+
   const ai = getClient();
   const deadline = Date.now() + RETRY_BUDGET_MS;
   const contents = contentsForReply(session, incoming);
@@ -212,57 +243,32 @@ export async function replyToSms(session: QuoteSession, incoming: string): Promi
         }
 
         if (session.contractSent) {
-          functionResponseParts.push({
-            functionResponse: {
-              id: call.id,
-              name: SEND_CONTRACT,
-              response: { output: "Invoice already sent. Do not send again." },
-            },
-          });
-          continue;
+          return remember(
+            session,
+            incoming,
+            `The invoice was already emailed to ${session.email}. If it is not in your inbox or spam, reply that you didn't get it and I will send it again.`,
+          );
         }
 
-        try {
-          await sendInvoiceEmail(session);
-          session.contractSent = true;
-          functionResponseParts.push({
-            functionResponse: {
-              id: call.id,
-              name: SEND_CONTRACT,
-              response: {
-                output: `Invoice ${session.invoiceId} emailed to ${session.email}.`,
-              },
-            },
-          });
-        } catch (error) {
-          const message =
-            error instanceof Error ? error.message : "Email failed";
-          functionResponseParts.push({
-            functionResponse: {
-              id: call.id,
-              name: SEND_CONTRACT,
-              response: { error: message },
-            },
-          });
-        }
+        return remember(session, incoming, await deliverInvoice(session));
       }
 
       contents.push({ role: "user", parts: functionResponseParts });
       continue;
     }
 
-    const text = response.text?.trim();
-    const reply =
-      text ||
+    const text =
+      response.text?.trim() ||
       "Thanks — could you tell me a bit more about how you'll use the shed?";
-    session.messages.push({ role: "user", text: incoming });
-    session.messages.push({ role: "model", text: reply });
-    return reply;
+    if (!session.contractSent && claimsInvoiceSent(text)) {
+      return remember(session, incoming, await deliverInvoice(session));
+    }
+    return remember(session, incoming, text);
   }
 
-  const fallback =
-    "Thanks, I hit a snag sending that. Reply and I'll pick up where we left off.";
-  session.messages.push({ role: "user", text: incoming });
-  session.messages.push({ role: "model", text: fallback });
-  return fallback;
+  return remember(
+    session,
+    incoming,
+    "Thanks, I hit a snag sending that. Reply and I'll pick up where we left off.",
+  );
 }
