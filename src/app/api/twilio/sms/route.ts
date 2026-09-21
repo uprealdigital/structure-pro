@@ -1,4 +1,4 @@
-import { replyToSms } from "@/src/lib/gemini-sms";
+import { replyFailureMessage, replyToSms } from "@/src/lib/gemini-sms";
 import {
   deleteQuoteSession,
   getQuoteSession,
@@ -66,16 +66,18 @@ export async function POST(request: Request) {
     );
   }
 
+  let reply: string;
   try {
-    const reply = await replyToSms(session, body || "Hi");
-    await saveQuoteSession(session);
-    return xml(twimlMessage(reply));
+    reply = await replyToSms(session, body || "Hi");
   } catch (error) {
     console.error(error);
-    return xml(
-      twimlMessage(
-        "Sorry, I had trouble with that message. Reply again in a moment.",
-      ),
-    );
+    return xml(twimlMessage(replyFailureMessage(error)));
   }
+
+  try {
+    await saveQuoteSession(session);
+  } catch (error) {
+    console.error(error);
+  }
+  return xml(twimlMessage(reply));
 }

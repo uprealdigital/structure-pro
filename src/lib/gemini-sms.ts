@@ -38,15 +38,35 @@ Never invent prices. Do not email more than once. After the invoice is sent, con
 If they say they are not ready, stay helpful and do not call ${SEND_CONTRACT}.`;
 }
 
-export async function replyToSms(session: QuoteSession, incoming: string): Promise<string> {
-  const ai = getClient();
-  const model = process.env.GEMINI_MODEL?.trim() || "gemini-2.5-flash";
-
+function contentsForReply(session: QuoteSession, incoming: string): Content[] {
   const contents: Content[] = session.messages.map((message) => ({
     role: message.role,
     parts: [{ text: message.text }],
   }));
   contents.push({ role: "user", parts: [{ text: incoming }] });
+
+  // The opening text is stored as the assistant's first turn. Gemini rejects
+  // a transcript that does not start with the customer.
+  if (contents[0]?.role === "model") {
+    contents.unshift({
+      role: "user",
+      parts: [{ text: "I submitted a quote on the website." }],
+    });
+  }
+
+  return contents;
+}
+
+export function replyFailureMessage(error: unknown): string {
+  const detail = error instanceof Error ? error.message : "Unknown error";
+  const brief = detail.replace(/\s+/g, " ").trim().slice(0, 300);
+  return `Sorry, I had trouble with that message. ${brief}`;
+}
+
+export async function replyToSms(session: QuoteSession, incoming: string): Promise<string> {
+  const ai = getClient();
+  const model = process.env.GEMINI_MODEL?.trim() || "gemini-2.5-flash";
+  const contents = contentsForReply(session, incoming);
 
   for (let i = 0; i < 3; i += 1) {
     const response = await ai.models.generateContent({

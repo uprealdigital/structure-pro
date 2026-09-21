@@ -1,4 +1,4 @@
-import { replyToSms } from "@/src/lib/gemini-sms";
+import { replyFailureMessage, replyToSms } from "@/src/lib/gemini-sms";
 import {
   deleteQuoteSession,
   getQuoteSession,
@@ -72,16 +72,20 @@ export async function POST(request: Request) {
     return Response.json({ ok: true });
   }
 
+  let reply: string;
   try {
-    const reply = await replyToSms(session, text || "Hi");
-    await saveQuoteSession(session);
-    await sendTelegramMessage(key, reply);
+    reply = await replyToSms(session, text || "Hi");
   } catch (error) {
     console.error(error);
-    await sendTelegramMessage(
-      key,
-      "Sorry, I had trouble with that message. Reply again in a moment.",
-    );
+    await sendTelegramMessage(key, replyFailureMessage(error));
+    return Response.json({ ok: true });
+  }
+
+  await sendTelegramMessage(key, reply);
+  try {
+    await saveQuoteSession(session);
+  } catch (error) {
+    console.error(error);
   }
 
   return Response.json({ ok: true });
