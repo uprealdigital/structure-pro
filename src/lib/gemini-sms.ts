@@ -75,9 +75,16 @@ Configured shed:
 ${specLines}
 Estimated total: ${described.estimate.total} USD.
 
-Qualify them on: intended use, site/delivery readiness, timeline, and that they want to proceed.
-When you have enough to send an invoice (they confirmed they want to proceed, plus use or site/timeline), call ${SEND_CONTRACT} exactly once.
-Never invent prices. Do not email more than once. After the invoice is sent, confirm it is in their inbox and stop asking the same questions.
+Before you email the invoice, ask about these three topics, in this order. Phrase each question yourself. Any answer is acceptable.
+1. When they want the shed.
+2. Whether the site is ready, and whether they have a foundation.
+3. What they want the shed for, and what they will store in it.
+
+Ask one question per text. Never ask about two of these topics in the same text.
+If they already answered a topic earlier in the chat, do not ask it again.
+After they answer, acknowledge it briefly, then ask only the next unanswered topic.
+Call ${SEND_CONTRACT} only after all three topics have an answer. Pass their words as timeline, site, and purpose. If one is still missing, do not call the tool. Ask about that topic in your own words, and ask nothing else.
+Never invent prices. Do not say the invoice was emailed unless the tool succeeded. Do not email more than once. After it is sent, stop asking these questions.
 If they say they are not ready, stay helpful and do not call ${SEND_CONTRACT}.`;
 }
 
@@ -117,7 +124,11 @@ async function generateReply(
       functionDeclarations: {
         name: string;
         description: string;
-        parameters: { type: Type; properties: Record<string, never> };
+        parameters: {
+          type: Type;
+          properties: Record<string, { type: Type; description: string }>;
+          required: string[];
+        };
       }[];
     }[];
     toolConfig: {
@@ -177,6 +188,17 @@ async function deliverInvoice(session: QuoteSession): Promise<string> {
   }
 }
 
+function answerText(value: unknown): string {
+  return typeof value === "string" ? value.trim() : "";
+}
+
+function missingTopic(args: Record<string, unknown> | undefined): string | undefined {
+  if (!answerText(args?.timeline)) return "when they want the shed";
+  if (!answerText(args?.site)) return "whether the site is ready and if they have a foundation";
+  if (!answerText(args?.purpose)) return "what they want the shed for and what they will store";
+  return undefined;
+}
+
 function claimsInvoiceSent(text: string): boolean {
   return /sent (the )?(invoice|contract)|check your inbox|emailed the invoice/i.test(text);
 }
@@ -188,7 +210,7 @@ function wantsInvoiceAgain(text: string): boolean {
 }
 
 export async function replyToSms(session: QuoteSession, incoming: string): Promise<string> {
-  if (wantsInvoiceAgain(incoming)) {
+  if (session.contractSent && wantsInvoiceAgain(incoming)) {
     return remember(session, incoming, await deliverInvoice(session));
   }
 
@@ -203,10 +225,26 @@ export async function replyToSms(session: QuoteSession, incoming: string): Promi
           {
             name: SEND_CONTRACT,
             description:
-              "Email the HTML invoice and quote.json to the customer's quote email.",
+              "Email the invoice only after the customer has answered when they want it, whether the site is ready, and what the shed is for.",
             parameters: {
               type: Type.OBJECT,
-              properties: {},
+              properties: {
+                timeline: {
+                  type: Type.STRING,
+                  description: "The customer's own answer for when they want the shed.",
+                },
+                site: {
+                  type: Type.STRING,
+                  description:
+                    "The customer's own answer about site readiness and foundation.",
+                },
+                purpose: {
+                  type: Type.STRING,
+                  description:
+                    "The customer's own answer for what they want the shed for and what they will store.",
+                },
+              },
+              required: ["timeline", "site", "purpose"],
             },
           },
         ],
@@ -250,6 +288,20 @@ export async function replyToSms(session: QuoteSession, incoming: string): Promi
           );
         }
 
+        const topic = missingTopic(call.args as Record<string, unknown> | undefined);
+        if (topic) {
+          functionResponseParts.push({
+            functionResponse: {
+              id: call.id,
+              name: SEND_CONTRACT,
+              response: {
+                error: `Do not email yet. Ask one question, in your own words, about ${topic}. Do not ask anything else.`,
+              },
+            },
+          });
+          continue;
+        }
+
         return remember(session, incoming, await deliverInvoice(session));
       }
 
@@ -260,8 +312,12 @@ export async function replyToSms(session: QuoteSession, incoming: string): Promi
     const text =
       response.text?.trim() ||
       "Thanks — could you tell me a bit more about how you'll use the shed?";
-    if (!session.contractSent && claimsInvoiceSent(text)) {
-      return remember(session, incoming, await deliverInvoice(session));
+    if (!session.contractSent && claimsInvoiceSent(text) && !text.includes("?")) {
+      return remember(
+        session,
+        incoming,
+        "I still need a few details before I email the invoice. I'll ask one question at a time.",
+      );
     }
     return remember(session, incoming, text);
   }
