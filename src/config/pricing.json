@@ -6,10 +6,10 @@
   },
   "pricing": {
     "basePerSqFt": 56.25,
-    "sidingFinish": 1450,
-    "doorsWindows": 1600,
-    "interior": 650,
-    "delivery": 350,
+    "sidingFinish": 400,
+    "doorsWindows": 400,
+    "interior": 250,
+    "delivery": 250,
     "financeMonths": 60
   },
   "defaultZip": "32091",
@@ -18,7 +18,7 @@
       "id": "value-shed",
       "label": "Value Shed",
       "productTitle": "Value Shed",
-      "basePerSqFt": 52.5,
+      "basePerSqFt": 16,
       "pitch": 0.45,
       "roofShape": "gable",
       "image": "https://lh3.googleusercontent.com/aida-public/AB6AXuCDXxuxswbLWiioGe2OtXSofCX_C23hpPlRtxlLjZfhJfjweo52_h2nUle1RTGzGMW-pscTv7DEy_yzJCsKPbjiuxnZTIe-FxxDMeWF4GypZUQjCLM_J8RkWMucsgdLlPm_5osig9--9c0QoJG6Ewi1FcPt2iQrJfFtNRQTzgf9ts4QHvxScTCEjoOnCKLAVFOWmKrRmoiRqW19-tO9UvJyoy_OSNValMRV7NVnVIkEf34BFRcD5Ni2YqCbjrRr_OV1hR4"
@@ -27,7 +27,7 @@
       "id": "value-barn",
       "label": "Value Barn",
       "productTitle": "Value Barn",
-      "baseAdjustment": 2000,
+      "basePerSqFt": 24.48,
       "pitch": 0.68,
       "roofShape": "gambrel",
       "breakRatio": 0.5,
