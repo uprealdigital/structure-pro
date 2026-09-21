@@ -1,7 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import {
   Box,
   Expand,
@@ -230,7 +230,13 @@ export function ShedConfigurator() {
 
       {yardOpen ? <YardModal onClose={() => setYardOpen(false)} /> : null}
 
-      {quoteOpen ? <QuoteModal onClose={() => setQuoteOpen(false)} /> : null}
+      {quoteOpen ? (
+        <QuoteModal
+          config={config}
+          zip={zip}
+          onClose={() => setQuoteOpen(false)}
+        />
+      ) : null}
     </div>
   );
 }
@@ -547,14 +553,61 @@ function IconButton({
 const quoteFieldClassName =
   "w-full rounded-lg border border-neutral-200 bg-neutral-50 px-3.5 py-2.5 text-sm text-neutral-800 placeholder-neutral-400 outline-none transition-colors focus:border-black focus:bg-white";
 
-function QuoteModal({ onClose }: { onClose: () => void }) {
+function QuoteModal({
+  config,
+  zip,
+  onClose,
+}: {
+  config: ShedConfig;
+  zip: string;
+  onClose: () => void;
+}) {
   const [fullName, setFullName] = useState("");
   const [phone, setPhone] = useState("");
   const [email, setEmail] = useState("");
+  const [status, setStatus] = useState<"idle" | "submitting" | "success" | "error">(
+    "idle",
+  );
+  const [errorMessage, setErrorMessage] = useState("");
 
   function requiredPlaceholder(label: string) {
     return `${label}*`;
   }
+
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (status === "submitting") return;
+
+    setStatus("submitting");
+    setErrorMessage("");
+
+    try {
+      const response = await fetch("/api/quote", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          fullName: fullName.trim(),
+          phone,
+          email: email.trim(),
+          selections: { ...config, zip },
+        }),
+      });
+      const payload = (await response.json().catch(() => null)) as {
+        error?: string;
+      } | null;
+      if (!response.ok) {
+        setStatus("error");
+        setErrorMessage(payload?.error || copy.quoteSubmitError);
+        return;
+      }
+      setStatus("success");
+    } catch {
+      setStatus("error");
+      setErrorMessage(copy.quoteSubmitError);
+    }
+  }
+
+  const submitting = status === "submitting";
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-black/50 p-4 backdrop-blur-sm">
@@ -563,6 +616,7 @@ function QuoteModal({ onClose }: { onClose: () => void }) {
         className="absolute inset-0"
         aria-label={copy.close}
         onClick={onClose}
+        disabled={submitting}
       />
       <div className="relative z-10 my-auto w-full max-w-xl rounded-xl border border-gray-200 bg-white p-6 text-gray-900 shadow-2xl sm:p-8">
         <div className="flex items-start justify-between border-b border-gray-100 pb-4">
@@ -579,57 +633,63 @@ function QuoteModal({ onClose }: { onClose: () => void }) {
             type="button"
             aria-label={copy.close}
             onClick={onClose}
-            className="flex h-8 w-8 items-center justify-center rounded-full text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-700"
+            disabled={submitting}
+            className="flex h-8 w-8 items-center justify-center rounded-full text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-700 disabled:opacity-50"
           >
             <X className="h-5 w-5" />
           </button>
         </div>
 
-        <form
-          className="space-y-4 pt-4"
-          onSubmit={(event) => {
-            event.preventDefault();
-            onClose();
-          }}
-        >
-          <div className="space-y-3">
-            <input
-              type="text"
-              required
-              autoComplete="name"
-              placeholder={requiredPlaceholder(copy.fullName)}
-              value={fullName}
-              onChange={(event) => setFullName(event.target.value)}
-              className={quoteFieldClassName}
-            />
-            <input
-              type="tel"
-              required
-              autoComplete="tel"
-              placeholder={requiredPlaceholder(copy.phone)}
-              value={phone}
-              onChange={(event) => setPhone(event.target.value)}
-              className={quoteFieldClassName}
-            />
-            <input
-              type="email"
-              required
-              autoComplete="email"
-              placeholder={requiredPlaceholder(copy.email)}
-              value={email}
-              onChange={(event) => setEmail(event.target.value)}
-              className={quoteFieldClassName}
-            />
-          </div>
-          <div className="pt-2">
-            <button
-              type="submit"
-              className="w-full rounded-full bg-black px-6 py-3.5 text-center text-sm font-medium text-white shadow-md transition-all hover:bg-stone-900 active:scale-95"
-            >
-              {copy.submitQuote}
-            </button>
-          </div>
-        </form>
+        {status === "success" ? (
+          <p className="pt-6 text-sm text-gray-700">{copy.quoteSubmitSuccess}</p>
+        ) : (
+          <form className="space-y-4 pt-4" onSubmit={handleSubmit}>
+            <div className="space-y-3">
+              <input
+                type="text"
+                required
+                autoComplete="name"
+                placeholder={requiredPlaceholder(copy.fullName)}
+                value={fullName}
+                onChange={(event) => setFullName(event.target.value)}
+                className={quoteFieldClassName}
+                disabled={submitting}
+              />
+              <input
+                type="tel"
+                required
+                autoComplete="tel"
+                placeholder={requiredPlaceholder(copy.phone)}
+                value={phone}
+                onChange={(event) => setPhone(event.target.value)}
+                className={quoteFieldClassName}
+                disabled={submitting}
+              />
+              <input
+                type="email"
+                required
+                autoComplete="email"
+                placeholder={requiredPlaceholder(copy.email)}
+                value={email}
+                onChange={(event) => setEmail(event.target.value)}
+                className={quoteFieldClassName}
+                disabled={submitting}
+              />
+            </div>
+            {status === "error" ? (
+              <p className="text-sm text-red-600">{errorMessage}</p>
+            ) : null}
+            <div className="pt-2">
+              <button
+                type="submit"
+                disabled={submitting}
+                className="w-full rounded-full bg-black px-6 py-3.5 text-center text-sm font-medium text-white shadow-md transition-all hover:bg-stone-900 active:scale-95 disabled:opacity-60"
+              >
+                {submitting ? copy.quoteSubmitting : copy.submitQuote}
+              </button>
+            </div>
+          </form>
+        )}
       </div>
     </div>
   );
