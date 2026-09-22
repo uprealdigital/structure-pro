@@ -256,8 +256,12 @@ type BrowserSpeechRecognition = {
   onend: (() => void) | null;
 };
 
+type BrowserSpeechResult = ArrayLike<{ transcript: string }> & {
+  isFinal: boolean;
+};
+
 type BrowserSpeechRecognitionEvent = {
-  results: ArrayLike<ArrayLike<{ transcript: string }>>;
+  results: ArrayLike<BrowserSpeechResult>;
 };
 
 function getSpeechRecognitionCtor(): SpeechRecognitionCtor | undefined {
@@ -267,6 +271,47 @@ function getSpeechRecognitionCtor(): SpeechRecognitionCtor | undefined {
     webkitSpeechRecognition?: SpeechRecognitionCtor;
   };
   return speechWindow.SpeechRecognition ?? speechWindow.webkitSpeechRecognition;
+}
+
+function usesPhraseRecognition(): boolean {
+  const ua = navigator.userAgent;
+  if (/Android|iPhone|iPad|iPod/i.test(ua)) return true;
+  return /Macintosh/i.test(ua) && navigator.maxTouchPoints > 1;
+}
+
+function normalizeSpeech(text: string): string {
+  return text.trim().replace(/\s+/g, " ");
+}
+
+/** Merge a new speech chunk without repeating a phrase the engine already returned. */
+function joinSpeech(base: string, addition: string): string {
+  const next = normalizeSpeech(addition);
+  const current = normalizeSpeech(base);
+  if (!next) return current;
+  if (!current) return next;
+
+  const currentLower = current.toLowerCase();
+  const nextLower = next.toLowerCase();
+  const nextWords = next.split(" ");
+  if (currentLower === nextLower) return current;
+  if (nextWords.length >= 2 && currentLower.endsWith(` ${nextLower}`)) {
+    return current;
+  }
+
+  const currentWords = current.split(" ");
+  const maxOverlap = Math.min(currentWords.length, nextWords.length);
+
+  for (let size = maxOverlap; size > 0; size -= 1) {
+    const suffix = currentWords.slice(-size).join(" ").toLowerCase();
+    const prefix = nextWords.slice(0, size).join(" ").toLowerCase();
+    if (suffix !== prefix) continue;
+    const remainder = nextWords.slice(size).join(" ");
+    // A single repeated word is new speech. A longer shared prefix is the same utterance.
+    if (size === 1 && !remainder) break;
+    return remainder ? `${current} ${remainder}` : current;
+  }
+
+  return `${current} ${next}`;
 }
 
 const ASSISTANT_NOTE_MS = 5000;
@@ -289,7 +334,10 @@ function AssistantPromptForm({
   const recognitionRef = useRef<BrowserSpeechRecognition | null>(null);
   const listeningRef = useRef(false);
   const promptRef = useRef("");
-  const basePromptRef = useRef("");
+  const speechPromptRef = useRef("");
+  const committedRef = useRef("");
+  const sessionBaseRef = useRef("");
+  const interimRef = useRef("");
   const ignoreSendUntilRef = useRef(0);
   const hasText = prompt.trim().length > 0;
   const showSend = hasText && !listening;
@@ -315,6 +363,11 @@ function AssistantPromptForm({
     setPrompt(next);
   }
 
+  function applySpeechPrompt(next: string) {
+    speechPromptRef.current = next;
+    setPromptValue(next);
+  }
+
   function sendCurrentPrompt() {
     if (listeningRef.current) return;
     if (Date.now() < ignoreSendUntilRef.current) return;
@@ -329,30 +382,45 @@ function AssistantPromptForm({
   function stopListening() {
     listeningRef.current = false;
     ignoreSendUntilRef.current = Date.now() + 500;
+    if (interimRef.current) {
+      committedRef.current = joinSpeech(committedRef.current, interimRef.current);
+      interimRef.current = "";
+      applySpeechPrompt(committedRef.current);
+    }
     recognitionRef.current?.stop();
     recognitionRef.current = null;
     setListening(false);
   }
 
-  function startRecognitionSession() {
+  function startRecognitionSession(attempt = 0) {
     const SpeechRecognition = getSpeechRecognitionCtor();
     if (!SpeechRecognition || !listeningRef.current || recognitionRef.current) return;
 
+    const phraseMode = usesPhraseRecognition();
     const recognition = new SpeechRecognition();
-    recognition.continuous = true;
+    // Phone browsers end a continuous session on every pause and resend the last phrase.
+    recognition.continuous = !phraseMode;
     recognition.interimResults = true;
     recognition.lang = "en-US";
     recognition.onresult = (event) => {
-      let spoken = "";
+      let sessionFinal = "";
+      let interim = "";
       for (let index = 0; index < event.results.length; index += 1) {
-        spoken += event.results[index][0]?.transcript ?? "";
+        const result = event.results[index];
+        const transcript = result[0]?.transcript ?? "";
+        if (!transcript.trim()) continue;
+        if (result.isFinal) sessionFinal = joinSpeech(sessionFinal, transcript);
+        else interim = transcript.trim();
       }
-      const next = [basePromptRef.current, spoken.trim()].filter(Boolean).join(" ");
-      setPromptValue(next);
+      interimRef.current = interim;
+      const finalized = joinSpeech(sessionBaseRef.current, sessionFinal);
+      committedRef.current = finalized;
+      applySpeechPrompt(interim ? joinSpeech(finalized, interim) : finalized);
     };
     recognition.onerror = (event) => {
       if (event.error === "not-allowed" || event.error === "service-not-allowed") {
         listeningRef.current = false;
+        interimRef.current = "";
         setListening(false);
         setVoiceFeedback(copy.voiceDenied);
         recognitionRef.current = null;
@@ -362,48 +430,47 @@ function AssistantPromptForm({
       if (recognitionRef.current === recognition) {
         recognitionRef.current = null;
       }
+      // Drop the live guess. The next session would otherwise append it again.
+      if (listeningRef.current && promptRef.current === speechPromptRef.current) {
+        interimRef.current = "";
+        if (committedRef.current !== promptRef.current) {
+          applySpeechPrompt(committedRef.current);
+        }
+      }
       if (!listeningRef.current) return;
       window.setTimeout(() => {
         if (!listeningRef.current || recognitionRef.current) return;
-        basePromptRef.current = promptRef.current.trim();
+        sessionBaseRef.current = committedRef.current.trim();
         startRecognitionSession();
-      }, 200);
+      }, phraseMode ? 80 : 200);
     };
     recognitionRef.current = recognition;
     try {
       recognition.start();
     } catch {
       recognitionRef.current = null;
+      if (attempt >= 2) return;
+      window.setTimeout(() => {
+        if (!listeningRef.current || recognitionRef.current) return;
+        startRecognitionSession(attempt + 1);
+      }, 200);
     }
   }
 
-  async function startListening() {
+  function startListening() {
     const SpeechRecognition = getSpeechRecognitionCtor();
     if (!SpeechRecognition) {
       setVoiceFeedback(copy.voiceUnsupported);
       return;
     }
-    if (!navigator.mediaDevices?.getUserMedia) {
-      setVoiceFeedback(copy.voiceDenied);
-      return;
-    }
 
+    const existing = promptRef.current.trim();
     listeningRef.current = true;
-    basePromptRef.current = promptRef.current.trim();
+    committedRef.current = existing;
+    sessionBaseRef.current = existing;
+    interimRef.current = "";
     setVoiceNote("");
     setListening(true);
-
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      stream.getTracks().forEach((track) => track.stop());
-    } catch {
-      listeningRef.current = false;
-      setListening(false);
-      setVoiceFeedback(copy.voiceDenied);
-      return;
-    }
-
-    if (!listeningRef.current) return;
     startRecognitionSession();
   }
 
@@ -448,7 +515,7 @@ function AssistantPromptForm({
       stopListening();
       return;
     }
-    void startListening();
+    startListening();
   }
 
   return (
