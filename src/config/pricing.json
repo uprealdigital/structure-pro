@@ -170,7 +170,7 @@
     {
       "id": "lp-lap",
       "label": "LP Lap (8\")",
-      "roughness": 0.78,
+      "roughness": 1,
       "metalness": 0.04,
       "normalScale": [1, 1],
       "tileFeet": [5.333, 5.333],
