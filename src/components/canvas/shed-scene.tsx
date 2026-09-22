@@ -1,14 +1,28 @@
 "use client";
 
-import { memo, Suspense, useEffect, useLayoutEffect, useState } from "react";
+import {
+  memo,
+  Suspense,
+  useEffect,
+  useLayoutEffect,
+  useState,
+  type RefObject,
+} from "react";
 import { Canvas, useThree } from "@react-three/fiber";
 import { ContactShadows, Environment, OrbitControls } from "@react-three/drei";
+import type { Camera, Scene, WebGLRenderer } from "three";
 import { ShedModel } from "@/src/components/canvas/shed-model";
 import type { ShedConfig } from "@/src/config/shed-config";
 
+export type ShedCapture = () => Promise<Blob>;
+
 type ShedSceneProps = {
   config: ShedConfig;
+  captureRef: RefObject<ShedCapture | null>;
 };
+
+const CAPTURE_MAX_EDGE = 1280;
+const CAPTURE_JPEG_QUALITY = 0.85;
 
 const DESKTOP_CAMERA: [number, number, number] = [20, 12, 24];
 const MOBILE_CAMERA: [number, number, number] = [30, 16, 36];
@@ -45,13 +59,67 @@ function SceneCamera({ isMobile }: { isMobile: boolean }) {
   return null;
 }
 
-function ShedScene({ config }: ShedSceneProps) {
+function captureShedJpeg(
+  renderer: WebGLRenderer,
+  scene: Scene,
+  camera: Camera,
+): Promise<Blob> {
+  renderer.render(scene, camera);
+  const source = renderer.domElement;
+  const longSide = Math.max(source.width, source.height);
+  const scale = longSide > CAPTURE_MAX_EDGE ? CAPTURE_MAX_EDGE / longSide : 1;
+  const width = Math.max(1, Math.round(source.width * scale));
+  const height = Math.max(1, Math.round(source.height * scale));
+  const canvas = document.createElement("canvas");
+  canvas.width = width;
+  canvas.height = height;
+  const context = canvas.getContext("2d");
+  if (!context) {
+    return Promise.reject(new Error("Could not capture the shed"));
+  }
+  context.drawImage(source, 0, 0, width, height);
+  return new Promise((resolve, reject) => {
+    canvas.toBlob(
+      (blob) => {
+        if (!blob || blob.size === 0) {
+          reject(new Error("Could not capture the shed"));
+          return;
+        }
+        resolve(blob);
+      },
+      "image/jpeg",
+      CAPTURE_JPEG_QUALITY,
+    );
+  });
+}
+
+function CaptureBridge({
+  captureRef,
+}: {
+  captureRef: RefObject<ShedCapture | null>;
+}) {
+  const gl = useThree((state) => state.gl);
+  const scene = useThree((state) => state.scene);
+  const camera = useThree((state) => state.camera);
+
+  useEffect(() => {
+    captureRef.current = () => captureShedJpeg(gl, scene, camera);
+    return () => {
+      captureRef.current = null;
+    };
+  }, [camera, captureRef, gl, scene]);
+
+  return null;
+}
+
+function ShedScene({ config, captureRef }: ShedSceneProps) {
   const isMobile = useIsMobile();
 
   return (
     <div className="h-full w-full" role="application" aria-label="3D shed view">
       <Canvas
         shadows
+        gl={{ preserveDrawingBuffer: true }}
         className="h-full w-full"
         camera={{
           position: isMobile ? MOBILE_CAMERA : DESKTOP_CAMERA,
@@ -103,6 +171,7 @@ function ShedScene({ config }: ShedSceneProps) {
           enableDamping
         />
         <SceneCamera isMobile={isMobile} />
+        <CaptureBridge captureRef={captureRef} />
       </Canvas>
     </div>
   );

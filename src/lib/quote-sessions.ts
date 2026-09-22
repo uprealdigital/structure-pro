@@ -1,5 +1,5 @@
-import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { isQuoteSelections } from "@/src/lib/selections";
+import { getSupabase } from "@/src/lib/supabase";
 import type { QuoteChatMessage, QuoteSession } from "@/src/lib/quote-types";
 
 type QuoteMessageRow = {
@@ -20,23 +20,8 @@ type QuoteRow = {
   opted_out: boolean;
 };
 
-let client: SupabaseClient | undefined;
-
-function supabase(): SupabaseClient {
-  if (client) return client;
-
-  const url = process.env.SUPABASE_URL?.trim();
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY?.trim();
-  if (!url || !key) {
-    throw new Error(
-      "Quote follow-ups need Supabase. Set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY.",
-    );
-  }
-
-  client = createClient(url, key, {
-    auth: { persistSession: false, autoRefreshToken: false },
-  });
-  return client;
+function supabase() {
+  return getSupabase();
 }
 
 function sessionKey(session: QuoteSession): string {

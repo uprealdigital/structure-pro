@@ -15,9 +15,11 @@ import {
   Square,
   X,
 } from "lucide-react";
+import type { ShedCapture } from "@/src/components/canvas/shed-scene";
 import { ShedControls } from "@/src/components/ui/shed-controls";
 import { YardModal } from "@/src/components/ui/yard-modal";
 import { copy } from "@/src/i18n/en";
+import type { QuoteSelections } from "@/src/lib/quote-types";
 import {
   applyAssistantPrompt,
   CATALOG,
@@ -44,6 +46,11 @@ export function ShedConfigurator() {
   const [yardOpen, setYardOpen] = useState(false);
   const [quoteOpen, setQuoteOpen] = useState(false);
   const [zip, setZip] = useState(CATALOG.defaultZip);
+  const captureShedRef = useRef<ShedCapture | null>(null);
+  const selections = useMemo<QuoteSelections>(
+    () => ({ ...config, zip }),
+    [config, zip],
+  );
 
   const style = getStyle(config.styleId);
   const estimate = useMemo(() => estimateShed(config), [config]);
@@ -60,7 +67,7 @@ export function ShedConfigurator() {
       <section className="studio-viewport relative flex h-[40vh] shrink-0 flex-col overflow-hidden lg:h-auto lg:min-h-0 lg:flex-1">
         <div className="pointer-events-none absolute inset-0 opacity-60 floor-grid" />
         <div className="relative min-h-0 flex-1">
-          <ShedScene config={config} />
+          <ShedScene config={config} captureRef={captureShedRef} />
         </div>
 
         <div className="pointer-events-none absolute inset-x-0 top-0 z-20 flex items-start justify-between px-3 py-3 lg:items-center lg:px-6 lg:py-5">
@@ -229,7 +236,19 @@ export function ShedConfigurator() {
         </details>
       </aside>
 
-      {yardOpen ? <YardModal onClose={() => setYardOpen(false)} /> : null}
+      {yardOpen ? (
+        <YardModal
+          selections={selections}
+          captureShed={() => {
+            const capture = captureShedRef.current;
+            if (!capture) {
+              return Promise.reject(new Error("Could not capture the shed"));
+            }
+            return capture();
+          }}
+          onClose={() => setYardOpen(false)}
+        />
+      ) : null}
 
       {quoteOpen ? (
         <QuoteModal

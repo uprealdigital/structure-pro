@@ -41,3 +41,31 @@ alter table public.quote_messages enable row level security;
 grant select, insert, update, delete on table public.quotes to service_role;
 grant select, insert, update, delete on table public.quote_messages to service_role;
 grant usage, select on all sequences in schema public to service_role;
+
+-- One row per backyard preview request. Images live in the yard-previews
+-- storage bucket; the path columns point at those files.
+create table if not exists public.yard_previews (
+  id uuid primary key default gen_random_uuid(),
+  full_name text not null,
+  phone text not null,
+  email text not null,
+  selections jsonb not null,
+  summary text not null,
+  status text not null default 'accepted' check (status in ('accepted', 'emailed', 'failed')),
+  error text,
+  events jsonb not null default '[]'::jsonb,
+  yard_photo_path text,
+  shed_render_path text,
+  preview_path text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create index if not exists yard_previews_created_at_idx
+  on public.yard_previews (created_at desc);
+
+alter table public.yard_previews enable row level security;
+
+grant select, insert, update, delete on table public.yard_previews to service_role;
+
+-- The app creates the private "yard-previews" storage bucket on the first save.

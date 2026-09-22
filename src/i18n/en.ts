@@ -85,6 +85,9 @@ export const copy = {
   sendPreviewNotify:
     "We'll notify you as soon as the high-res 3D architectural render completes.",
   sendPreviewCta: "Send me the backyard preview when it's ready",
+  yardPreviewBack: "Back",
+  yardPreviewSending: "Sending…",
+  yardPreviewError: "Could not send your backyard preview. Try again.",
   yardPreviewSentTitle: "You're all set",
   yardPreviewSentBody:
     "We'll send your backyard preview to {email} as soon as the render is ready.",
