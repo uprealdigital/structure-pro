@@ -1,14 +1,15 @@
 import {
   type ShedConfig,
   CATALOG,
-  estimateShed,
   getColor,
   getFlooring,
   getRoofType,
   getSidingType,
   getStyle,
-} from "@/src/config/shed-config";
-import type { QuoteSelections } from "@/src/lib/quote-types";
+} from "@/src/config/catalog";
+import { estimateShed } from "@/src/config/pricing";
+import { isLocaleCode } from "@/src/lib/configuration-link";
+import type { QuoteSelections, StoredConfiguration } from "@/src/lib/quote-types";
 
 const DOOR_LABELS: Record<ShedConfig["doorStyle"], string> = {
   single: "Single door",
@@ -16,11 +17,10 @@ const DOOR_LABELS: Record<ShedConfig["doorStyle"], string> = {
   none: "None",
 };
 
-export function isQuoteSelections(value: unknown): value is QuoteSelections {
+export function isShedConfig(value: unknown): value is ShedConfig {
   if (!value || typeof value !== "object") return false;
   const item = value as Record<string, unknown>;
   return (
-    typeof item.zip === "string" &&
     typeof item.styleId === "string" &&
     typeof item.width === "number" &&
     typeof item.length === "number" &&
@@ -43,6 +43,28 @@ export function isQuoteSelections(value: unknown): value is QuoteSelections {
       item.wallFace === "back" ||
       item.wallFace === "right")
   );
+}
+
+export function isQuoteSelections(value: unknown): value is QuoteSelections {
+  if (!isShedConfig(value)) return false;
+  return typeof (value as { zip?: unknown }).zip === "string";
+}
+
+export function isStoredConfiguration(value: unknown): value is StoredConfiguration {
+  if (!isQuoteSelections(value) || !value.zip.trim()) return false;
+  const lng = (value as { lng?: unknown }).lng;
+  return typeof lng === "string" && isLocaleCode(lng.trim());
+}
+
+export function toStoredConfiguration(
+  selections: QuoteSelections,
+  lng: string,
+): StoredConfiguration {
+  return {
+    lng: lng.trim(),
+    zip: selections.zip.trim(),
+    ...toShedConfig(selections),
+  };
 }
 
 export function toShedConfig(selections: QuoteSelections): ShedConfig {

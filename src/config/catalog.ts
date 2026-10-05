@@ -1,4 +1,5 @@
-import catalog from "@/src/config/pricing.json";
+import catalog from "@/src/config/catalog.json";
+import defaultConfig from "@/src/config/default-config.json";
 
 export type StyleOption = (typeof catalog.styles)[number];
 export type ColorOption = (typeof catalog.colors)[number];
@@ -31,10 +32,26 @@ export type ShedConfig = {
 
 export const CATALOG = catalog;
 
+export const DEFAULT_ZIP = defaultConfig.zip;
+export const DEFAULT_LNG = defaultConfig.lng;
+
 export const DEFAULT_SHED_CONFIG: ShedConfig = {
-  ...catalog.defaults,
-  doorStyle: catalog.defaults.doorStyle as DoorStyle,
-  wallFace: catalog.defaults.wallFace as ShedConfig["wallFace"],
+  styleId: defaultConfig.styleId,
+  width: defaultConfig.width,
+  length: defaultConfig.length,
+  height: defaultConfig.height,
+  sidingTypeId: defaultConfig.sidingTypeId,
+  roofTypeId: defaultConfig.roofTypeId,
+  sidingColorId: defaultConfig.sidingColorId,
+  trimColorId: defaultConfig.trimColorId,
+  roofColorId: defaultConfig.roofColorId,
+  shutterColorId: defaultConfig.shutterColorId,
+  flooringId: defaultConfig.flooringId,
+  hasLoft: defaultConfig.hasLoft,
+  hasWindow: defaultConfig.hasWindow,
+  hasVent: defaultConfig.hasVent,
+  doorStyle: defaultConfig.doorStyle as DoorStyle,
+  wallFace: defaultConfig.wallFace as ShedConfig["wallFace"],
 };
 
 export function getStyle(id: string): StyleOption {
@@ -191,65 +208,6 @@ export function roofPeakHeight(
   width: number,
 ): number {
   return wallHeight + roofPeakRise(style, width);
-}
-
-export function formatUsd(amount: number): string {
-  return new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "USD",
-    maximumFractionDigits: 0,
-  }).format(amount);
-}
-
-export function estimateShed(config: ShedConfig) {
-  const { pricing } = catalog;
-  const style = getStyle(config.styleId);
-  const perSqFt =
-    "basePerSqFt" in style && typeof style.basePerSqFt === "number"
-      ? style.basePerSqFt
-      : pricing.basePerSqFt;
-  const styleAdjustment =
-    "baseAdjustment" in style && typeof style.baseAdjustment === "number"
-      ? style.baseAdjustment
-      : 0;
-  const base = Math.round(config.width * config.length * perSqFt) + styleAdjustment;
-  const interior = config.hasLoft ? pricing.interior : 0;
-  const openings =
-    config.doorStyle === "none" && !config.hasWindow
-      ? 0
-      : pricing.doorsWindows;
-  const total =
-    base +
-    pricing.sidingFinish +
-    openings +
-    interior +
-    pricing.delivery;
-  const monthly = Math.round(total / 53.4);
-  const financeMonthly = Math.round(total / pricing.financeMonths);
-  const siding = getColor(config.sidingColorId);
-  const roof = getColor(config.roofColorId);
-
-  return {
-    total,
-    monthly,
-    financeMonthly,
-    lines: [
-      {
-        label: `Base Studio (${config.width}×${config.length} ${style.productTitle})`,
-        amount: base,
-      },
-      {
-        label: `Siding & Finish (${siding.label} + ${roof.label} Roof)`,
-        amount: pricing.sidingFinish,
-      },
-      {
-        label: "Doors & Windows (Full-Lite French Glass + Casement)",
-        amount: openings,
-      },
-      { label: "Interior & Electrical Rough-in", amount: interior },
-      { label: "Delivery & Stamped Engineering", amount: pricing.delivery },
-    ],
-  };
 }
 
 export function applyAssistantPrompt(

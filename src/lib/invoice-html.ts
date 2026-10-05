@@ -1,4 +1,4 @@
-import { formatUsd } from "@/src/config/shed-config";
+import { formatUsd } from "@/src/config/pricing";
 import { describeSelections } from "@/src/lib/selections";
 import type { QuoteContact, QuoteSelections } from "@/src/lib/quote-types";
 

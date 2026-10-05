@@ -1,0 +1,20 @@
+{
+  "lng": "en-US",
+  "zip": "32091",
+  "styleId": "value-shed",
+  "width": 12,
+  "length": 16,
+  "height": 8,
+  "sidingTypeId": "lp-smart",
+  "roofTypeId": "shingle",
+  "sidingColorId": "serious-gray",
+  "trimColorId": "serious-gray",
+  "roofColorId": "cyberspace",
+  "shutterColorId": "ice-cube-white",
+  "flooringId": "tg-prostruct",
+  "hasLoft": true,
+  "hasWindow": false,
+  "hasVent": true,
+  "doorStyle": "double",
+  "wallFace": "front"
+}

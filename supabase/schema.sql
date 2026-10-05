@@ -69,3 +69,52 @@ alter table public.yard_previews enable row level security;
 grant select, insert, update, delete on table public.yard_previews to service_role;
 
 -- The app creates the private "yard-previews" storage bucket on the first save.
+
+-- One frozen snapshot per Share click. The public id is the URL hash.
+-- selections matches src/config/default-config.json, including zip and lng.
+create table if not exists public.configurations (
+  id text primary key,
+  selections jsonb not null,
+  created_at timestamptz not null default now()
+);
+
+-- Fold any older zip and lng columns into selections, then drop them.
+do $$
+begin
+  if exists (
+    select 1
+    from information_schema.columns
+    where table_schema = 'public'
+      and table_name = 'configurations'
+      and column_name = 'lng'
+  ) then
+    update public.configurations
+    set selections = jsonb_set(selections, '{lng}', to_jsonb(lng), true)
+    where lng is not null
+      and not (selections ? 'lng');
+
+    alter table public.configurations drop column lng;
+  end if;
+
+  if exists (
+    select 1
+    from information_schema.columns
+    where table_schema = 'public'
+      and table_name = 'configurations'
+      and column_name = 'zip'
+  ) then
+    update public.configurations
+    set selections = jsonb_set(selections, '{zip}', to_jsonb(zip), true)
+    where zip is not null
+      and (
+        not (selections ? 'zip')
+        or coalesce(selections->>'zip', '') = ''
+      );
+
+    alter table public.configurations drop column zip;
+  end if;
+end $$;
+
+alter table public.configurations enable row level security;
+
+grant select, insert on table public.configurations to service_role;

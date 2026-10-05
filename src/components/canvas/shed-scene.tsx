@@ -12,7 +12,7 @@ import { Canvas, useThree } from "@react-three/fiber";
 import { ContactShadows, Environment, OrbitControls } from "@react-three/drei";
 import type { Camera, Scene, WebGLRenderer } from "three";
 import { ShedModel } from "@/src/components/canvas/shed-model";
-import type { ShedConfig } from "@/src/config/shed-config";
+import type { ShedConfig } from "@/src/config/catalog";
 
 export type ShedCapture = () => Promise<Blob>;
 

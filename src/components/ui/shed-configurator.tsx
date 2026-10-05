@@ -17,18 +17,26 @@ import {
 } from "lucide-react";
 import type { ShedCapture } from "@/src/components/canvas/shed-scene";
 import { ShedControls } from "@/src/components/ui/shed-controls";
+import { ShareModal } from "@/src/components/ui/share-modal";
 import { YardModal } from "@/src/components/ui/yard-modal";
-import { copy } from "@/src/i18n/en";
-import type { QuoteSelections } from "@/src/lib/quote-types";
 import {
   applyAssistantPrompt,
   CATALOG,
+  DEFAULT_LNG,
   DEFAULT_SHED_CONFIG,
-  estimateShed,
-  formatUsd,
+  DEFAULT_ZIP,
   getStyle,
   type ShedConfig,
-} from "@/src/config/shed-config";
+} from "@/src/config/catalog";
+import { copy } from "@/src/i18n/en";
+import {
+  configurationShareUrl,
+  isConfigurationId,
+  isLocaleCode,
+} from "@/src/lib/configuration-link";
+import type { QuoteSelections } from "@/src/lib/quote-types";
+import { isStoredConfiguration } from "@/src/lib/selections";
+import { estimateShed, formatUsd } from "@/src/config/pricing";
 
 const ShedScene = dynamic(() => import("@/src/components/canvas/shed-scene"), {
   ssr: false,
@@ -45,7 +53,13 @@ export function ShedConfigurator() {
   const [assistantNoteId, setAssistantNoteId] = useState(0);
   const [yardOpen, setYardOpen] = useState(false);
   const [quoteOpen, setQuoteOpen] = useState(false);
-  const [zip, setZip] = useState(CATALOG.defaultZip);
+  const [zip, setZip] = useState(DEFAULT_ZIP);
+  const [lng, setLng] = useState(DEFAULT_LNG);
+  const [configReady, setConfigReady] = useState(false);
+  const [shareOpen, setShareOpen] = useState(false);
+  const [shareStatus, setShareStatus] = useState<"saving" | "copied" | "error">("saving");
+  const [shareUrl, setShareUrl] = useState("");
+  const [shareError, setShareError] = useState("");
   const captureShedRef = useRef<ShedCapture | null>(null);
   const selections = useMemo<QuoteSelections>(
     () => ({ ...config, zip }),
@@ -54,6 +68,83 @@ export function ShedConfigurator() {
 
   const style = getStyle(config.styleId);
   const estimate = useMemo(() => estimateShed(config), [config]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadSharedConfiguration() {
+      const params = new URLSearchParams(window.location.search);
+      const queryZip = params.get("zip")?.trim() ?? "";
+      const queryLng = params.get("lng")?.trim() ?? "";
+      const hash = window.location.hash.replace(/^#/, "");
+      const shareId = isConfigurationId(hash) ? hash : "";
+
+      if (queryZip) setZip(queryZip);
+      if (isLocaleCode(queryLng)) setLng(queryLng);
+
+      if (!shareId) {
+        if (!cancelled) setConfigReady(true);
+        return;
+      }
+
+      try {
+        const response = await fetch(`/api/configurations/${shareId}`);
+        if (!response.ok) throw new Error("missing");
+        const payload: unknown = await response.json();
+        if (cancelled || !payload || typeof payload !== "object") return;
+        const body = payload as { selections?: unknown };
+        if (isStoredConfiguration(body.selections)) {
+          const { lng: savedLng, zip: savedZip, ...shed } = body.selections;
+          setConfig(shed);
+          if (!queryZip) setZip(savedZip);
+          if (!isLocaleCode(queryLng)) setLng(savedLng);
+        }
+      } catch {
+        // An unknown id falls back to default-config.json, already in state.
+      } finally {
+        if (!cancelled) setConfigReady(true);
+      }
+    }
+
+    void loadSharedConfiguration();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  async function shareConfiguration() {
+    setShareOpen(true);
+    setShareStatus("saving");
+    setShareUrl("");
+    setShareError("");
+
+    try {
+      const response = await fetch("/api/configurations", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ selections: { lng, ...selections } }),
+      });
+      const payload: unknown = await response.json().catch(() => null);
+      const body =
+        payload && typeof payload === "object"
+          ? (payload as { id?: unknown; error?: unknown })
+          : {};
+      if (!response.ok || typeof body.id !== "string") {
+        const message = typeof body.error === "string" ? body.error : copy.shareError;
+        throw new Error(message);
+      }
+
+      const href = configurationShareUrl(window.location.href, body.id);
+      const url = new URL(href);
+      window.history.replaceState(null, "", `${url.pathname}${url.search}${url.hash}`);
+      setShareUrl(href);
+      await navigator.clipboard.writeText(href);
+      setShareStatus("copied");
+    } catch (error) {
+      setShareStatus("error");
+      setShareError(error instanceof Error ? error.message : copy.shareError);
+    }
+  }
 
   function submitPrompt(prompt: string) {
     const result = applyAssistantPrompt(config, prompt);
@@ -67,7 +158,13 @@ export function ShedConfigurator() {
       <section className="studio-viewport relative flex h-[40vh] shrink-0 flex-col overflow-hidden lg:h-auto lg:min-h-0 lg:flex-1">
         <div className="pointer-events-none absolute inset-0 opacity-60 floor-grid" />
         <div className="relative min-h-0 flex-1">
-          <ShedScene config={config} captureRef={captureShedRef} />
+          {configReady ? (
+            <ShedScene config={config} captureRef={captureShedRef} />
+          ) : (
+            <div className="flex h-full w-full items-center justify-center text-sm text-zinc-500">
+              {copy.loadingScene}
+            </div>
+          )}
         </div>
 
         <div className="pointer-events-none absolute inset-x-0 top-0 z-20 flex items-start justify-between px-3 py-3 lg:items-center lg:px-6 lg:py-5">
@@ -108,8 +205,9 @@ export function ShedConfigurator() {
               </span>
             </button>
             <IconButton
-              label="Share"
-              onClick={() => void navigator.clipboard.writeText(window.location.href)}
+              label={copy.share}
+              disabled={!configReady || (shareOpen && shareStatus === "saving")}
+              onClick={() => void shareConfiguration()}
             >
               <Share className="h-4 w-4" />
             </IconButton>
@@ -149,7 +247,7 @@ export function ShedConfigurator() {
                 <div className="mt-2 flex items-center gap-1 text-xs text-gray-600">
                   <span className="text-gray-500">{copy.payAsLowAs}</span>
                   <span className="rounded-sm border border-amber-800/80 bg-amber-100/30 px-1.5 py-0.5 text-[11px] leading-none font-semibold text-amber-800/80">
-                    {formatUsd(estimate.monthly)}/mo
+                    {formatUsd(estimate.rto)}/mo
                   </span>
                 </div>
               </div>
@@ -188,7 +286,7 @@ export function ShedConfigurator() {
               <span>{copy.paymentOptions}</span>
               <span>{copy.fromAsLowAs}</span>
               <span className="rounded-sm border border-amber-800/80 bg-amber-100/30 px-2 py-0.5 text-[11px] font-semibold text-amber-800/80">
-                {formatUsd(estimate.financeMonthly)}/mo
+                {formatUsd(estimate.rto)}/mo
               </span>
               <span>{copy.forMonths}</span>
             </div>
@@ -255,6 +353,15 @@ export function ShedConfigurator() {
           config={config}
           zip={zip}
           onClose={() => setQuoteOpen(false)}
+        />
+      ) : null}
+
+      {shareOpen ? (
+        <ShareModal
+          status={shareStatus}
+          url={shareUrl}
+          error={shareError}
+          onClose={() => setShareOpen(false)}
         />
       ) : null}
     </div>
@@ -619,10 +726,12 @@ function IconButton({
   label,
   children,
   onClick,
+  disabled,
 }: {
   label: string;
   children: React.ReactNode;
   onClick?: () => void;
+  disabled?: boolean;
 }) {
   return (
     <button
@@ -630,7 +739,8 @@ function IconButton({
       aria-label={label}
       title={label}
       onClick={onClick}
-      className="flex h-8 w-8 items-center justify-center rounded-full bg-white text-gray-700 shadow-[0_4px_20px_-2px_rgba(0,0,0,0.08)] hover:bg-gray-50 lg:h-10 lg:w-10"
+      disabled={disabled}
+      className="flex h-8 w-8 items-center justify-center rounded-full bg-white text-gray-700 shadow-[0_4px_20px_-2px_rgba(0,0,0,0.08)] hover:bg-gray-50 disabled:opacity-50 lg:h-10 lg:w-10"
     >
       {children}
     </button>

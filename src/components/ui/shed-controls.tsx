@@ -13,10 +13,10 @@ import { copy } from "@/src/i18n/en";
 import { ColorSwatch } from "@/src/components/ui/color-swatch";
 import {
   CATALOG,
-  formatUsd,
   getColor,
   type ShedConfig,
-} from "@/src/config/shed-config";
+} from "@/src/config/catalog";
+import { formatUsd } from "@/src/config/pricing";
 
 const CONTROL_SECTIONS = [
   { id: "style", title: copy.style },
@@ -42,7 +42,7 @@ type ShedControlsProps = {
   children?: ReactNode;
   estimate: {
     total: number;
-    financeMonthly: number;
+    rto: number;
     lines: { label: string; amount: number }[];
   };
   zip: string;
@@ -685,7 +685,7 @@ function EstimateBreakdownBody({
 }: {
   estimate: {
     total: number;
-    financeMonthly: number;
+    rto: number;
     lines: { label: string; amount: number }[];
   };
   zip: string;
@@ -715,7 +715,7 @@ function EstimateBreakdownBody({
         <span>{copy.paymentOptions}</span>
         <span>{copy.fromAsLowAs}</span>
         <span className="rounded-sm border border-amber-800/80 bg-amber-100/30 px-2 py-0.5 text-[11px] font-semibold text-amber-800/80">
-          {formatUsd(estimate.financeMonthly)}/mo
+          {formatUsd(estimate.rto)}/mo
         </span>
         <span>{copy.forMonths}</span>
       </div>

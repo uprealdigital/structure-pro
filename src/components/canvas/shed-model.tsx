@@ -30,7 +30,7 @@ import {
   getSidingType,
   getStyle,
   type ShedConfig,
-} from "@/src/config/shed-config";
+} from "@/src/config/catalog";
 
 type ShedModelProps = {
   config: ShedConfig;
