@@ -1,0 +1,16 @@
+---
+description: Feature custom hooks live in that feature's hooks folder
+globs: src/features/**/*.{ts,tsx}
+alwaysApply: false
+---
+
+# Feature hooks
+
+Put a feature's custom React hooks in `src/features/<feature>/hooks/`. Name the file after the hook: `use-building-selection.ts` exports `useBuildingSelection`.
+
+```ts
+// src/features/cpq/hooks/use-building-selection.ts
+export function useBuildingSelection() { /* configuration and share state */ }
+```
+
+Components import these hooks. Do not leave a feature's client state and effects inline in a component when they are their own hook. Do not put hooks in `utils/` or `components/`. Hooks call `server/actions.ts` for writes. They do not import `db/` or `server/queries.ts`.

@@ -14,7 +14,7 @@ const domine = Domine({
 
 export const metadata: Metadata = {
   title: "TimberCraft 3D Studio",
-  description: "Configure a shed in 3D — style, siding, roof, and size.",
+  description: "Configure a building in 3D — style, siding, roof, and size.",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {

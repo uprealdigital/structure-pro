@@ -1,15 +1,16 @@
 ---
-description: Project rules and tech stack guidelines for Structure Pro
-globs: *
+description: Structure Pro stack and product data sources
+alwaysApply: true
 ---
 
-# Structure Pro Guidelines
+# Structure Pro
 
-## Stack
-- Next.js (App Router), TypeScript, Tailwind CSS
-- React Three Fiber, Three.js, `@react-three/drei`
+Next.js App Router, TypeScript, and Tailwind. The building scene uses React Three Fiber, Three.js, and `@react-three/drei`.
 
-## Architecture Rules
-1. **Data-Driven:** Shed configurations (styles, sizes, materials, colors) come from `src/config/catalog.json` via `catalog.ts`. Prices come from `src/config/pricing.json` via `pricing.ts`. Never hardcode prices or dimensions inside components.
-2. **Separation of Concerns:** Keep 3D scene elements (Canvas, Mesh, Lighting) in `src/components/canvas/` and 2D UI controls in `src/components/ui/`.
-3. **i18n Ready:** Keep UI strings isolated in a localization dictionary file for English/French support.
+Feature code lives in `src/features/<feature>/` and follows the layer rules in this folder: `server/queries.ts`, `server/actions.ts`, `db/`, `types/index.ts`, and `utils/`.
+
+- Building options come from `src/features/cpq/config/catalog.json` through `src/features/cpq/utils/catalog.ts`.
+- Prices come from `src/features/cpq/config/pricing.json` through `src/features/cpq/utils/pricing.ts`.
+- Do not hardcode prices or dimensions in components.
+- 3D scene elements live in `src/features/cpq/components/` with the other building UI.
+- UI copy lives in `src/features/<feature>/locales/`.

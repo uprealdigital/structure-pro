@@ -1,0 +1,31 @@
+---
+description: Feature utils are pure and split by concern
+globs: src/features/**/utils/**/*.ts
+alwaysApply: false
+---
+
+# Feature utils
+
+`src/features/<feature>/utils/` holds pure functions. The same inputs always produce the same outputs. Do not import React, Next.js server APIs, or `db/`.
+
+Split files by concern:
+
+- `utils/pricing.ts` for price math and `describeSelections`
+- `utils/geometry.ts` for roof rise, gambrel breaks, and peak height
+- `utils/materials.ts` for siding and roof texture maps, tile scale, and shader properties
+- `utils/assistant.ts` for turning a prompt into a configuration change
+- `utils/mappers.ts` for every mapper, including database rows to typed records and one schema to another. Do not put these functions in `db/`
+- `utils/formatting.ts` for display strings and URLs
+- `utils/id.ts` for id generators
+- `utils/system.ts` for the opening SMS template
+
+```ts
+// utils/formatting.ts
+export function configurationShareUrl(href: string, id: string): string { /* ... */ }
+
+// utils/mappers.ts
+export function toBuildingConfig(selections: QuoteSelections): BuildingConfig { /* ... */ }
+export function toContact(row: ContactRow): Contact | undefined { /* ... */ }
+```
+
+Do not put these functions in `types/index.ts`, components, or route handlers.

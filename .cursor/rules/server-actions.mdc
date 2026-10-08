@@ -1,0 +1,24 @@
+---
+description: Feature server actions validate input, mutate, and revalidate
+globs: src/features/**/server/actions.ts
+alwaysApply: false
+---
+
+# Server actions
+
+`src/features/<feature>/server/actions.ts` is what Client Components call for writes (forms, buttons, event handlers).
+
+- Put `"use server";` on the first line.
+- Validate every argument with a Zod schema from `types/index.ts` before writing.
+- Mutate through `db/*.ts`.
+- After a successful write, call `revalidatePath` or `revalidateTag`.
+- Return `{ success: true, data }` or `{ error: string }`. Catch failures and return `{ error }` instead of throwing to the client.
+
+A client-only read, such as a configuration id in the URL hash, may call `queries.ts` from this file. That function must not mutate.
+
+```ts
+"use server";
+
+const parsed = quoteContactSchema.safeParse(input);
+if (!parsed.success) return { error: "fullName, phone, and email are required" };
+```

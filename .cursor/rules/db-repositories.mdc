@@ -1,0 +1,29 @@
+---
+description: Feature db files run Supabase CRUD and validate writes with Zod
+globs: src/features/**/{db/*.ts,data/*.db.ts}
+alwaysApply: false
+---
+
+# Database repositories
+
+Each Supabase table has one file under `src/features/<feature>/db/`. CPQ uses `quote.ts` and `configuration.ts`. CRM uses `contact.ts`, `deal.ts`, `conversation.ts`, and `message.ts`. AI tables still live in `data/<table>.db.ts`; new table files go in `db/`.
+
+The file exports CRUD only:
+
+- `create…` inserts a row
+- `read…` loads a row
+- `update…` changes a row
+- `delete…` removes a row
+
+Validate write payloads with a Zod schema from `types/index.ts` before the query. Return the row or a typed record. Do not calculate prices, format text, or reshape data for the UI here. Do not query another feature's tables.
+
+Do not put mapper functions in `db/`. Turning a database row into a typed record, or one schema into another, belongs in `utils/mappers.ts`. Call that function from the repository.
+
+```ts
+export async function readContact(id: string): Promise<Contact | undefined> {
+  const { data, error } = await crm().from("contacts").select("id, full_name, phone, email, opted_out").eq("id", id).maybeSingle();
+  throwIfError(error);
+  if (!data) return undefined;
+  return toContact(data as ContactRow);
+}
+```

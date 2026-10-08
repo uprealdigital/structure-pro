@@ -1,0 +1,27 @@
+---
+description: Feature types/index.ts files hold Zod schemas and inferred types only
+globs: "**/types/index.ts"
+alwaysApply: false
+---
+
+# Type contracts
+
+`types/index.ts` is the feature's data contract. Export Zod schemas and types inferred from them. Do not export functions.
+
+```ts
+export const quoteSelectionsSchema = buildingConfigSchema.extend({
+  zip: z.string().trim().min(1),
+});
+
+export type QuoteSelections = z.infer<typeof quoteSelectionsSchema>;
+```
+
+Do not add guards (`isXYZ`), mappers, formatters, or domain math here. Put those in `utils/`.
+
+Call sites validate with the schema and use `parsed.data`:
+
+```ts
+const parsed = quoteSelectionsSchema.safeParse(value);
+if (!parsed.success) return;
+const selections = parsed.data;
+```

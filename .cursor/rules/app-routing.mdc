@@ -1,0 +1,18 @@
+---
+description: App Router pages and route handlers stay thin and call feature server modules
+globs: src/app/**/*.{ts,tsx}
+alwaysApply: false
+---
+
+# App routing
+
+Keep `page.tsx` and route handlers thin.
+
+- Do not call Supabase from `page.tsx` or a route handler.
+- Reads go through `src/features/<feature>/server/queries.ts`.
+- Writes from a route go through `src/features/<feature>/server/actions.ts` or `db/*.ts` after the handler has only parsed the HTTP request.
+
+```ts
+const quote = await getQuoteForPage(id);
+if (!quote) return Response.json({ error: "Quote not found" }, { status: 404 });
+```

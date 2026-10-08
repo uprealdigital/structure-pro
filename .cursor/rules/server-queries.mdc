@@ -1,0 +1,23 @@
+---
+description: Feature server queries are read-only and enrich data before the UI
+globs: src/features/**/server/queries.ts
+alwaysApply: false
+---
+
+# Server queries
+
+`src/features/<feature>/server/queries.ts` is the read path for pages, Server Components, and route handlers.
+
+- Put `import "server-only";` on the first line. Do not add `"use server"`.
+- Read through `db/*.ts` or an external API. Do not insert, update, or delete.
+- Enrich rows with pure utils before returning them. Pricing belongs in `utils/pricing.ts`, not in the query's database call.
+
+```ts
+import "server-only";
+
+export async function getQuoteForPage(id: string) {
+  const quote = await readQuote(id);
+  if (!quote) return undefined;
+  return { ...quote, summary: priceSummary(quote.selections) };
+}
+```
