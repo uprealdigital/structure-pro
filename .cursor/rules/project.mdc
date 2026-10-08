@@ -7,7 +7,7 @@ alwaysApply: true
 
 Next.js App Router, TypeScript, and Tailwind. The building scene uses React Three Fiber, Three.js, and `@react-three/drei`.
 
-Feature code lives in `src/features/<feature>/` and follows the layer rules in this folder: `server/queries.ts`, `server/actions.ts`, `db/`, `types/index.ts`, and `utils/`.
+Feature code lives in `src/features/<feature>/`. Every feature has the same folders as CPQ: `components/`, `config/`, `db/`, `hooks/`, `locales/`, `server/`, `types/`, and `utils/`.
 
 - Building options come from `src/features/cpq/config/catalog.json` through `src/features/cpq/utils/catalog.ts`.
 - Prices come from `src/features/cpq/config/pricing.json` through `src/features/cpq/utils/pricing.ts`.

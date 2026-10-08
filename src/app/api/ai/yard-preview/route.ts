@@ -4,13 +4,16 @@ import { sendMail } from "@/src/common/utils/mail";
 import { toE164 } from "@/src/common/utils/phone";
 import {
   createYardPreview,
-  errorDetail,
-  previewEvent,
   storeYardPreviewImage,
   updateYardPreview,
-  type YardPreviewEvent,
-} from "@/src/features/ai/data/yard-preview.service";
-import { compositeYardPreview, yardSpecLines } from "@/src/features/ai/services/yard-preview.service";
+} from "@/src/features/ai/db/yard-preview";
+import type { YardPreviewEvent } from "@/src/features/ai/types";
+import {
+  compositeYardPreview,
+  errorDetail,
+  previewEvent,
+  yardSpecLines,
+} from "@/src/features/ai/utils/yard-preview";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;

@@ -1,0 +1,19 @@
+---
+description: Every feature uses the same folders as CPQ
+alwaysApply: true
+---
+
+# Feature folders
+
+Every feature under `src/features/<feature>/` has the same folders as `src/features/cpq/`:
+
+- `components/` for UI
+- `config/` for JSON and other static configuration
+- `db/` for one Supabase repository per table
+- `hooks/` for custom React hooks
+- `locales/` for UI copy
+- `server/` for `queries.ts` and `actions.ts`
+- `types/` for `index.ts` Zod schemas and inferred types
+- `utils/` for pure functions
+
+Do not add another top-level folder inside a feature. Do not put feature code outside these folders.

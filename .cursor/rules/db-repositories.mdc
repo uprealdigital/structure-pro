@@ -6,7 +6,7 @@ alwaysApply: false
 
 # Database repositories
 
-Each Supabase table has one file under `src/features/<feature>/db/`. CPQ uses `quote.ts` and `configuration.ts`. CRM uses `contact.ts`, `deal.ts`, `conversation.ts`, and `message.ts`. AI tables still live in `data/<table>.db.ts`; new table files go in `db/`.
+Each Supabase table has one file under `src/features/<feature>/db/`. CPQ uses `quote.ts` and `configuration.ts`. CRM uses `contact.ts`, `deal.ts`, `conversation.ts`, and `message.ts`. AI uses `yard-preview.ts`.
 
 The file exports CRUD only:
 

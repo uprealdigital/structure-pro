@@ -64,7 +64,7 @@ export function webhookUrlFromRequest(request: Request): string {
   const host =
     request.headers.get("x-forwarded-host") ?? request.headers.get("host");
   const proto = request.headers.get("x-forwarded-proto") ?? "https";
-  return `${proto}://${host}/api/lib/twilio`;
+  return `${proto}://${host}/api/ai/webhooks/twilio`;
 }
 
 export function isValidTwilioRequest(

@@ -1,19 +1,5 @@
 import { GoogleGenAI } from "@google/genai";
-
-const DEFAULT_IMAGE_MODEL = "gemini-3.1-flash-image";
-
-const ASPECT_RATIOS: { id: string; ratio: number }[] = [
-  { id: "1:1", ratio: 1 },
-  { id: "2:3", ratio: 2 / 3 },
-  { id: "3:2", ratio: 3 / 2 },
-  { id: "3:4", ratio: 3 / 4 },
-  { id: "4:3", ratio: 4 / 3 },
-  { id: "4:5", ratio: 4 / 5 },
-  { id: "5:4", ratio: 5 / 4 },
-  { id: "9:16", ratio: 9 / 16 },
-  { id: "16:9", ratio: 16 / 9 },
-  { id: "21:9", ratio: 21 / 9 },
-];
+import type { YardPreviewEvent } from "@/src/features/ai/types";
 
 const PROMPT_SPEC_LABELS = new Set([
   "Style",
@@ -37,6 +23,33 @@ export function yardSpecLines(specs: { label: string; value: string }[]): string
     .map((spec) => `- ${spec.label}: ${spec.value}`)
     .join("\n");
 }
+
+export function previewEvent(step: string, detail?: string): YardPreviewEvent {
+  return {
+    at: new Date().toISOString(),
+    step,
+    ...(detail ? { detail } : {}),
+  };
+}
+
+export function errorDetail(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+const DEFAULT_IMAGE_MODEL = "gemini-3.1-flash-image";
+
+const ASPECT_RATIOS: { id: string; ratio: number }[] = [
+  { id: "1:1", ratio: 1 },
+  { id: "2:3", ratio: 2 / 3 },
+  { id: "3:2", ratio: 3 / 2 },
+  { id: "3:4", ratio: 3 / 4 },
+  { id: "4:3", ratio: 4 / 3 },
+  { id: "4:5", ratio: 4 / 5 },
+  { id: "5:4", ratio: 5 / 4 },
+  { id: "9:16", ratio: 9 / 16 },
+  { id: "16:9", ratio: 16 / 9 },
+  { id: "21:9", ratio: 21 / 9 },
+];
 
 export type YardImage = {
   bytes: Buffer;
@@ -163,9 +176,7 @@ export async function compositeYardPreview(input: {
   }
 
   const size = readImageSize(input.yardPhoto.bytes);
-  const aspectRatio = size
-    ? closestAspectRatio(size.width, size.height)
-    : "4:3";
+  const aspectRatio = size ? closestAspectRatio(size.width, size.height) : "4:3";
   const ai = new GoogleGenAI({ apiKey });
   const response = await ai.models.generateContent({
     model: imageModel(),

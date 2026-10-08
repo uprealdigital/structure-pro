@@ -1,3 +1,4 @@
+import { after } from "next/server";
 import {
   FunctionCallingConfigMode,
   GoogleGenAI,
@@ -7,13 +8,50 @@ import {
 import { sendMail } from "@/src/common/utils/mail";
 import { callRouter, readJson } from "@/src/common/utils/internal-call";
 import type { AgentSession } from "@/src/features/ai/types";
-import { configuratorAgentPrompt } from "@/src/features/ai/prompts/configurator-agent.prompt";
+import { optOutContact, removeConversation, saveAgentSession } from "@/src/features/crm/server/actions";
+import { getAgentSession } from "@/src/features/crm/server/queries";
 
 const SEND_CONTRACT = "send_contract";
 const PRIMARY_MODEL = "gemini-3.1-flash-lite";
 const FALLBACK_MODELS = ["gemini-3.5-flash-lite"];
 const RETRY_BUDGET_MS = 90_000;
 const ATTEMPT_MS = 45_000;
+const STOP_RE = /^(stop|stopall|unsubscribe|cancel|end|quit)$/i;
+
+type InboundMessageParams = {
+  channelKey: string;
+  text: string;
+  sendMessage: (text: string) => Promise<void>;
+};
+
+export function configuratorAgentPrompt(input: {
+  channel: "Telegram" | "SMS";
+  fullName: string;
+  email: string;
+  phone: string;
+  brandName: string;
+  specLines: string;
+  total: number;
+}): string {
+  return `You are a friendly building sales assistant chatting with a customer on ${input.channel} for ${input.brandName}.
+Keep every reply under 320 characters. Ask one question at a time.
+Customer: ${input.fullName} (${input.email}, ${input.phone}).
+Configured building:
+${input.specLines}
+Estimated total: ${input.total} USD.
+
+Before you email the invoice, ask about these three topics, in this order. Phrase each question yourself. Any answer is acceptable.
+1. When they want the building.
+2. Whether the site is ready, and whether they have a foundation.
+3. What they want the building for, and what they will store in it.
+
+Ask one question per text. Never ask about two of these topics in the same text.
+If they already answered a topic earlier in the chat, do not ask it again.
+After they answer, acknowledge it briefly, then ask only the next unanswered topic.
+Call send_contract only after all three topics have an answer. Pass their words as timeline, site, and purpose. If one is still missing, do not call the tool. Ask about that topic in your own words, and ask nothing else.
+Never invent prices. Do not say the invoice was emailed unless the tool succeeded. Do not email more than once. After it is sent, stop asking these questions.
+If they say they are not ready, stay helpful and do not call send_contract.`;
+}
 
 function modelsToTry(): string[] {
   const preferred = process.env.GEMINI_MODEL?.trim() || PRIMARY_MODEL;
@@ -343,4 +381,43 @@ export async function replyToSms(session: AgentSession, incoming: string): Promi
     incoming,
     "Thanks, I hit a snag sending that. Reply and I'll pick up where we left off.",
   );
+}
+
+export async function processInboundMessage({
+  channelKey,
+  text,
+  sendMessage,
+}: InboundMessageParams): Promise<string | undefined> {
+  if (STOP_RE.test(text)) {
+    await optOutContact(channelKey).catch(console.error);
+    await removeConversation(channelKey);
+    return "You're unsubscribed. Submit a new quote on the website if you want to chat again.";
+  }
+
+  let loaded: Awaited<ReturnType<typeof getAgentSession>>;
+  try {
+    loaded = await getAgentSession(channelKey);
+  } catch (error) {
+    console.error(error);
+    return "Sorry, I had trouble loading your quote. Reply again in a moment.";
+  }
+
+  if (!loaded) {
+    return "We don't have an open quote for this channel. Submit for quote on the website first.";
+  }
+
+  const { conversationId, session } = loaded;
+
+  after(async () => {
+    try {
+      const reply = await replyToSms(session, text || "Hi");
+      await saveAgentSession(conversationId, session).catch(console.error);
+      await sendMessage(reply);
+    } catch (error) {
+      console.error(error);
+      await sendMessage(replyFailureMessage(error)).catch(console.error);
+    }
+  });
+
+  return undefined;
 }

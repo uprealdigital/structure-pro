@@ -1,8 +1,5 @@
 import { assertInternal } from "@/src/common/utils/internal-call";
-import {
-  openConversation,
-  removeConversation,
-} from "@/src/features/ai/services/conversation.service";
+import { openConversation, removeConversation } from "@/src/features/crm/server/actions";
 import { demoChatId, ensureTelegramWebhook, sendTelegramMessage } from "@/src/common/lib/telegram/telegram.service";
 import { sendSms } from "@/src/common/lib/twilio/twilio.service";
 
