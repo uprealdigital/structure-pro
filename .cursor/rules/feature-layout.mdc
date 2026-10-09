@@ -17,3 +17,5 @@ Every feature under `src/features/<feature>/` has the same folders as `src/featu
 - `utils/` for pure functions
 
 Do not add another top-level folder inside a feature. Do not put feature code outside these folders.
+
+CRM is split into subfeatures under `src/features/crm/<subfeature>/`. Each subfeature uses the same folders: `components/`, `db/`, `locales/`, `server/`, `types/`, and `utils/`. `conversations`, `deals`, `customers`, `quotes`, `settings`, and `support` are the subfeatures that exist now. Code used by more than one of those subfeatures lives in `src/features/crm/common/` with the same folders.

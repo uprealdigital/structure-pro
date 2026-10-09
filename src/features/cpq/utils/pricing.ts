@@ -189,6 +189,11 @@ export function priceSummary(selections: QuoteSelections): QuoteSummary {
     total: described.estimate.total,
     totalLabel: formatUsd(described.estimate.total),
     specs: described.specs,
+    lines: described.estimate.lines.map((line) => ({
+      label: line.label,
+      amountLabel: formatUsd(line.amount),
+    })),
+    imageUrl: described.style.image,
     brand: {
       name: described.brand.name,
       region: described.brand.region,

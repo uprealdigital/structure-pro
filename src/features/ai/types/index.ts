@@ -13,9 +13,9 @@ export const agentSessionSchema = z.object({
   email: z.string(),
   chatId: z.string().optional(),
   invoiceId: z.string(),
-  cpqQuoteId: z.string(),
+  quoteId: z.string(),
   crmDealId: z.string(),
-  crmContactId: z.string(),
+  crmCustomerId: z.string(),
   specLines: z.string(),
   total: z.number(),
   brandName: z.string(),
@@ -39,7 +39,7 @@ export type YardPreviewStatus = z.infer<typeof yardPreviewStatusSchema>;
 
 export const yardPreviewSchema = z.object({
   id: z.string(),
-  crmContactId: z.string(),
+  crmCustomerId: z.string(),
   crmDealId: z.string(),
   status: yardPreviewStatusSchema,
   error: z.string().nullable(),
@@ -48,7 +48,7 @@ export const yardPreviewSchema = z.object({
 export type YardPreview = z.infer<typeof yardPreviewSchema>;
 
 export const yardPreviewWriteSchema = z.object({
-  crmContactId: z.string(),
+  crmCustomerId: z.string(),
   crmDealId: z.string(),
   events: z.array(yardPreviewEventSchema),
 });

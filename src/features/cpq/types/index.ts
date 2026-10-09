@@ -54,11 +54,17 @@ export const quoteRecordSchema = z.object({
 
 export type QuoteRecord = z.infer<typeof quoteRecordSchema>;
 
+export type ListedQuote = QuoteRecord & {
+  createdAt: string;
+};
+
 export type QuoteSummary = {
   text: string;
   total: number;
   totalLabel: string;
   specs: { label: string; value: string }[];
+  lines: { label: string; amountLabel: string }[];
+  imageUrl: string;
   brand: { name: string; region: string; mark: string };
 };
 

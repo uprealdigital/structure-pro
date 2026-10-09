@@ -22,7 +22,7 @@ function extensionFor(mimeType: string): string {
 }
 
 export async function createYardPreview(input: {
-  crmContactId: string;
+  crmCustomerId: string;
   crmDealId: string;
   events: YardPreviewEvent[];
 }): Promise<string> {
@@ -30,7 +30,7 @@ export async function createYardPreview(input: {
   const { data, error } = await ai()
     .from("yard_previews")
     .insert({
-      crm_contact_id: preview.crmContactId,
+      crm_customer_id: preview.crmCustomerId,
       crm_deal_id: preview.crmDealId,
       status: "accepted",
       events: preview.events,
@@ -46,7 +46,7 @@ export async function createYardPreview(input: {
 export async function readYardPreview(id: string): Promise<YardPreview | undefined> {
   const { data, error } = await ai()
     .from("yard_previews")
-    .select("id, crm_contact_id, crm_deal_id, status, error")
+    .select("id, crm_customer_id, crm_deal_id, status, error")
     .eq("id", id)
     .maybeSingle();
 

@@ -5,7 +5,7 @@ import { callRouter, readJson } from "@/src/common/utils/internal-call";
 import { toE164 } from "@/src/common/utils/phone";
 import { openingSms } from "@/src/features/cpq/utils/system";
 import { createConfiguration } from "@/src/features/cpq/db/configuration";
-import { createQuote, deleteQuote } from "@/src/features/cpq/db/quote";
+import { createQuote, deleteQuote } from "@/src/features/crm/quotes/db/quote";
 import { getConfiguration } from "@/src/features/cpq/server/queries";
 import {
   localeCodeSchema,
@@ -81,24 +81,25 @@ export async function createQuoteAction(input: {
   try {
     quoteId = await createQuote({ invoiceId, selections: selections.data });
 
-    const { POST: upsertContact } = await import("@/src/app/api/crm/contacts/route");
-    const savedContact = await readJson<{ id: string }>(
-      await callRouter(upsertContact, "/api/crm/contacts", {
-        body: {
-          fullName: contact.data.fullName,
-          phone,
-          email: contact.data.email,
-          optedOut: false,
-        },
-      }),
-    );
-    const { POST: createDeal } = await import("@/src/app/api/crm/deals/route");
+    const { POST: createDealRoute } = await import("@/src/app/api/crm/deals/route");
     const deal = await readJson<{ id: string }>(
-      await callRouter(createDeal, "/api/crm/deals", {
-        body: { contactId: savedContact.id, cpqQuoteId: quoteId, source: "quote" },
+      await callRouter(createDealRoute, "/api/crm/deals", {
+        body: { quoteId, source: "quote" },
       }),
     );
     dealId = deal.id;
+
+    const { POST: createCustomer } = await import("@/src/app/api/crm/customers/route");
+    const savedCustomer = await readJson<{ id: string }>(
+      await callRouter(createCustomer, "/api/crm/customers", {
+        body: {
+          dealId: deal.id,
+          fullName: contact.data.fullName,
+          phone,
+          email: contact.data.email,
+        },
+      }),
+    );
 
     const { POST: start } = await import("@/src/app/api/ai/conversations/route");
     const started = await readJson<{ lookupKey: string }>(
@@ -106,8 +107,7 @@ export async function createQuoteAction(input: {
         body: {
           phone,
           channel,
-          crmDealId: deal.id,
-          cpqQuoteId: quoteId,
+          customerId: savedCustomer.id,
           openingMessage,
         },
       }),

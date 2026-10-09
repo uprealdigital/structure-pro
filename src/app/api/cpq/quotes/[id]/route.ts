@@ -1,6 +1,6 @@
 import { assertInternal } from "@/src/common/utils/internal-call";
 import type { RouteContext } from "@/src/common/types";
-import { deleteQuote } from "@/src/features/cpq/db/quote";
+import { deleteQuote } from "@/src/features/crm/quotes/db/quote";
 import { getQuoteForPage } from "@/src/features/cpq/server/queries";
 
 export const runtime = "nodejs";

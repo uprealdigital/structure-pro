@@ -9,6 +9,8 @@ Next.js App Router, TypeScript, and Tailwind. The building scene uses React Thre
 
 Feature code lives in `src/features/<feature>/`. Every feature has the same folders as CPQ: `components/`, `config/`, `db/`, `hooks/`, `locales/`, `server/`, `types/`, and `utils/`.
 
+CRM views live in subfeatures under `src/features/crm/conversations/`, `src/features/crm/deals/`, `src/features/crm/customers/`, `src/features/crm/quotes/`, `src/features/crm/settings/`, and `src/features/crm/support/`. Each subfeature uses those same folders. Code shared by those views lives in `src/features/crm/common/`.
+
 - Building options come from `src/features/cpq/config/catalog.json` through `src/features/cpq/utils/catalog.ts`.
 - Prices come from `src/features/cpq/config/pricing.json` through `src/features/cpq/utils/pricing.ts`.
 - Do not hardcode prices or dimensions in components.

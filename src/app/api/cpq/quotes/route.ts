@@ -1,5 +1,5 @@
 import { assertInternal } from "@/src/common/utils/internal-call";
-import { createQuote } from "@/src/features/cpq/db/quote";
+import { createQuote } from "@/src/features/crm/quotes/db/quote";
 import { getQuoteForPage } from "@/src/features/cpq/server/queries";
 import { quoteSelectionsSchema } from "@/src/features/cpq/types";
 import { newInvoiceId } from "@/src/features/cpq/utils/id";

@@ -51,89 +51,93 @@ select id, selections, created_at
 from public.configurations
 on conflict (id) do nothing;
 
-insert into cpq.quotes (id, invoice_id, selections, created_at, updated_at)
+insert into crm.quotes (id, invoice_id, selections, created_at, updated_at)
 select id, invoice_id, selections, created_at, updated_at
 from public.quotes
 on conflict (id) do nothing;
 
-insert into crm.contacts (full_name, phone, email, opted_out, created_at, updated_at)
-select distinct on (phone) full_name, phone, email, opted_out, created_at, updated_at
-from public.quotes
-order by phone, updated_at desc
-on conflict (phone) do update
-set
-  full_name = excluded.full_name,
-  email = excluded.email,
-  opted_out = excluded.opted_out,
-  updated_at = excluded.updated_at;
-
-insert into crm.contacts (full_name, phone, email, opted_out, created_at, updated_at)
-select distinct on (phone) full_name, phone, email, false, created_at, updated_at
-from public.yard_previews
-order by phone, updated_at desc
-on conflict (phone) do nothing;
-
 create temp table quote_move (
   quote_id uuid primary key,
   deal_id uuid not null,
+  customer_id uuid not null,
   conversation_id uuid not null
 );
 
-insert into quote_move (quote_id, deal_id, conversation_id)
-select id, gen_random_uuid(), gen_random_uuid()
+insert into quote_move (quote_id, deal_id, customer_id, conversation_id)
+select id, gen_random_uuid(), gen_random_uuid(), gen_random_uuid()
 from public.quotes q
 where not exists (
   select 1 from crm.deals d
-  where d.cpq_quote_id = q.id and d.source = 'quote'
+  where d.quote_id = q.id and d.source = 'quote'
 );
 
-insert into crm.deals (id, contact_id, cpq_quote_id, source, status, created_at, updated_at)
+insert into crm.deals (id, quote_id, source, status, created_at, updated_at)
 select
   m.deal_id,
-  c.id,
   q.id,
   'quote',
   case when q.contract_sent then 'invoice_sent' else 'open' end,
   q.created_at,
   q.updated_at
 from public.quotes q
-join quote_move m on m.quote_id = q.id
-join crm.contacts c on c.phone = q.phone;
+join quote_move m on m.quote_id = q.id;
+
+insert into crm.customers (
+  id, deal_id, full_name, phone, email, opted_out, created_at, updated_at
+)
+select
+  m.customer_id,
+  m.deal_id,
+  q.full_name,
+  q.phone,
+  q.email,
+  q.opted_out,
+  q.created_at,
+  q.updated_at
+from public.quotes q
+join quote_move m on m.quote_id = q.id;
 
 insert into crm.conversations (
-  id, lookup_key, chat_id, crm_deal_id, cpq_quote_id, contract_sent, created_at, updated_at
+  id, lookup_key, chat_id, customer_id, contract_sent, created_at, updated_at
 )
 select
   m.conversation_id,
   q.lookup_key,
   q.chat_id,
-  m.deal_id,
-  q.id,
+  m.customer_id,
   q.contract_sent,
   q.created_at,
   q.updated_at
 from public.quotes q
 join quote_move m on m.quote_id = q.id;
 
-insert into crm.messages (conversation_id, position, role, body, created_at)
-select m.conversation_id, qm.position, qm.role, qm.body, qm.created_at
+insert into crm.activities (conversation_id, position, source, role, body, created_at)
+select
+  m.conversation_id,
+  qm.position,
+  case when q.chat_id is not null and q.chat_id <> '' then 'telegram' else 'sms' end,
+  qm.role,
+  qm.body,
+  qm.created_at
 from public.quote_messages qm
-join quote_move m on m.quote_id = qm.quote_id;
+join quote_move m on m.quote_id = qm.quote_id
+join public.quotes q on q.id = qm.quote_id;
 
 create temp table yard_move (
   old_id uuid primary key,
   quote_id uuid not null,
-  deal_id uuid not null
+  deal_id uuid not null,
+  customer_id uuid not null
 );
 
-insert into yard_move (old_id, quote_id, deal_id)
-select id, gen_random_uuid(), gen_random_uuid()
+insert into yard_move (old_id, quote_id, deal_id, customer_id)
+select id, gen_random_uuid(), gen_random_uuid(), gen_random_uuid()
 from public.yard_previews y
 where not exists (
   select 1 from ai.yard_previews p where p.id = y.id
 );
 
-insert into cpq.quotes (id, invoice_id, selections, created_at, updated_at)
+insert into crm.quotes (id, invoice_id, selections, created_at, updated_at)
 select
   ym.quote_id,
   'PREVIEW-' || upper(substr(replace(y.id::text, '-', ''), 1, 8)),
@@ -143,15 +147,29 @@ select
 from public.yard_previews y
 join yard_move ym on ym.old_id = y.id;
 
-insert into crm.deals (id, contact_id, cpq_quote_id, source, status, created_at, updated_at)
-select ym.deal_id, c.id, ym.quote_id, 'yard_preview', 'open', y.created_at, y.updated_at
+insert into crm.deals (id, quote_id, source, status, created_at, updated_at)
+select ym.deal_id, ym.quote_id, 'yard_preview', 'open', y.created_at, y.updated_at
 from public.yard_previews y
-join yard_move ym on ym.old_id = y.id
-join crm.contacts c on c.phone = y.phone;
+join yard_move ym on ym.old_id = y.id;
+
+insert into crm.customers (
+  id, deal_id, full_name, phone, email, opted_out, created_at, updated_at
+)
+select
+  ym.customer_id,
+  ym.deal_id,
+  y.full_name,
+  y.phone,
+  y.email,
+  false,
+  y.created_at,
+  y.updated_at
+from public.yard_previews y
+join yard_move ym on ym.old_id = y.id;
 
 insert into ai.yard_previews (
   id,
-  crm_contact_id,
+  crm_customer_id,
   crm_deal_id,
   status,
   error,
@@ -164,7 +182,7 @@ insert into ai.yard_previews (
 )
 select
   y.id,
-  c.id,
+  ym.customer_id,
   ym.deal_id,
   y.status,
   y.error,
@@ -175,8 +193,7 @@ select
   y.created_at,
   y.updated_at
 from public.yard_previews y
-join yard_move ym on ym.old_id = y.id
-join crm.contacts c on c.phone = y.phone;
+join yard_move ym on ym.old_id = y.id;
 
 drop table if exists public.quote_messages;
 drop table if exists public.quotes;

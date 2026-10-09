@@ -6,7 +6,9 @@ alwaysApply: false
 
 # Database repositories
 
-Each Supabase table has one file under `src/features/<feature>/db/`. CPQ uses `quote.ts` and `configuration.ts`. CRM uses `contact.ts`, `deal.ts`, `conversation.ts`, and `message.ts`. AI uses `yard-preview.ts`.
+Each Supabase table has one file under `src/features/<feature>/db/`. CPQ uses `configuration.ts` for `cpq.configurations`. CRM customers stay in `src/features/crm/common/db/customer.ts` and the customers view reads that list. Deals use `src/features/crm/deals/db/deal.ts`. Conversations use `src/features/crm/conversations/db/conversation.ts`, `activity.ts`, and `call.ts`. A call activity points at `crm.calls` through `activities.call_id`. `activities.generated_by` is `ai` or `manual`. Quotes use `src/features/crm/quotes/db/quote.ts` against `crm.quotes`. CPQ writes those rows through that repository. AI uses `yard-preview.ts`.
+
+The quotes view does not add a second repository for `crm.quotes`.
 
 The file exports CRUD only:
 
@@ -20,10 +22,10 @@ Validate write payloads with a Zod schema from `types/index.ts` before the query
 Do not put mapper functions in `db/`. Turning a database row into a typed record, or one schema into another, belongs in `utils/mappers.ts`. Call that function from the repository.
 
 ```ts
-export async function readContact(id: string): Promise<Contact | undefined> {
-  const { data, error } = await crm().from("contacts").select("id, full_name, phone, email, opted_out").eq("id", id).maybeSingle();
+export async function readCustomer(id: string): Promise<Customer | undefined> {
+  const { data, error } = await crm().from("customers").select("id, deal_id, full_name, phone, email, opted_out").eq("id", id).maybeSingle();
   throwIfError(error);
   if (!data) return undefined;
-  return toContact(data as ContactRow);
+  return toCustomer(data as CustomerRow);
 }
 ```

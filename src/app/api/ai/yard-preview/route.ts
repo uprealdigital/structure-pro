@@ -118,29 +118,29 @@ export async function POST(request: Request) {
 
   let dealId: string | undefined;
   try {
-    const { POST: upsertContact } = await import("@/src/app/api/crm/contacts/route");
-    const savedContact = await readJson<{ id: string }>(
-      await callRouter(upsertContact, "/api/crm/contacts", {
-        body: contact,
-      }),
-    );
     const { POST: createDeal } = await import("@/src/app/api/crm/deals/route");
     const deal = await readJson<{ id: string }>(
       await callRouter(createDeal, "/api/crm/deals", {
         body: {
-          contactId: savedContact.id,
-          cpqQuoteId: quote.id,
+          quoteId: quote.id,
           source: "yard_preview",
         },
       }),
     );
     dealId = deal.id;
 
+    const { POST: createCustomer } = await import("@/src/app/api/crm/customers/route");
+    const savedCustomer = await readJson<{ id: string }>(
+      await callRouter(createCustomer, "/api/crm/customers", {
+        body: { ...contact, dealId: deal.id },
+      }),
+    );
+
     const events: YardPreviewEvent[] = [
       previewEvent("accepted", "Request accepted. Image generation has not started."),
     ];
     const previewId = await createYardPreview({
-      crmContactId: savedContact.id,
+      crmCustomerId: savedCustomer.id,
       crmDealId: deal.id,
       events,
     });
@@ -237,11 +237,6 @@ export async function POST(request: Request) {
 
     return Response.json({ ok: true });
   } catch (error) {
-    const { DELETE: remove } = await import("@/src/app/api/cpq/quotes/[id]/route");
-    await callRouter(remove, `/api/cpq/quotes/${quote.id}`, {
-      method: "DELETE",
-      params: { id: quote.id },
-    }).catch(() => undefined);
     if (dealId) {
       const { DELETE: removeDeal } = await import("@/src/app/api/crm/deals/[id]/route");
       await callRouter(removeDeal, `/api/crm/deals/${dealId}`, {
@@ -249,6 +244,11 @@ export async function POST(request: Request) {
         params: { id: dealId },
       }).catch(() => undefined);
     }
+    const { DELETE: remove } = await import("@/src/app/api/cpq/quotes/[id]/route");
+    await callRouter(remove, `/api/cpq/quotes/${quote.id}`, {
+      method: "DELETE",
+      params: { id: quote.id },
+    }).catch(() => undefined);
     const message = error instanceof Error ? error.message : "Could not save backyard preview";
     return Response.json({ error: message }, { status: 500 });
   }

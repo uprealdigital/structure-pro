@@ -36,6 +36,7 @@ export async function POST(request: Request) {
 
   const syncReply = await processInboundMessage({
     channelKey: key,
+    source: "telegram",
     text,
     sendMessage: (message) => sendTelegramMessage(key, message),
   });

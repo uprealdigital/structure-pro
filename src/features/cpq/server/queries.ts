@@ -1,7 +1,7 @@
 import "server-only";
 
 import { readConfiguration } from "@/src/features/cpq/db/configuration";
-import { readQuote } from "@/src/features/cpq/db/quote";
+import { readQuote } from "@/src/features/crm/quotes/db/quote";
 import { configurationIdSchema } from "@/src/features/cpq/types";
 import { CATALOG } from "@/src/features/cpq/utils/catalog";
 import { priceSummary } from "@/src/features/cpq/utils/pricing";

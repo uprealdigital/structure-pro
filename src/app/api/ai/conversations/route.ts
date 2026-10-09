@@ -1,5 +1,5 @@
 import { assertInternal } from "@/src/common/utils/internal-call";
-import { openConversation, removeConversation } from "@/src/features/crm/server/actions";
+import { openConversation, removeConversation } from "@/src/features/crm/conversations/server/actions";
 import { demoChatId, ensureTelegramWebhook, sendTelegramMessage } from "@/src/common/lib/telegram/telegram.service";
 import { sendSms } from "@/src/common/lib/twilio/twilio.service";
 
@@ -26,11 +26,10 @@ export async function POST(request: Request) {
   const payload = body as Record<string, unknown>;
   const phone = text(payload.phone);
   const openingMessage = text(payload.openingMessage);
-  const crmDealId = text(payload.crmDealId);
-  const cpqQuoteId = text(payload.cpqQuoteId);
+  const customerId = text(payload.customerId);
   const channel = payload.channel === "telegram" ? "telegram" : "twilio";
-  if (!phone || !openingMessage || !crmDealId || !cpqQuoteId) {
-    return Response.json({ error: "phone, openingMessage, crmDealId, and cpqQuoteId are required" }, { status: 400 });
+  if (!phone || !openingMessage || !customerId) {
+    return Response.json({ error: "phone, openingMessage, and customerId are required" }, { status: 400 });
   }
 
   let chatId: string | undefined;
@@ -46,10 +45,16 @@ export async function POST(request: Request) {
     await openConversation({
       lookupKey,
       chatId,
-      crmDealId,
-      cpqQuoteId,
+      customerId,
       contractSent: false,
-      messages: [{ role: "model", text: openingMessage }],
+      activities: [
+        {
+          role: "model",
+          text: openingMessage,
+          source: channel === "telegram" ? "telegram" : "sms",
+          generatedBy: "ai",
+        },
+      ],
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Could not save conversation";

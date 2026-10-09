@@ -1,8 +1,8 @@
 import type { RouteContext } from "@/src/common/types";
 import { assertInternal } from "@/src/common/utils/internal-call";
-import type { DealStatus } from "@/src/features/crm/types";
-import { deleteDeal, updateDeal } from "@/src/features/crm/db/deal";
-import { getDeal } from "@/src/features/crm/server/queries";
+import { deleteDeal, updateDeal } from "@/src/features/crm/deals/db/deal";
+import { getDeal } from "@/src/features/crm/deals/server/queries";
+import type { DealStatus } from "@/src/features/crm/deals/types";
 
 export const runtime = "nodejs";
 

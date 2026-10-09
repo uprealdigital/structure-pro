@@ -8,8 +8,14 @@ import {
 import { sendMail } from "@/src/common/utils/mail";
 import { callRouter, readJson } from "@/src/common/utils/internal-call";
 import type { AgentSession } from "@/src/features/ai/types";
-import { optOutContact, removeConversation, saveAgentSession } from "@/src/features/crm/server/actions";
-import { getAgentSession } from "@/src/features/crm/server/queries";
+import {
+  appendTurnActivities,
+  optOutCustomer,
+  removeConversation,
+  saveAgentSession,
+} from "@/src/features/crm/conversations/server/actions";
+import type { ActivitySource } from "@/src/features/crm/conversations/types";
+import { getAgentSession } from "@/src/features/crm/conversations/server/queries";
 
 const SEND_CONTRACT = "send_contract";
 const PRIMARY_MODEL = "gemini-3.1-flash-lite";
@@ -20,6 +26,7 @@ const STOP_RE = /^(stop|stopall|unsubscribe|cancel|end|quit)$/i;
 
 type InboundMessageParams = {
   channelKey: string;
+  source: Extract<ActivitySource, "sms" | "telegram">;
   text: string;
   sendMessage: (text: string) => Promise<void>;
 };
@@ -200,10 +207,10 @@ async function deliverInvoice(session: AgentSession): Promise<string> {
     const { POST: renderDocument } = await import("@/src/app/api/cpq/quotes/[id]/document/route");
     const response = await callRouter(
       renderDocument,
-      `/api/cpq/quotes/${session.cpqQuoteId}/document`,
+      `/api/cpq/quotes/${session.quoteId}/document`,
       {
         method: "POST",
-        params: { id: session.cpqQuoteId },
+        params: { id: session.quoteId },
         body: {
           kind: "invoice",
           contact: {
@@ -385,11 +392,12 @@ export async function replyToSms(session: AgentSession, incoming: string): Promi
 
 export async function processInboundMessage({
   channelKey,
+  source,
   text,
   sendMessage,
 }: InboundMessageParams): Promise<string | undefined> {
   if (STOP_RE.test(text)) {
-    await optOutContact(channelKey).catch(console.error);
+    await optOutCustomer(channelKey).catch(console.error);
     await removeConversation(channelKey);
     return "You're unsubscribed. Submit a new quote on the website if you want to chat again.";
   }
@@ -410,7 +418,9 @@ export async function processInboundMessage({
 
   after(async () => {
     try {
-      const reply = await replyToSms(session, text || "Hi");
+      const incoming = text || "Hi";
+      const reply = await replyToSms(session, incoming);
+      await appendTurnActivities(conversationId, source, incoming, reply).catch(console.error);
       await saveAgentSession(conversationId, session).catch(console.error);
       await sendMessage(reply);
     } catch (error) {

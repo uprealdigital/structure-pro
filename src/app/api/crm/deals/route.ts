@@ -1,6 +1,6 @@
 import { assertInternal } from "@/src/common/utils/internal-call";
-import type { DealSource } from "@/src/features/crm/types";
-import { createDeal } from "@/src/features/crm/db/deal";
+import { createDeal } from "@/src/features/crm/deals/db/deal";
+import type { DealSource } from "@/src/features/crm/deals/types";
 
 export const runtime = "nodejs";
 
@@ -27,17 +27,13 @@ export async function POST(request: Request) {
   const denied = assertInternal(request);
   if (denied) return denied;
   const payload = await payloadOf(request);
-  const contactId = text(payload?.contactId);
-  const cpqQuoteId = text(payload?.cpqQuoteId);
+  const quoteId = text(payload?.quoteId);
   const source = sourceOf(payload?.source);
-  if (!contactId || !cpqQuoteId || !source) {
-    return Response.json(
-      { error: "contactId, cpqQuoteId, and source are required" },
-      { status: 400 },
-    );
+  if (!quoteId || !source) {
+    return Response.json({ error: "quoteId and source are required" }, { status: 400 });
   }
   try {
-    const deal = await createDeal({ contactId, cpqQuoteId, source });
+    const deal = await createDeal({ quoteId, source });
     return Response.json(deal);
   } catch (error) {
     const message = error instanceof Error ? error.message : "Could not save deal";

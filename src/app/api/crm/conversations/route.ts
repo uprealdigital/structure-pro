@@ -1,6 +1,6 @@
 import { assertInternal } from "@/src/common/utils/internal-call";
-import { createConversation } from "@/src/features/crm/db/conversation";
-import type { ChatMessage } from "@/src/features/crm/types";
+import { createConversation } from "@/src/features/crm/conversations/db/conversation";
+import { activityInsertSchema, type ActivityInsert } from "@/src/features/crm/conversations/types";
 
 export const runtime = "nodejs";
 
@@ -18,17 +18,16 @@ async function payloadOf(request: Request): Promise<Record<string, unknown> | nu
   }
 }
 
-function messagesOf(value: unknown): ChatMessage[] | undefined {
+function activitiesOf(value: unknown): ActivityInsert[] | undefined {
   if (!Array.isArray(value)) return undefined;
-  const messages: ChatMessage[] = [];
+  const activities: ActivityInsert[] = [];
   for (const item of value) {
     if (!item || typeof item !== "object") return undefined;
-    const role = (item as { role?: unknown }).role;
-    const textValue = (item as { text?: unknown }).text;
-    if ((role !== "user" && role !== "model") || typeof textValue !== "string") return undefined;
-    messages.push({ role, text: textValue });
+    const activity = activityInsertSchema.safeParse(item);
+    if (!activity.success) return undefined;
+    activities.push(activity.data);
   }
-  return messages;
+  return activities;
 }
 
 export async function POST(request: Request) {
@@ -38,13 +37,12 @@ export async function POST(request: Request) {
   const payload = await payloadOf(request);
   const lookupKey = text(payload?.lookupKey);
   const chatId = text(payload?.chatId) || undefined;
-  const crmDealId = text(payload?.crmDealId);
-  const cpqQuoteId = text(payload?.cpqQuoteId);
+  const customerId = text(payload?.customerId);
   const contractSent = payload?.contractSent === true;
-  const messages = messagesOf(payload?.messages);
-  if (!lookupKey || !crmDealId || !cpqQuoteId || !messages) {
+  const activities = activitiesOf(payload?.activities);
+  if (!lookupKey || !customerId || !activities) {
     return Response.json(
-      { error: "lookupKey, crmDealId, cpqQuoteId, and messages are required" },
+      { error: "lookupKey, customerId, and activities are required" },
       { status: 400 },
     );
   }
@@ -53,10 +51,9 @@ export async function POST(request: Request) {
     const id = await createConversation({
       lookupKey,
       chatId,
-      crmDealId,
-      cpqQuoteId,
+      customerId,
       contractSent,
-      messages,
+      activities,
     });
     return Response.json({ id });
   } catch (error) {
