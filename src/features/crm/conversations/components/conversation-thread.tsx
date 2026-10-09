@@ -1,6 +1,6 @@
 import { Phone } from "lucide-react";
 import { copy } from "@/src/features/crm/conversations/locales/en";
-import type { Activity, ActivitySource } from "@/src/features/crm/conversations/types";
+import type { Activity, ActivityChannel } from "@/src/features/crm/conversations/types";
 import { formatCallDuration, formatMessageClock, formatMessageDay } from "@/src/features/crm/conversations/utils/formatting";
 import { contactInitials } from "@/src/features/crm/common/utils/formatting";
 
@@ -12,12 +12,10 @@ function AiStar() {
   );
 }
 
-export function activitySourceLabel(source: ActivitySource): string {
-  switch (source) {
-    case "inbound_call":
-      return copy.inboundCall;
-    case "outbound_call":
-      return copy.outboundCall;
+export function activityChannelLabel(channel: ActivityChannel): string {
+  switch (channel) {
+    case "call":
+      return copy.channelCall;
     case "sms":
       return copy.channelSms;
     case "facebook":
@@ -29,15 +27,20 @@ export function activitySourceLabel(source: ActivitySource): string {
   }
 }
 
-function isCall(source: ActivitySource): boolean {
-  return source === "inbound_call" || source === "outbound_call";
+function isCall(channel: ActivityChannel): boolean {
+  return channel === "call";
+}
+
+function callDirectionLabel(activity: Activity): string {
+  if (activity.call?.direction === "outbound") return copy.outboundCall;
+  if (activity.call?.direction === "inbound") return copy.inboundCall;
+  return copy.channelCall;
 }
 
 function CallActivity({ activity }: { activity: Activity }) {
   const duration = formatCallDuration(activity.call?.durationSeconds);
-  const label = duration
-    ? `${activitySourceLabel(activity.source)} (${duration})`
-    : activitySourceLabel(activity.source);
+  const directionLabel = callDirectionLabel(activity);
+  const label = duration ? `${directionLabel} (${duration})` : directionLabel;
   const clock = activity.createdAt ? formatMessageClock(activity.createdAt) : "";
   const highMatch = (activity.call?.scriptMatch ?? 0) >= 70;
   const matchClass = highMatch ? "text-emerald-700" : "text-red-600";
@@ -61,7 +64,7 @@ function CallActivity({ activity }: { activity: Activity }) {
       </div>
       {clock ? (
         <span className="text-[10px] text-gray-400">
-          {clock} • {activitySourceLabel(activity.source)}
+          {clock} • {callDirectionLabel(activity)}
         </span>
       ) : null}
     </div>
@@ -98,14 +101,14 @@ export function ConversationThread({
     const day = activity.createdAt ? formatMessageDay(activity.createdAt) : "";
     const previousDay = items.findLast((item) => item.day)?.day ?? "";
     const clock = activity.createdAt ? formatMessageClock(activity.createdAt) : "";
-    const sourceLabel = activitySourceLabel(activity.source);
+    const channelLabel = activityChannelLabel(activity.channel);
     const stamp = !clock
       ? ""
-      : activity.generatedBy === "ai" && activity.source === "sms"
+      : activity.generatedBy === "ai" && activity.channel === "sms"
         ? `${clock} • ${copy.sentViaAi}`
-        : `${clock} • ${copy.viaChannel} ${sourceLabel}`;
+        : `${clock} • ${copy.viaChannel} ${channelLabel}`;
     items.push({
-      key: `${index}-${activity.source}-${activity.role}`,
+      key: `${index}-${activity.channel}-${activity.role}`,
       activity,
       fromCustomer,
       showDay: Boolean(day) && day !== previousDay,
@@ -129,7 +132,7 @@ export function ConversationThread({
                 </span>
               </div>
             ) : null}
-            {isCall(activity.source) ? (
+            {isCall(activity.channel) ? (
               <CallActivity activity={activity} />
             ) : fromCustomer ? (
               <div className="flex max-w-xl items-start">

@@ -2,22 +2,21 @@ import { z } from "zod";
 import { customerSchema } from "@/src/features/crm/common/types";
 import { dealSchema, dealSourceSchema, dealStatusSchema } from "@/src/features/crm/deals/types";
 
-export const activitySourceSchema = z.enum([
-  "inbound_call",
-  "outbound_call",
+export const activityChannelSchema = z.enum([
+  "call",
   "sms",
   "facebook",
   "email",
   "telegram",
 ]);
 
-export type ActivitySource = z.infer<typeof activitySourceSchema>;
+export type ActivityChannel = z.infer<typeof activityChannelSchema>;
 
 export const generatedBySchema = z.enum(["ai", "manual"]);
 export type GeneratedBy = z.infer<typeof generatedBySchema>;
 
-export const composerSourceSchema = z.enum(["sms", "facebook", "email"]);
-export type ComposerSource = z.infer<typeof composerSourceSchema>;
+export const composerChannelSchema = z.enum(["sms", "facebook", "email"]);
+export type ComposerChannel = z.infer<typeof composerChannelSchema>;
 
 export const callDirectionSchema = z.enum(["inbound", "outbound"]);
 export type CallDirection = z.infer<typeof callDirectionSchema>;
@@ -37,6 +36,7 @@ export const callSchema = z.object({
 export type Call = z.infer<typeof callSchema>;
 
 export const callDraftSchema = z.object({
+  direction: callDirectionSchema.optional(),
   durationSeconds: z.number().int().nonnegative().optional(),
   scriptMatch: z.number().int().min(0).max(100).optional(),
   recordingUrl: z.string().optional(),
@@ -51,7 +51,7 @@ export type CallDraft = z.infer<typeof callDraftSchema>;
 export const activitySchema = z.object({
   role: z.enum(["user", "model"]),
   text: z.string(),
-  source: activitySourceSchema,
+  channel: activityChannelSchema,
   generatedBy: generatedBySchema,
   createdAt: z.string().optional(),
   call: callSchema.optional(),
@@ -59,14 +59,19 @@ export const activitySchema = z.object({
 
 export type Activity = z.infer<typeof activitySchema>;
 
-export const activityInsertSchema = z.object({
-  role: z.enum(["user", "model"]),
-  text: z.string(),
-  source: activitySourceSchema,
-  generatedBy: generatedBySchema.default("manual"),
-  createdAt: z.string().optional(),
-  call: callDraftSchema.optional(),
-});
+export const activityInsertSchema = z
+  .object({
+    role: z.enum(["user", "model"]),
+    text: z.string(),
+    channel: activityChannelSchema,
+    generatedBy: generatedBySchema.default("manual"),
+    createdAt: z.string().optional(),
+    call: callDraftSchema.optional(),
+  })
+  .refine((activity) => activity.channel !== "call" || Boolean(activity.call?.direction), {
+    message: "A call activity needs a direction",
+    path: ["call", "direction"],
+  });
 
 export type ActivityInsert = z.infer<typeof activityInsertSchema>;
 

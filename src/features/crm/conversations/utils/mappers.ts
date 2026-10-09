@@ -42,7 +42,7 @@ export type CallRow = {
 
 export type ActivityRow = {
   position: number;
-  source: string;
+  channel: string;
   role: string;
   body: string;
   generated_by?: string | null;
@@ -82,7 +82,7 @@ export function toActivity(row: ActivityRow, call?: Call): Activity | undefined 
   const activity = activitySchema.safeParse({
     role: row.role,
     text: row.body,
-    source: row.source,
+    channel: row.channel,
     generatedBy: row.generated_by ?? "manual",
     createdAt: row.created_at ?? undefined,
     call,

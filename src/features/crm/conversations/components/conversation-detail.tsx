@@ -3,12 +3,13 @@
 import { ArrowUpRight, ChevronDown, Paperclip, Pencil, Phone } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useRef, useState, type FormEvent } from "react";
-import { activitySourceLabel, ConversationThread } from "@/src/features/crm/conversations/components/conversation-thread";
+import { activityChannelLabel, ConversationThread } from "@/src/features/crm/conversations/components/conversation-thread";
 import { DealSummary } from "@/src/features/crm/conversations/components/deal-summary";
 import { QuotePanel } from "@/src/features/crm/conversations/components/quote-panel";
+import { useConversationActivities } from "@/src/features/crm/conversations/hooks/use-conversation-activities";
 import { copy } from "@/src/features/crm/conversations/locales/en";
 import { sendManualActivity } from "@/src/features/crm/conversations/server/actions";
-import type { Activity, ComposerSource, ConversationWorkspace } from "@/src/features/crm/conversations/types";
+import type { ComposerChannel, ConversationWorkspace } from "@/src/features/crm/conversations/types";
 import { productTitle } from "@/src/features/crm/conversations/utils/formatting";
 import { contactInitials } from "@/src/features/crm/common/utils/formatting";
 
@@ -61,21 +62,21 @@ export function ConversationDetail({
 }) {
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [draft, setDraft] = useState("");
-  const [source, setSource] = useState<ComposerSource>("sms");
-  const [sourceOpen, setSourceOpen] = useState(false);
-  const [activities, setActivities] = useState<Activity[]>(workspace.activities);
+  const [channel, setChannel] = useState<ComposerChannel>("sms");
+  const [channelOpen, setChannelOpen] = useState(false);
+  const { activities, setActivities } = useConversationActivities(workspace.id, workspace.activities);
   const [sending, setSending] = useState(false);
   const [sendError, setSendError] = useState("");
-  const sourceMenu = useRef<HTMLDivElement>(null);
+  const channelMenu = useRef<HTMLDivElement>(null);
   const thread = useRef<HTMLDivElement>(null);
   const specs = workspace.quote?.specs ?? [];
   const title = productTitle(specs);
   const status = quoteStatus(workspace);
-  const sources: ComposerSource[] = ["sms", "facebook", "email"];
+  const channels: ComposerChannel[] = ["sms", "facebook", "email"];
 
   useEffect(() => {
     function closeMenu(event: MouseEvent) {
-      if (!sourceMenu.current?.contains(event.target as Node)) setSourceOpen(false);
+      if (!channelMenu.current?.contains(event.target as Node)) setChannelOpen(false);
     }
     document.addEventListener("mousedown", closeMenu);
     return () => document.removeEventListener("mousedown", closeMenu);
@@ -96,7 +97,7 @@ export function ConversationDetail({
     if (!text || sending) return;
     setSending(true);
     setSendError("");
-    const result = await sendManualActivity({ conversationId: workspace.id, text, source });
+    const result = await sendManualActivity({ conversationId: workspace.id, text, channel });
     setSending(false);
     if ("error" in result) {
       setSendError(copy.sendFailed);
@@ -246,44 +247,44 @@ export function ConversationDetail({
             className="w-full border-0 bg-transparent py-2.5 pr-3.5 pl-2 text-xs text-gray-900 outline-none placeholder:text-gray-400 focus:ring-0"
           />
           <div className="flex items-center space-x-1 pr-2">
-            <div ref={sourceMenu} className="relative mr-1.5 flex items-center">
+            <div ref={channelMenu} className="relative mr-1.5 flex items-center">
               <button
                 type="button"
                 aria-haspopup="listbox"
-                aria-expanded={sourceOpen}
+                aria-expanded={channelOpen}
                 aria-label={copy.messageSource}
-                onClick={() => setSourceOpen((open) => !open)}
+                onClick={() => setChannelOpen((open) => !open)}
                 className="inline-flex items-center gap-1.5 rounded-md bg-transparent px-2.5 py-1.5 text-xs font-semibold text-gray-800 transition-colors hover:bg-gray-100"
               >
                 <svg className="h-3.5 w-3.5 shrink-0 text-gray-900" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" aria-hidden="true">
                   <path strokeLinecap="round" strokeLinejoin="round" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
                 </svg>
-                <span className="font-medium">{activitySourceLabel(source)}</span>
+                <span className="font-medium">{activityChannelLabel(channel)}</span>
                 <svg className="h-3 w-3 shrink-0 text-gray-500" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" aria-hidden="true">
                   <path strokeLinecap="round" strokeLinejoin="round" d="M5 15l7-7 7 7" />
                 </svg>
               </button>
-              {sourceOpen ? (
+              {channelOpen ? (
                 <ul
                   role="listbox"
                   aria-label={copy.messageSource}
                   className="absolute right-0 bottom-full z-30 mb-2 w-36 overflow-hidden rounded-md border border-gray-200 bg-white py-1 shadow-md"
                 >
-                  {sources.map((option) => (
+                  {channels.map((option) => (
                     <li key={option}>
                       <button
                         type="button"
                         role="option"
-                        aria-selected={option === source}
+                        aria-selected={option === channel}
                         onClick={() => {
-                          setSource(option);
-                          setSourceOpen(false);
+                          setChannel(option);
+                          setChannelOpen(false);
                         }}
                         className={`block w-full px-3 py-1.5 text-left text-xs ${
-                          option === source ? "bg-gray-100 font-semibold text-gray-900" : "text-gray-700 hover:bg-gray-50"
+                          option === channel ? "bg-gray-100 font-semibold text-gray-900" : "text-gray-700 hover:bg-gray-50"
                         }`}
                       >
-                        {activitySourceLabel(option)}
+                        {activityChannelLabel(option)}
                       </button>
                     </li>
                   ))}

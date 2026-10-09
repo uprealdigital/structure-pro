@@ -8,13 +8,7 @@ function crm() {
   return db("crm");
 }
 
-const activityColumns = "position, source, role, body, generated_by, call_id, created_at";
-
-function callDirection(source: ActivityInsert["source"]): "inbound" | "outbound" | undefined {
-  if (source === "inbound_call") return "inbound";
-  if (source === "outbound_call") return "outbound";
-  return undefined;
-}
+const activityColumns = "position, channel, role, body, generated_by, call_id, created_at";
 
 export async function createActivities(
   conversationId: string,
@@ -34,12 +28,12 @@ export async function createActivities(
 
   const callIds: Array<string | null> = [];
   for (const activity of rows) {
-    const direction = callDirection(activity.source);
+    const direction = activity.channel === "call" ? activity.call?.direction : undefined;
     if (!direction) {
       callIds.push(null);
       continue;
     }
-    const call = await createCall({ direction, ...activity.call });
+    const call = await createCall({ ...activity.call, direction });
     callIds.push(call.id);
   }
 
@@ -47,7 +41,7 @@ export async function createActivities(
     rows.map((activity, offset) => ({
       conversation_id: conversationId,
       position: start + offset,
-      source: activity.source,
+      channel: activity.channel,
       role: activity.role,
       body: activity.text,
       generated_by: activity.generatedBy,

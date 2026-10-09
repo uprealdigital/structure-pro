@@ -3,12 +3,30 @@
 
 alter table crm.activities add column if not exists generated_by text;
 
-update crm.activities
-set generated_by = case
-  when role = 'model' and source in ('sms', 'telegram') then 'ai'
-  else 'manual'
-end
-where generated_by is null;
+do $$
+begin
+  if exists (
+    select 1
+    from information_schema.columns
+    where table_schema = 'crm'
+      and table_name = 'activities'
+      and column_name = 'channel'
+  ) then
+    update crm.activities
+    set generated_by = case
+      when role = 'model' and channel in ('sms', 'telegram') then 'ai'
+      else 'manual'
+    end
+    where generated_by is null;
+  else
+    update crm.activities
+    set generated_by = case
+      when role = 'model' and source in ('sms', 'telegram') then 'ai'
+      else 'manual'
+    end
+    where generated_by is null;
+  end if;
+end $$;
 
 alter table crm.activities alter column generated_by set default 'manual';
 

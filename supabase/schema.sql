@@ -5,6 +5,8 @@
 -- Fresh installs run this file only. An existing database also runs migrate-to-modules.sql.
 -- A database that already has cpq.quotes, crm.contacts, and crm.messages runs
 -- migrate-crm-customers-activities.sql after this file.
+-- If crm.activities still has a source column, run migrate-crm-activity-channel.sql.
+-- If activities.channel still uses inbound_call or outbound_call, run migrate-crm-activity-call.sql.
 
 create schema if not exists cpq;
 create schema if not exists crm;
@@ -79,9 +81,8 @@ create table if not exists crm.activities (
   id bigint generated always as identity primary key,
   conversation_id uuid not null references crm.conversations (id) on delete cascade,
   position integer not null,
-  source text not null check (source in (
-    'inbound_call',
-    'outbound_call',
+  channel text not null check (channel in (
+    'call',
     'sms',
     'facebook',
     'email',

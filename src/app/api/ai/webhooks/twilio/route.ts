@@ -30,7 +30,7 @@ export async function POST(request: Request) {
 
   const syncReply = await processInboundMessage({
     channelKey: from,
-    source: "sms",
+    channel: "sms",
     text: body,
     sendMessage: (message) => sendSms(from, message),
   });

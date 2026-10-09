@@ -5,12 +5,11 @@ import { createActivities, readActivities } from "@/src/features/crm/conversatio
 import { createConversation, deleteConversation, updateConversation } from "@/src/features/crm/conversations/db/conversation";
 import { getConversation, getConversationWorkspace } from "@/src/features/crm/conversations/server/queries";
 import {
-  activitySourceSchema,
-  composerSourceSchema,
+  activityInsertSchema,
+  composerChannelSchema,
   conversationIdSchema,
   type Activity,
   type ActivityInsert,
-  type ActivitySource,
   type ConversationWorkspace,
 } from "@/src/features/crm/conversations/types";
 import { updateCustomer } from "@/src/features/crm/common/db/customer";
@@ -30,34 +29,31 @@ export async function removeConversation(key: string): Promise<void> {
   await deleteConversation(key);
 }
 
-export async function appendTurnActivities(
+export async function appendActivity(
   conversationId: string,
-  source: ActivitySource,
-  incoming: string,
-  reply: string,
+  activity: ActivityInsert,
 ): Promise<void> {
-  const channel = activitySourceSchema.parse(source);
-  await createActivities(conversationId, [
-    { role: "user", source: channel, text: incoming, generatedBy: "manual" },
-    { role: "model", source: channel, text: reply, generatedBy: "ai" },
-  ]);
+  const id = conversationIdSchema.parse(conversationId);
+  const row = activityInsertSchema.parse(activity);
+  await createActivities(id, [row]);
+  revalidatePath("/crm/conversations");
 }
 
 export async function sendManualActivity(input: {
   conversationId: string;
   text: string;
-  source: unknown;
+  channel: unknown;
 }): Promise<{ success: true; data: Activity } | { error: string }> {
   const conversationId = conversationIdSchema.safeParse(input.conversationId);
   const text = input.text.trim();
-  const source = composerSourceSchema.safeParse(input.source);
-  if (!conversationId.success || !text || !source.success) {
-    return { error: "A conversation, message, and source are required" };
+  const channel = composerChannelSchema.safeParse(input.channel);
+  if (!conversationId.success || !text || !channel.success) {
+    return { error: "A conversation, message, and channel are required" };
   }
 
   try {
     await createActivities(conversationId.data, [
-      { role: "model", source: source.data, text, generatedBy: "manual" },
+      { role: "model", channel: channel.data, text, generatedBy: "manual" },
     ]);
     const activity = (await readActivities(conversationId.data)).at(-1);
     if (!activity) return { error: "The message was not saved" };

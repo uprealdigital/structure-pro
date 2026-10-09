@@ -51,7 +51,7 @@ export async function POST(request: Request) {
         {
           role: "model",
           text: openingMessage,
-          source: channel === "telegram" ? "telegram" : "sms",
+          channel: channel === "telegram" ? "telegram" : "sms",
           generatedBy: "ai",
         },
       ],

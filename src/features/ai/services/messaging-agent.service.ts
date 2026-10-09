@@ -9,12 +9,12 @@ import { sendMail } from "@/src/common/utils/mail";
 import { callRouter, readJson } from "@/src/common/utils/internal-call";
 import type { AgentSession } from "@/src/features/ai/types";
 import {
-  appendTurnActivities,
+  appendActivity,
   optOutCustomer,
   removeConversation,
   saveAgentSession,
 } from "@/src/features/crm/conversations/server/actions";
-import type { ActivitySource } from "@/src/features/crm/conversations/types";
+import type { ActivityChannel } from "@/src/features/crm/conversations/types";
 import { getAgentSession } from "@/src/features/crm/conversations/server/queries";
 
 const SEND_CONTRACT = "send_contract";
@@ -26,7 +26,7 @@ const STOP_RE = /^(stop|stopall|unsubscribe|cancel|end|quit)$/i;
 
 type InboundMessageParams = {
   channelKey: string;
-  source: Extract<ActivitySource, "sms" | "telegram">;
+  channel: Extract<ActivityChannel, "sms" | "telegram">;
   text: string;
   sendMessage: (text: string) => Promise<void>;
 };
@@ -392,7 +392,7 @@ export async function replyToSms(session: AgentSession, incoming: string): Promi
 
 export async function processInboundMessage({
   channelKey,
-  source,
+  channel,
   text,
   sendMessage,
 }: InboundMessageParams): Promise<string | undefined> {
@@ -415,18 +415,38 @@ export async function processInboundMessage({
   }
 
   const { conversationId, session } = loaded;
+  const incoming = text.trim();
 
-  after(async () => {
+  if (incoming) {
     try {
-      const incoming = text || "Hi";
-      const reply = await replyToSms(session, incoming);
-      await appendTurnActivities(conversationId, source, incoming, reply).catch(console.error);
-      await saveAgentSession(conversationId, session).catch(console.error);
-      await sendMessage(reply);
+      await appendActivity(conversationId, {
+        role: "user",
+        channel,
+        text: incoming,
+        generatedBy: "manual",
+      });
     } catch (error) {
       console.error(error);
-      await sendMessage(replyFailureMessage(error)).catch(console.error);
     }
+  }
+
+  after(async () => {
+    let reply: string;
+    try {
+      reply = await replyToSms(session, incoming || "Hi");
+      await saveAgentSession(conversationId, session).catch(console.error);
+    } catch (error) {
+      console.error(error);
+      reply = replyFailureMessage(error);
+    }
+
+    await appendActivity(conversationId, {
+      role: "model",
+      channel,
+      text: reply,
+      generatedBy: "ai",
+    }).catch(console.error);
+    await sendMessage(reply).catch(console.error);
   });
 
   return undefined;

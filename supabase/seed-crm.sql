@@ -3,6 +3,8 @@
 -- On a database that already had the old tables, run migrate-crm-customers-activities.sql first.
 -- If activities still has duration_seconds, run migrate-crm-calls.sql before this file.
 -- If activities has no generated_by column, run migrate-crm-activity-author.sql before this file.
+-- If activities still has a source column, run migrate-crm-activity-channel.sql before this file.
+-- If activities.channel still uses inbound_call or outbound_call, run migrate-crm-activity-call.sql before this file.
 -- Fixed ids. Running this twice does not duplicate rows.
 
 insert into crm.quotes (id, invoice_id, selections, created_at, updated_at)
@@ -174,7 +176,7 @@ on conflict (id) do nothing;
 insert into crm.activities (
   conversation_id,
   position,
-  source,
+  channel,
   role,
   body,
   generated_by,
@@ -183,7 +185,7 @@ insert into crm.activities (
 select
   conversation.id,
   activity.position,
-  activity.source,
+  activity.channel,
   activity.role,
   replace(activity.body, '{name}', customer.full_name),
   activity.generated_by,
@@ -198,7 +200,7 @@ join (
     (3, 'email', 'model', 'Got it. I will send the invoice to this email once the site questions are answered.', 'manual', interval '18 hours'),
     (4, 'facebook', 'user', 'I messaged on Facebook too. Is delivery included for my ZIP?', 'manual', interval '8 hours'),
     (5, 'telegram', 'model', 'Delivery is quoted from your ZIP. I can walk through it here.', 'ai', interval '6 hours')
-) as activity(position, source, role, body, generated_by, ago) on true
+) as activity(position, channel, role, body, generated_by, ago) on true
 where conversation.id in (
   '44444444-4444-4444-8444-444444444401',
   '44444444-4444-4444-8444-444444444402',
@@ -247,7 +249,7 @@ on conflict (id) do nothing;
 insert into crm.activities (
   conversation_id,
   position,
-  source,
+  channel,
   role,
   body,
   generated_by,
@@ -257,7 +259,7 @@ insert into crm.activities (
 select
   sample.conversation_id,
   sample.position,
-  sample.source,
+  sample.channel,
   sample.role,
   sample.body,
   'manual',
@@ -265,17 +267,17 @@ select
   now() - sample.ago
 from (
   values
-    ('44444444-4444-4444-8444-444444444401'::uuid, 6, 'inbound_call'::text, 'user'::text, 'Asked about the foundation and when the site will be ready.'::text, '55555555-5555-4555-8555-555555555501'::uuid, interval '3 hours'),
-    ('44444444-4444-4444-8444-444444444401'::uuid, 7, 'outbound_call', 'model', 'Called back to confirm timing and the next step on the quote.', '55555555-5555-4555-8555-555555555511'::uuid, interval '30 minutes'),
-    ('44444444-4444-4444-8444-444444444402'::uuid, 6, 'inbound_call', 'user', 'Asked about the foundation and when the site will be ready.', '55555555-5555-4555-8555-555555555502'::uuid, interval '3 hours'),
-    ('44444444-4444-4444-8444-444444444402'::uuid, 7, 'outbound_call', 'model', 'Called back to confirm timing and the next step on the quote.', '55555555-5555-4555-8555-555555555512'::uuid, interval '30 minutes'),
-    ('44444444-4444-4444-8444-444444444403'::uuid, 6, 'inbound_call', 'user', 'Asked about the foundation and when the site will be ready.', '55555555-5555-4555-8555-555555555503'::uuid, interval '3 hours'),
-    ('44444444-4444-4444-8444-444444444403'::uuid, 7, 'outbound_call', 'model', 'Called back to confirm timing and the next step on the quote.', '55555555-5555-4555-8555-555555555513'::uuid, interval '30 minutes'),
-    ('44444444-4444-4444-8444-444444444404'::uuid, 6, 'inbound_call', 'user', 'Asked about the foundation and when the site will be ready.', '55555555-5555-4555-8555-555555555504'::uuid, interval '3 hours'),
-    ('44444444-4444-4444-8444-444444444404'::uuid, 7, 'outbound_call', 'model', 'Called back to confirm timing and the next step on the quote.', '55555555-5555-4555-8555-555555555514'::uuid, interval '30 minutes'),
-    ('44444444-4444-4444-8444-444444444405'::uuid, 6, 'inbound_call', 'user', 'Asked about the foundation and when the site will be ready.', '55555555-5555-4555-8555-555555555505'::uuid, interval '3 hours'),
-    ('44444444-4444-4444-8444-444444444405'::uuid, 7, 'outbound_call', 'model', 'Called back to confirm timing and the next step on the quote.', '55555555-5555-4555-8555-555555555515'::uuid, interval '30 minutes')
-) as sample(conversation_id, position, source, role, body, call_id, ago)
+    ('44444444-4444-4444-8444-444444444401'::uuid, 6, 'call'::text, 'user'::text, 'Asked about the foundation and when the site will be ready.'::text, '55555555-5555-4555-8555-555555555501'::uuid, interval '3 hours'),
+    ('44444444-4444-4444-8444-444444444401'::uuid, 7, 'call', 'model', 'Called back to confirm timing and the next step on the quote.', '55555555-5555-4555-8555-555555555511'::uuid, interval '30 minutes'),
+    ('44444444-4444-4444-8444-444444444402'::uuid, 6, 'call', 'user', 'Asked about the foundation and when the site will be ready.', '55555555-5555-4555-8555-555555555502'::uuid, interval '3 hours'),
+    ('44444444-4444-4444-8444-444444444402'::uuid, 7, 'call', 'model', 'Called back to confirm timing and the next step on the quote.', '55555555-5555-4555-8555-555555555512'::uuid, interval '30 minutes'),
+    ('44444444-4444-4444-8444-444444444403'::uuid, 6, 'call', 'user', 'Asked about the foundation and when the site will be ready.', '55555555-5555-4555-8555-555555555503'::uuid, interval '3 hours'),
+    ('44444444-4444-4444-8444-444444444403'::uuid, 7, 'call', 'model', 'Called back to confirm timing and the next step on the quote.', '55555555-5555-4555-8555-555555555513'::uuid, interval '30 minutes'),
+    ('44444444-4444-4444-8444-444444444404'::uuid, 6, 'call', 'user', 'Asked about the foundation and when the site will be ready.', '55555555-5555-4555-8555-555555555504'::uuid, interval '3 hours'),
+    ('44444444-4444-4444-8444-444444444404'::uuid, 7, 'call', 'model', 'Called back to confirm timing and the next step on the quote.', '55555555-5555-4555-8555-555555555514'::uuid, interval '30 minutes'),
+    ('44444444-4444-4444-8444-444444444405'::uuid, 6, 'call', 'user', 'Asked about the foundation and when the site will be ready.', '55555555-5555-4555-8555-555555555505'::uuid, interval '3 hours'),
+    ('44444444-4444-4444-8444-444444444405'::uuid, 7, 'call', 'model', 'Called back to confirm timing and the next step on the quote.', '55555555-5555-4555-8555-555555555515'::uuid, interval '30 minutes')
+) as sample(conversation_id, position, channel, role, body, call_id, ago)
 on conflict (conversation_id, position) do nothing;
 
 update crm.activities

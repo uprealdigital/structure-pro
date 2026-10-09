@@ -16,8 +16,13 @@ export function formatCallDuration(seconds: number | undefined): string {
 
 export function activityPreview(activity: Activity | undefined): string {
   if (!activity) return "";
-  if (activity.source === "inbound_call" || activity.source === "outbound_call") {
-    const label = activity.source === "inbound_call" ? "Inbound call" : "Outbound call";
+  if (activity.channel === "call") {
+    const label =
+      activity.call?.direction === "outbound"
+        ? "Outbound call"
+        : activity.call?.direction === "inbound"
+          ? "Inbound call"
+          : "Call";
     const duration = formatCallDuration(activity.call?.durationSeconds);
     const note = messagePreview(activity.text);
     const timed = duration ? `${label} (${duration})` : label;
