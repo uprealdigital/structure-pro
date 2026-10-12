@@ -1,5 +1,6 @@
 -- Sample customers, deals, conversations, activities, and calls.
 -- Paste in the Supabase SQL editor after supabase/schema.sql.
+-- If crm.customers still has deal_id, run migrate-crm-customer-deals.sql first.
 -- On a database that already had the old tables, run migrate-crm-customers-activities.sql first.
 -- If activities still has duration_seconds, run migrate-crm-calls.sql before this file.
 -- If activities has no generated_by column, run migrate-crm-activity-author.sql before this file.
@@ -36,6 +37,20 @@ values
     '{"styleId":"value-shed","width":8,"length":12,"height":8,"sidingTypeId":"lp-smart","roofTypeId":"shingle","sidingColorId":"serious-gray","trimColorId":"serious-gray","roofColorId":"cyberspace","shutterColorId":"ice-cube-white","flooringId":"tg-prostruct","hasLoft":false,"hasWindow":false,"hasVent":true,"doorStyle":"single","wallFace":"front","zip":"94110"}'::jsonb,
     now() - interval '1 day',
     now() - interval '1 day'
+  ),
+  (
+    '11111111-1111-4111-8111-111111111105',
+    'SEED-1005',
+    '{"styleId":"value-shed","width":14,"length":20,"height":8,"sidingTypeId":"lp-smart","roofTypeId":"shingle","sidingColorId":"serious-gray","trimColorId":"serious-gray","roofColorId":"cyberspace","shutterColorId":"ice-cube-white","flooringId":"tg-prostruct","hasLoft":true,"hasWindow":true,"hasVent":true,"doorStyle":"double","wallFace":"front","zip":"32091"}'::jsonb,
+    now() - interval '18 hours',
+    now() - interval '18 hours'
+  ),
+  (
+    '11111111-1111-4111-8111-111111111106',
+    'SEED-1006',
+    '{"styleId":"value-shed","width":10,"length":14,"height":8,"sidingTypeId":"lp-smart","roofTypeId":"metal","sidingColorId":"serious-gray","trimColorId":"serious-gray","roofColorId":"cyberspace","shutterColorId":"ice-cube-white","flooringId":"tg-prostruct","hasLoft":false,"hasWindow":true,"hasVent":true,"doorStyle":"single","wallFace":"front","zip":"32091"}'::jsonb,
+    now() - interval '6 hours',
+    now() - interval '6 hours'
   )
 on conflict (id) do nothing;
 
@@ -72,14 +87,29 @@ values
     'open',
     now() - interval '1 day',
     now() - interval '1 day'
+  ),
+  (
+    '22222222-2222-4222-8222-222222222205',
+    '11111111-1111-4111-8111-111111111105',
+    'quote',
+    'open',
+    now() - interval '18 hours',
+    now() - interval '18 hours'
+  ),
+  (
+    '22222222-2222-4222-8222-222222222206',
+    '11111111-1111-4111-8111-111111111106',
+    'quote',
+    'invoice_sent',
+    now() - interval '6 hours',
+    now() - interval '6 hours'
   )
 on conflict (id) do nothing;
 
-insert into crm.customers (id, deal_id, full_name, phone, email, opted_out, created_at, updated_at)
+insert into crm.customers (id, full_name, phone, email, opted_out, created_at, updated_at)
 values
   (
     '33333333-3333-4333-8333-333333333301',
-    '22222222-2222-4222-8222-222222222201',
     'Maya Chen',
     '+15550001001',
     'maya.chen@example.com',
@@ -89,7 +119,6 @@ values
   ),
   (
     '33333333-3333-4333-8333-333333333302',
-    '22222222-2222-4222-8222-222222222202',
     'Luis Ortega',
     '+15550001002',
     'luis.ortega@example.com',
@@ -99,7 +128,6 @@ values
   ),
   (
     '33333333-3333-4333-8333-333333333303',
-    '22222222-2222-4222-8222-222222222203',
     'Jordan Hale',
     '+15550001003',
     'jordan.hale@example.com',
@@ -109,7 +137,6 @@ values
   ),
   (
     '33333333-3333-4333-8333-333333333304',
-    '22222222-2222-4222-8222-222222222203',
     'Sam Okonkwo',
     '+15550001004',
     'sam.okonkwo@example.com',
@@ -119,15 +146,55 @@ values
   ),
   (
     '33333333-3333-4333-8333-333333333305',
-    '22222222-2222-4222-8222-222222222204',
     'Priya Nandakumar',
     '+15550001005',
     'priya.nandakumar@example.com',
     false,
     now() - interval '1 day',
     now() - interval '3 hours'
+  ),
+  (
+    '33333333-3333-4333-8333-333333333306',
+    'Avery Cole',
+    '+15550001006',
+    'avery.cole@example.com',
+    false,
+    now() - interval '2 days',
+    now() - interval '2 days'
+  ),
+  (
+    '33333333-3333-4333-8333-333333333307',
+    'Noah Brooks',
+    '+15550001007',
+    'noah.brooks@example.com',
+    false,
+    now() - interval '18 hours',
+    now() - interval '18 hours'
+  ),
+  (
+    '33333333-3333-4333-8333-333333333308',
+    'Elena Vasquez',
+    '+15550001008',
+    'elena.vasquez@example.com',
+    false,
+    now() - interval '6 hours',
+    now() - interval '6 hours'
   )
 on conflict (id) do nothing;
+
+insert into crm.deal_customers (customer_id, deal_id, is_primary, created_at)
+values
+  ('33333333-3333-4333-8333-333333333301', '22222222-2222-4222-8222-222222222201', true, now() - interval '3 days'),
+  ('33333333-3333-4333-8333-333333333301', '22222222-2222-4222-8222-222222222205', true, now() - interval '18 hours'),
+  ('33333333-3333-4333-8333-333333333307', '22222222-2222-4222-8222-222222222205', false, now() - interval '18 hours'),
+  ('33333333-3333-4333-8333-333333333301', '22222222-2222-4222-8222-222222222206', true, now() - interval '6 hours'),
+  ('33333333-3333-4333-8333-333333333308', '22222222-2222-4222-8222-222222222206', false, now() - interval '6 hours'),
+  ('33333333-3333-4333-8333-333333333302', '22222222-2222-4222-8222-222222222202', true, now() - interval '2 days'),
+  ('33333333-3333-4333-8333-333333333306', '22222222-2222-4222-8222-222222222202', false, now() - interval '2 days'),
+  ('33333333-3333-4333-8333-333333333303', '22222222-2222-4222-8222-222222222203', true, now() - interval '5 days'),
+  ('33333333-3333-4333-8333-333333333304', '22222222-2222-4222-8222-222222222203', false, now() - interval '5 days'),
+  ('33333333-3333-4333-8333-333333333305', '22222222-2222-4222-8222-222222222204', true, now() - interval '1 day')
+on conflict (customer_id, deal_id) do nothing;
 
 insert into crm.conversations (id, lookup_key, customer_id, contract_sent, created_at, updated_at)
 values
@@ -154,14 +221,6 @@ values
     true,
     now() - interval '5 days',
     now() - interval '4 hours'
-  ),
-  (
-    '44444444-4444-4444-8444-444444444404',
-    '+15550001004',
-    '33333333-3333-4333-8333-333333333304',
-    true,
-    now() - interval '5 days',
-    now() - interval '1 day'
   ),
   (
     '44444444-4444-4444-8444-444444444405',
@@ -205,7 +264,6 @@ where conversation.id in (
   '44444444-4444-4444-8444-444444444401',
   '44444444-4444-4444-8444-444444444402',
   '44444444-4444-4444-8444-444444444403',
-  '44444444-4444-4444-8444-444444444404',
   '44444444-4444-4444-8444-444444444405'
 )
 on conflict (conversation_id, position) do nothing;
@@ -239,8 +297,6 @@ from (
     ('55555555-5555-4555-8555-555555555512'::uuid, 'outbound', 240, 31, 'Reviewed financing and asked them to check the emailed invoice.', 'CA-seed-luis-out', interval '30 minutes'),
     ('55555555-5555-4555-8555-555555555503'::uuid, 'inbound', 75, 91, 'Confirmed the foundation is ready and asked about the deposit.', 'CA-seed-jordan-in', interval '3 hours'),
     ('55555555-5555-4555-8555-555555555513'::uuid, 'outbound', 96, 22, 'Walked through the contract and the remaining site questions.', 'CA-seed-jordan-out', interval '30 minutes'),
-    ('55555555-5555-4555-8555-555555555504'::uuid, 'inbound', 20, 80, 'Asked for the same quote details sent to Jordan.', 'CA-seed-sam-in', interval '3 hours'),
-    ('55555555-5555-4555-8555-555555555514'::uuid, 'outbound', 150, 28, 'Confirmed both customers are on the deal and the invoice was sent.', 'CA-seed-sam-out', interval '30 minutes'),
     ('55555555-5555-4555-8555-555555555505'::uuid, 'inbound', 33, 97, 'Asked about a smaller building and a later delivery date.', 'CA-seed-priya-in', interval '3 hours'),
     ('55555555-5555-4555-8555-555555555515'::uuid, 'outbound', 64, 18, 'Offered two delivery windows and a follow-up text.', 'CA-seed-priya-out', interval '30 minutes')
 ) as sample(call_id, direction, duration_seconds, script_match, transcript, external_id, ago)
@@ -273,8 +329,6 @@ from (
     ('44444444-4444-4444-8444-444444444402'::uuid, 7, 'call', 'model', 'Called back to confirm timing and the next step on the quote.', '55555555-5555-4555-8555-555555555512'::uuid, interval '30 minutes'),
     ('44444444-4444-4444-8444-444444444403'::uuid, 6, 'call', 'user', 'Asked about the foundation and when the site will be ready.', '55555555-5555-4555-8555-555555555503'::uuid, interval '3 hours'),
     ('44444444-4444-4444-8444-444444444403'::uuid, 7, 'call', 'model', 'Called back to confirm timing and the next step on the quote.', '55555555-5555-4555-8555-555555555513'::uuid, interval '30 minutes'),
-    ('44444444-4444-4444-8444-444444444404'::uuid, 6, 'call', 'user', 'Asked about the foundation and when the site will be ready.', '55555555-5555-4555-8555-555555555504'::uuid, interval '3 hours'),
-    ('44444444-4444-4444-8444-444444444404'::uuid, 7, 'call', 'model', 'Called back to confirm timing and the next step on the quote.', '55555555-5555-4555-8555-555555555514'::uuid, interval '30 minutes'),
     ('44444444-4444-4444-8444-444444444405'::uuid, 6, 'call', 'user', 'Asked about the foundation and when the site will be ready.', '55555555-5555-4555-8555-555555555505'::uuid, interval '3 hours'),
     ('44444444-4444-4444-8444-444444444405'::uuid, 7, 'call', 'model', 'Called back to confirm timing and the next step on the quote.', '55555555-5555-4555-8555-555555555515'::uuid, interval '30 minutes')
 ) as sample(conversation_id, position, channel, role, body, call_id, ago)
@@ -289,7 +343,6 @@ where conversation_id in (
   '44444444-4444-4444-8444-444444444401',
   '44444444-4444-4444-8444-444444444402',
   '44444444-4444-4444-8444-444444444403',
-  '44444444-4444-4444-8444-444444444404',
   '44444444-4444-4444-8444-444444444405'
 )
   and position between 0 and 7;

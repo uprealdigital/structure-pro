@@ -11,6 +11,7 @@ export const dealSchema = z.object({
   quoteId: z.string(),
   source: dealSourceSchema,
   status: dealStatusSchema,
+  createdAt: z.string().optional(),
 });
 
 export type Deal = z.infer<typeof dealSchema>;

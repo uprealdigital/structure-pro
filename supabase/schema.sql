@@ -7,6 +7,7 @@
 -- migrate-crm-customers-activities.sql after this file.
 -- If crm.activities still has a source column, run migrate-crm-activity-channel.sql.
 -- If activities.channel still uses inbound_call or outbound_call, run migrate-crm-activity-call.sql.
+-- If crm.customers still has deal_id, run migrate-crm-customer-deals.sql.
 
 create schema if not exists cpq;
 create schema if not exists crm;
@@ -39,17 +40,28 @@ create index if not exists deals_quote_id_idx on crm.deals (quote_id);
 
 create table if not exists crm.customers (
   id uuid primary key default gen_random_uuid(),
-  deal_id uuid not null references crm.deals (id) on delete cascade,
   full_name text not null,
   phone text not null,
   email text not null,
   opted_out boolean not null default false,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
-  unique (deal_id, phone)
+  unique (phone)
 );
 
-create index if not exists customers_deal_id_idx on crm.customers (deal_id);
+create table if not exists crm.deal_customers (
+  customer_id uuid not null references crm.customers (id) on delete cascade,
+  deal_id uuid not null references crm.deals (id) on delete cascade,
+  is_primary boolean not null default false,
+  created_at timestamptz not null default now(),
+  primary key (customer_id, deal_id)
+);
+
+create index if not exists deal_customers_deal_id_idx on crm.deal_customers (deal_id);
+
+create unique index if not exists deal_customers_one_primary_idx
+  on crm.deal_customers (deal_id)
+  where is_primary;
 
 create table if not exists crm.conversations (
   id uuid primary key default gen_random_uuid(),
@@ -132,6 +144,7 @@ create index if not exists yard_previews_created_at_idx
 alter table cpq.configurations enable row level security;
 alter table crm.quotes enable row level security;
 alter table crm.customers enable row level security;
+alter table crm.deal_customers enable row level security;
 alter table crm.deals enable row level security;
 alter table crm.conversations enable row level security;
 alter table crm.calls enable row level security;
@@ -145,6 +158,7 @@ grant usage on schema cpq, crm, ai to service_role;
 grant select, insert, update, delete on table cpq.configurations to service_role;
 grant select, insert, update, delete on table crm.quotes to service_role;
 grant select, insert, update, delete on table crm.customers to service_role;
+grant select, insert, update, delete on table crm.deal_customers to service_role;
 grant select, insert, update, delete on table crm.deals to service_role;
 grant select, insert, update, delete on table crm.conversations to service_role;
 grant select, insert, update, delete on table crm.calls to service_role;

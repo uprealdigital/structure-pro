@@ -1,5 +1,6 @@
 import { assertInternal } from "@/src/common/utils/internal-call";
-import { createCustomer } from "@/src/features/crm/common/db/customer";
+import { createDealCustomer, readDealCustomer, readDealCustomersForDeal } from "@/src/features/crm/common/db/deal-customer";
+import { createCustomer, readCustomerByPhone } from "@/src/features/crm/common/db/customer";
 
 export const runtime = "nodejs";
 
@@ -35,7 +36,17 @@ export async function POST(request: Request) {
   }
 
   try {
-    const customer = await createCustomer({ dealId, fullName, phone, email, optedOut });
+    const existing = await readCustomerByPhone(phone);
+    const customer = existing ?? (await createCustomer({ fullName, phone, email, optedOut }));
+    const linked = await readDealCustomer(customer.id, dealId);
+    if (!linked) {
+      const onDeal = await readDealCustomersForDeal(dealId);
+      await createDealCustomer({
+        customerId: customer.id,
+        dealId,
+        isPrimary: !onDeal.some((link) => link.isPrimary),
+      });
+    }
     return Response.json(customer);
   } catch (error) {
     const message = error instanceof Error ? error.message : "Could not save customer";

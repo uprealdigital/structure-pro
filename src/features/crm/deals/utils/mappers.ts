@@ -11,6 +11,7 @@ export type DealRow = {
   quote_id: string;
   source: string;
   status: string;
+  created_at?: string | null;
 };
 
 export function toDeal(row: DealRow): Deal | undefined {
@@ -19,11 +20,22 @@ export function toDeal(row: DealRow): Deal | undefined {
     quoteId: row.quote_id,
     source: row.source,
     status: row.status,
+    createdAt: row.created_at ?? undefined,
   });
   return deal.success ? deal.data : undefined;
 }
 
-function boardStage(status: Deal["status"], contractSent: boolean, hasQuote: boolean): DealStage {
+export function contractOnDeal(
+  status: Deal["status"],
+  contractSent: boolean,
+  primaryDealCount: number,
+): boolean {
+  if (!contractSent) return false;
+  if (primaryDealCount <= 1) return true;
+  return status === "invoice_sent";
+}
+
+export function dealStageFor(status: Deal["status"], contractSent: boolean, hasQuote: boolean): DealStage {
   if (contractSent) return "contract";
   if (status === "invoice_sent") return "quote_sent";
   if (hasQuote) return "configured";
@@ -47,7 +59,7 @@ export function toDealBoardItem(input: {
     productName: input.productName,
     detail: input.detail,
     source: input.deal.source,
-    stage: boardStage(input.deal.status, input.contractSent, input.hasQuote),
+    stage: dealStageFor(input.deal.status, input.contractSent, input.hasQuote),
     valueLabel: input.valueLabel,
   });
   return item.success ? item.data : undefined;

@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { customerSchema } from "@/src/features/crm/common/types";
-import { dealSchema, dealSourceSchema, dealStatusSchema } from "@/src/features/crm/deals/types";
+import { dealSchema, dealSourceSchema, dealStageSchema, dealStatusSchema } from "@/src/features/crm/deals/types";
 
 export const activityChannelSchema = z.enum([
   "call",
@@ -137,11 +137,24 @@ export const conversationQuoteSchema = z.object({
 
 export type ConversationQuote = z.infer<typeof conversationQuoteSchema>;
 
+export const conversationDealOptionSchema = z.object({
+  id: z.string(),
+  title: z.string(),
+  priceLabel: z.string(),
+  stage: dealStageSchema,
+  dateLabel: z.string(),
+  deal: dealSchema,
+  quote: conversationQuoteSchema.nullable(),
+});
+
+export type ConversationDealOption = z.infer<typeof conversationDealOptionSchema>;
+
 export const conversationWorkspaceSchema = z.object({
   id: z.string(),
   contractSent: z.boolean(),
   customer: customerSchema,
   deal: dealSchema,
+  deals: z.array(conversationDealOptionSchema),
   createdAt: z.string(),
   activities: z.array(activitySchema),
   quote: conversationQuoteSchema.nullable(),

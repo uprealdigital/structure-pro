@@ -1,5 +1,6 @@
 import { assertInternal } from "@/src/common/utils/internal-call";
 import { openConversation, removeConversation } from "@/src/features/crm/conversations/server/actions";
+import { getConversationByCustomer } from "@/src/features/crm/conversations/server/queries";
 import { demoChatId, ensureTelegramWebhook, sendTelegramMessage } from "@/src/common/lib/telegram/telegram.service";
 import { sendSms } from "@/src/common/lib/twilio/twilio.service";
 
@@ -41,6 +42,11 @@ export async function POST(request: Request) {
   }
 
   const lookupKey = chatId ?? phone;
+  const existing = await getConversationByCustomer(customerId);
+  if (existing) {
+    return Response.json({ lookupKey: existing.lookupKey, chatId: existing.chatId ?? null, created: false });
+  }
+
   try {
     await openConversation({
       lookupKey,
@@ -74,7 +80,7 @@ export async function POST(request: Request) {
     return Response.json({ error: message }, { status: 502 });
   }
 
-  return Response.json({ lookupKey, chatId: chatId ?? null });
+  return Response.json({ lookupKey, chatId: chatId ?? null, created: true });
 }
 
 export async function DELETE(request: Request) {

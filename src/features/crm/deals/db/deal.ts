@@ -7,7 +7,7 @@ function crm() {
   return db("crm");
 }
 
-const dealColumns = "id, quote_id, source, status";
+const dealColumns = "id, quote_id, source, status, created_at";
 
 export async function createDeal(input: {
   quoteId: string;

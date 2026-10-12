@@ -3,11 +3,12 @@ import "server-only";
 import { cache } from "react";
 import { getQuoteForPage } from "@/src/features/cpq/server/queries";
 import { readCustomers } from "@/src/features/crm/common/db/customer";
+import { readDealCustomers } from "@/src/features/crm/common/db/deal-customer";
 import { readConversations } from "@/src/features/crm/conversations/db/conversation";
 import { readDeal, readDeals } from "@/src/features/crm/deals/db/deal";
 import type { DealBoardItem } from "@/src/features/crm/deals/types";
 import { dealDetailLine, dealProductName } from "@/src/features/crm/deals/utils/formatting";
-import { toDealBoardItem } from "@/src/features/crm/deals/utils/mappers";
+import { contractOnDeal, toDealBoardItem } from "@/src/features/crm/deals/utils/mappers";
 
 export async function getDeal(id: string) {
   return readDeal(id);
@@ -19,47 +20,43 @@ export async function getDealCount(): Promise<number> {
 }
 
 export const getDealBoard = cache(async (): Promise<DealBoardItem[]> => {
-  const [deals, conversations, customers] = await Promise.all([
+  const [deals, conversations, customers, links] = await Promise.all([
     readDeals(),
     readConversations(),
     readCustomers(),
+    readDealCustomers(),
   ]);
   const customerById = new Map(customers.map((customer) => [customer.id, customer]));
-  const customersByDeal = new Map<string, typeof customers>();
-  for (const customer of customers) {
-    const related = customersByDeal.get(customer.dealId) ?? [];
-    related.push(customer);
-    customersByDeal.set(customer.dealId, related);
-  }
-
-  const conversationByDeal = new Map<string, (typeof conversations)[number]>();
-  for (const conversation of conversations) {
-    const customer = customerById.get(conversation.customerId);
-    if (!customer || conversationByDeal.has(customer.dealId)) continue;
-    conversationByDeal.set(customer.dealId, conversation);
-  }
-
-  const contractDeals = new Set<string>();
-  for (const conversation of conversations) {
-    if (!conversation.contractSent) continue;
-    const customer = customerById.get(conversation.customerId);
-    if (customer) contractDeals.add(customer.dealId);
+  const conversationByCustomer = new Map(conversations.map((conversation) => [conversation.customerId, conversation]));
+  const customersByDeal = new Map<string, { customer: (typeof customers)[number]; isPrimary: boolean }[]>();
+  for (const link of links) {
+    const customer = customerById.get(link.customerId);
+    if (!customer) continue;
+    const related = customersByDeal.get(link.dealId) ?? [];
+    related.push({ customer, isPrimary: link.isPrimary });
+    customersByDeal.set(link.dealId, related);
   }
 
   const items: DealBoardItem[] = [];
   for (const deal of deals) {
-    const related = customersByDeal.get(deal.id) ?? [];
+    const related = (customersByDeal.get(deal.id) ?? []).sort(
+      (left, right) => Number(right.isPrimary) - Number(left.isPrimary),
+    );
     if (related.length === 0) continue;
+    const primary = related.find((entry) => entry.isPrimary)?.customer;
+    const conversation = primary ? conversationByCustomer.get(primary.id) : undefined;
+    const primaryDealCount = primary
+      ? links.filter((link) => link.customerId === primary.id && link.isPrimary).length
+      : 0;
     const quote = await getQuoteForPage(deal.quoteId);
     const specs = quote?.summary.specs ?? [];
-    const conversation = conversationByDeal.get(deal.id);
     const item = toDealBoardItem({
       deal,
-      contactName: related.map((customer) => customer.fullName).join(", "),
+      contactName: related.map((entry) => entry.customer.fullName).join(", "),
       productName: dealProductName(specs),
       detail: dealDetailLine(specs),
       valueLabel: quote?.summary.totalLabel ?? "",
-      contractSent: contractDeals.has(deal.id),
+      contractSent: contractOnDeal(deal.status, conversation?.contractSent === true, primaryDealCount),
       hasQuote: Boolean(quote),
       conversationId: conversation?.id,
     });

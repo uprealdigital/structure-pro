@@ -76,6 +76,7 @@ export async function createQuoteAction(input: {
   const openingMessage = openingSms(contact.data.fullName, selections.data);
   let quoteId: string | undefined;
   let dealId: string | undefined;
+  let createdConversation = false;
   let lookupKey: string | undefined;
 
   try {
@@ -102,7 +103,7 @@ export async function createQuoteAction(input: {
     );
 
     const { POST: start } = await import("@/src/app/api/ai/conversations/route");
-    const started = await readJson<{ lookupKey: string }>(
+    const started = await readJson<{ lookupKey: string; created?: boolean }>(
       await callRouter(start, "/api/ai/conversations", {
         body: {
           phone,
@@ -113,11 +114,12 @@ export async function createQuoteAction(input: {
       }),
     );
     lookupKey = started.lookupKey;
+    createdConversation = started.created === true;
 
     revalidatePath("/");
     return { success: true, data: { invoiceId, channel } };
   } catch (error) {
-    if (lookupKey) {
+    if (createdConversation && lookupKey) {
       const { DELETE: removeConversation } = await import("@/src/app/api/ai/conversations/route");
       await callRouter(removeConversation, "/api/ai/conversations", {
         method: "DELETE",

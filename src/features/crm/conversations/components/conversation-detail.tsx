@@ -4,6 +4,7 @@ import { ArrowUpRight, ChevronDown, Paperclip, Pencil, Phone } from "lucide-reac
 import Link from "next/link";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { activityChannelLabel, ConversationThread } from "@/src/features/crm/conversations/components/conversation-thread";
+import { DealMenu } from "@/src/features/crm/conversations/components/deal-menu";
 import { DealSummary } from "@/src/features/crm/conversations/components/deal-summary";
 import { QuotePanel } from "@/src/features/crm/conversations/components/quote-panel";
 import { useConversationActivities } from "@/src/features/crm/conversations/hooks/use-conversation-activities";
@@ -61,6 +62,11 @@ export function ConversationDetail({
   onBack: () => void;
 }) {
   const [detailsOpen, setDetailsOpen] = useState(false);
+  const [focusedDealId, setFocusedDealId] = useState(workspace.deal.id);
+  const focusedOption = workspace.deals.find((deal) => deal.id === focusedDealId) ?? workspace.deals[0];
+  const focused = focusedOption
+    ? { ...workspace, deal: focusedOption.deal, quote: focusedOption.quote }
+    : workspace;
   const [draft, setDraft] = useState("");
   const [channel, setChannel] = useState<ComposerChannel>("sms");
   const [channelOpen, setChannelOpen] = useState(false);
@@ -69,9 +75,9 @@ export function ConversationDetail({
   const [sendError, setSendError] = useState("");
   const channelMenu = useRef<HTMLDivElement>(null);
   const thread = useRef<HTMLDivElement>(null);
-  const specs = workspace.quote?.specs ?? [];
+  const specs = focused.quote?.specs ?? [];
   const title = productTitle(specs);
-  const status = quoteStatus(workspace);
+  const status = quoteStatus(focused);
   const channels: ComposerChannel[] = ["sms", "facebook", "email"];
 
   useEffect(() => {
@@ -148,11 +154,7 @@ export function ConversationDetail({
                 </a>
               </div>
             </div>
-            <button type="button" onClick={toggleDetails} className="text-left">
-              <span className="text-xs font-medium tracking-tight text-gray-700">
-                {title || copy.quote}
-              </span>
-            </button>
+            <DealMenu deals={workspace.deals} selectedId={focused.deal.id} onSelect={setFocusedDealId} />
             <span
               className={`inline-flex items-center rounded border px-2 py-0.5 text-[11px] font-medium shadow-xs ${
                 status.sent
@@ -165,18 +167,18 @@ export function ConversationDetail({
           </div>
 
           <div className="flex shrink-0 items-center gap-2.5">
-            {workspace.quote ? (
+            {focused.quote ? (
               <div className="flex flex-row items-center gap-3 p-1">
                 <div className="flex shrink-0 flex-col items-center gap-1">
                   <div className="relative flex h-16 w-20 items-center justify-center overflow-hidden rounded-lg">
                     <img
                       alt={title || copy.quote}
-                      src={workspace.quote.imageUrl}
+                      src={focused.quote.imageUrl}
                       className="h-full w-full object-contain p-0.5"
                     />
                   </div>
                   <span className="pt-0.5 text-base leading-none font-semibold tracking-tight text-gray-950">
-                    {workspace.quote.totalLabel}
+                    {focused.quote.totalLabel}
                   </span>
                 </div>
                 <div className="flex shrink-0 flex-col gap-1.5">
@@ -210,8 +212,8 @@ export function ConversationDetail({
         {detailsOpen ? (
           <div className="relative z-10 shrink-0 overflow-visible border-b border-gray-200 bg-white shadow-sm">
             <div className="grid grid-cols-1 gap-6 bg-white px-6 py-4 lg:grid-cols-2">
-              <DealSummary workspace={workspace} />
-              <QuotePanel quote={workspace.quote} />
+              <DealSummary workspace={focused} />
+              <QuotePanel quote={focused.quote} />
             </div>
           </div>
         ) : null}

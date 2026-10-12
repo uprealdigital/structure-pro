@@ -19,6 +19,7 @@ export const copy = {
   source: "Source",
   creationDate: "Creation Date",
   quote: "Quote",
+  createDeal: "Create new deal for contact",
   messages: "Messages",
   noMessages: "No messages yet",
   customer: "Customer",

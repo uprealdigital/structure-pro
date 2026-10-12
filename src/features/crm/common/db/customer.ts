@@ -7,7 +7,7 @@ function crm() {
   return db("crm");
 }
 
-const customerColumns = "id, deal_id, full_name, phone, email, opted_out, created_at";
+const customerColumns = "id, full_name, phone, email, opted_out, created_at";
 
 export async function phoneOptedOut(phone: string): Promise<boolean> {
   const { data, error } = await crm()
@@ -21,8 +21,19 @@ export async function phoneOptedOut(phone: string): Promise<boolean> {
   return (data?.length ?? 0) > 0;
 }
 
+export async function readCustomerByPhone(phone: string): Promise<Customer | undefined> {
+  const { data, error } = await crm()
+    .from("customers")
+    .select(customerColumns)
+    .eq("phone", phone)
+    .maybeSingle();
+
+  throwIfError(error);
+  if (!data) return undefined;
+  return toCustomer(data as CustomerRow);
+}
+
 export async function createCustomer(input: {
-  dealId: string;
   fullName: string;
   phone: string;
   email: string;
@@ -33,7 +44,6 @@ export async function createCustomer(input: {
   const { data, error } = await crm()
     .from("customers")
     .insert({
-      deal_id: customer.dealId,
       full_name: customer.fullName,
       phone: customer.phone,
       email: customer.email,
