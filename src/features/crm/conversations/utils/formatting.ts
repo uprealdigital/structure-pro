@@ -1,6 +1,11 @@
 import { specValue } from "@/src/features/crm/common/utils/formatting";
-
+import { copy } from "@/src/features/crm/conversations/locales/en";
 import type { Activity } from "@/src/features/crm/conversations/types";
+
+export function revisionVersionLabel(status: "draft" | "sent", revisionNumber: number): string {
+  const name = status === "sent" ? copy.sentStatus : copy.draftStatus;
+  return `${name} ${copy.revisionVersion}${revisionNumber}`;
+}
 
 export function messagePreview(text: string): string {
   return text.replace(/\s+/g, " ").trim();
@@ -29,6 +34,31 @@ export function activityPreview(activity: Activity | undefined): string {
     return note ? `Call Log: ${timed} - ${note}` : `Call Log: ${timed}`;
   }
   return messagePreview(activity.text);
+}
+
+export function revisionSummary(specs: { label: string; value: string }[]): string {
+  const siding = specValue(specs, "Siding");
+  const roofColor = specValue(specs, "Roof color");
+  const roof = specValue(specs, "Roof");
+  const finish = [siding, roofColor || roof].filter(Boolean).join(" + ");
+  return finish || specValue(specs, "Style");
+}
+
+export function formatUpdatedAgo(iso: string, now = new Date()): string {
+  const date = new Date(iso);
+  if (!iso || Number.isNaN(date.getTime())) return "";
+
+  const minutes = Math.max(0, Math.round((now.getTime() - date.getTime()) / 60000));
+  if (minutes < 1) return "just now";
+  if (minutes < 60) return minutes === 1 ? "1 minute ago" : `${minutes} minutes ago`;
+
+  const hours = Math.round(minutes / 60);
+  if (hours < 24) return hours === 1 ? "1 hour ago" : `${hours} hours ago`;
+
+  const days = Math.round(hours / 24);
+  if (days === 1) return "yesterday";
+  if (days < 7) return `${days} days ago`;
+  return formatDealMenuDate(iso);
 }
 
 export function productTitle(specs: { label: string; value: string }[]): string {

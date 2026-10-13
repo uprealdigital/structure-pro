@@ -4,74 +4,31 @@ import { ChevronLeft, ChevronRight, Filter, Globe, ImageIcon, List, Plus, Search
 import Link from "next/link";
 import { useRef, useState } from "react";
 import { copy } from "@/src/features/crm/deals/locales/en";
-import type { DealBoardItem, DealSource, DealStage } from "@/src/features/crm/deals/types";
+import type { DealBoardItem, DealSource, DealStatus } from "@/src/features/crm/deals/types";
+import { dealStatusOption, dealStatusOptions, type DealStatusOption } from "@/src/features/crm/deals/utils/status";
 import { contactInitials } from "@/src/features/crm/common/utils/formatting";
 
-const stages: {
-  id: DealStage;
-  label: string;
-  tone: "default" | "won" | "lost";
-  badge: string;
-}[] = [
-  {
-    id: "new_lead",
-    label: copy.stageNewLeads,
-    tone: "default",
-    badge: "border-blue-200 bg-blue-50 text-blue-700",
-  },
-  {
-    id: "configured",
-    label: copy.stageConfigured,
-    tone: "default",
-    badge: "border-purple-200 bg-purple-50 text-purple-700",
-  },
-  {
-    id: "quote_sent",
-    label: copy.stageQuoteSent,
-    tone: "default",
-    badge: "border-amber-200 bg-amber-50 text-amber-800",
-  },
-  {
-    id: "contract",
-    label: copy.stageContract,
-    tone: "default",
-    badge: "border-emerald-200 bg-emerald-50 text-emerald-800",
-  },
-  {
-    id: "won",
-    label: copy.stageWon,
-    tone: "won",
-    badge: "border-emerald-200 bg-emerald-50 text-emerald-700",
-  },
-  {
-    id: "lost",
-    label: copy.stageLost,
-    tone: "lost",
-    badge: "border-gray-200 bg-gray-100 text-gray-600",
-  },
-];
-
-function stageLabel(stage: DealStage): string {
-  return stages.find((item) => item.id === stage)?.label ?? stage;
+function stageLabel(stage: DealStatus): string {
+  return dealStatusOption(stage)?.label ?? stage;
 }
 
 function sourceLabel(source: DealSource): string {
   return source === "yard_preview" ? copy.sourceYardPreview : copy.sourceWebsite;
 }
 
-function showsValue(stage: DealStage): boolean {
-  return stage === "contract" || stage === "won" || stage === "lost";
+function showsValue(stage: DealStatus): boolean {
+  return stage !== "lead";
 }
 
-function valueClass(stage: DealStage): string {
-  if (stage === "won") return "text-emerald-700";
-  if (stage === "lost") return "text-gray-500";
+function valueClass(stage: DealStatus): string {
+  if (stage === "deal_won") return "text-emerald-700";
+  if (stage === "deal_lost") return "text-gray-500";
   return "text-gray-950";
 }
 
-function columnClass(tone: "default" | "won" | "lost"): string {
+function columnClass(tone: DealStatusOption["tone"]): string {
   if (tone === "won") return "border-emerald-200 bg-emerald-50/50";
-  if (tone === "lost") return "border-gray-200 bg-gray-100/50 opacity-90";
+  if (tone === "lost") return "border-red-100 bg-red-50/40";
   return "border-gray-200/90 bg-gray-100/70";
 }
 
@@ -88,9 +45,9 @@ function SourceBadge({ source }: { source: DealSource }) {
 function DealCard({ deal }: { deal: DealBoardItem }) {
   const priced = showsValue(deal.stage) && deal.valueLabel;
   const cardClass =
-    deal.stage === "won"
+    deal.stage === "deal_won"
       ? "border-emerald-200 bg-white hover:border-emerald-500 hover:shadow-sm"
-      : deal.stage === "lost"
+      : deal.stage === "deal_lost"
         ? "border-gray-200 bg-white/80 hover:border-gray-400"
         : "border-gray-200/90 bg-white hover:border-gray-400 hover:shadow-sm";
 
@@ -250,7 +207,7 @@ export function DealsBoard({ deals, loadError }: { deals: DealBoardItem[]; loadE
             {needle && visible.length === 0 ? (
               <p className="px-2 py-6 text-sm text-gray-500">{copy.emptyDealSearch}</p>
             ) : (
-              stages.map((stage) => {
+              dealStatusOptions.map((stage) => {
                 const cards = visible.filter((deal) => deal.stage === stage.id);
                 return (
                   <section
@@ -304,7 +261,7 @@ export function DealsBoard({ deals, loadError }: { deals: DealBoardItem[]; loadE
                   </thead>
                   <tbody className="divide-y divide-gray-100">
                     {visible.map((deal) => {
-                      const stage = stages.find((item) => item.id === deal.stage);
+                      const stage = dealStatusOption(deal.stage);
                       const href = deal.conversationId
                         ? `/crm/conversations?conversation=${encodeURIComponent(deal.conversationId)}`
                         : undefined;

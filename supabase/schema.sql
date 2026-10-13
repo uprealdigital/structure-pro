@@ -8,6 +8,9 @@
 -- If crm.activities still has a source column, run migrate-crm-activity-channel.sql.
 -- If activities.channel still uses inbound_call or outbound_call, run migrate-crm-activity-call.sql.
 -- If crm.customers still has deal_id, run migrate-crm-customer-deals.sql.
+-- If crm.deals.status still allows only open and invoice_sent, run migrate-crm-deal-status.sql.
+-- If crm.deals has no previous_status, run migrate-crm-deal-previous-status.sql.
+-- If crm.quotes has no active_revision_id, run migrate-crm-quote-revisions.sql.
 
 create schema if not exists cpq;
 create schema if not exists crm;
@@ -27,11 +30,28 @@ create table if not exists crm.quotes (
   updated_at timestamptz not null default now()
 );
 
+create table if not exists crm.quote_revisions (
+  id uuid primary key default gen_random_uuid(),
+  quote_id uuid not null references crm.quotes (id) on delete cascade,
+  revision_number integer not null check (revision_number > 0),
+  status text not null default 'draft' check (status in ('draft', 'sent')),
+  selections jsonb not null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique (quote_id, revision_number)
+);
+
+create index if not exists quote_revisions_quote_id_idx on crm.quote_revisions (quote_id);
+
+alter table crm.quotes
+  add column if not exists active_revision_id uuid references crm.quote_revisions (id) on delete set null;
+
 create table if not exists crm.deals (
   id uuid primary key default gen_random_uuid(),
   quote_id uuid not null references crm.quotes (id),
   source text not null check (source in ('quote', 'yard_preview')),
-  status text not null default 'open' check (status in ('open', 'invoice_sent')),
+  status text not null default 'lead' check (status in ('lead', 'quote_sent', 'quote_viewed', 'partially_signed', 'deal_won', 'deal_lost')),
+  previous_status text check (previous_status in ('lead', 'quote_sent', 'quote_viewed', 'partially_signed', 'deal_won', 'deal_lost')),
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
@@ -143,6 +163,7 @@ create index if not exists yard_previews_created_at_idx
 
 alter table cpq.configurations enable row level security;
 alter table crm.quotes enable row level security;
+alter table crm.quote_revisions enable row level security;
 alter table crm.customers enable row level security;
 alter table crm.deal_customers enable row level security;
 alter table crm.deals enable row level security;
@@ -157,6 +178,7 @@ alter table ai.yard_previews enable row level security;
 grant usage on schema cpq, crm, ai to service_role;
 grant select, insert, update, delete on table cpq.configurations to service_role;
 grant select, insert, update, delete on table crm.quotes to service_role;
+grant select, insert, update, delete on table crm.quote_revisions to service_role;
 grant select, insert, update, delete on table crm.customers to service_role;
 grant select, insert, update, delete on table crm.deal_customers to service_role;
 grant select, insert, update, delete on table crm.deals to service_role;

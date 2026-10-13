@@ -10,6 +10,7 @@ import {
   LogOut,
   MessageSquare,
   Settings,
+  TriangleAlert,
   Users,
 } from "lucide-react";
 import Link from "next/link";
@@ -143,6 +144,20 @@ export function CrmNav() {
       </div>
 
       <div>
+        <button
+          type="button"
+          className="mb-3 flex w-full items-center gap-2.5 rounded-full border border-[#5b2a2b] bg-[#202122] px-3 py-2 text-white transition-colors hover:bg-[#2a2c2e]"
+        >
+          <TriangleAlert className="h-3.5 w-3.5 shrink-0 text-red-500" strokeWidth={2} aria-hidden="true" />
+          <span className="min-w-0 flex-1 truncate text-left text-[13px] font-semibold">
+            {copy.requiresAttention}
+          </span>
+          {counts?.conversationCount != null ? (
+            <span className="flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full bg-red-500 px-1 text-[11px] font-semibold leading-none text-white">
+              {counts.conversationCount}
+            </span>
+          ) : null}
+        </button>
         <div className="space-y-1.5 border-t border-[#232528] pt-4 text-sm">
           <NavItem
             href="/crm/settings"

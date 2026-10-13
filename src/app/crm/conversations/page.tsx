@@ -33,7 +33,7 @@ export default async function ConversationsPage({
 
   try {
     inbox = await getConversationInbox();
-    selectedId = requestedId ?? inbox[0]?.id;
+  selectedId = requestedId ?? inbox.find((item) => item.dealStatus !== "deal_lost")?.id;
     if (selectedId) workspace = await getConversationWorkspace(selectedId);
   } catch {
     loadError = true;

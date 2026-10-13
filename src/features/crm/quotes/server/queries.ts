@@ -6,7 +6,7 @@ import { readCustomers } from "@/src/features/crm/common/db/customer";
 import { readDealCustomers } from "@/src/features/crm/common/db/deal-customer";
 import { readConversations } from "@/src/features/crm/conversations/db/conversation";
 import { readDeals } from "@/src/features/crm/deals/db/deal";
-import { contractOnDeal } from "@/src/features/crm/deals/utils/mappers";
+import { contractOnDeal, quoteIssued } from "@/src/features/crm/deals/utils/mappers";
 import { readQuotes } from "@/src/features/crm/quotes/db/quote";
 import type { QuoteCustomer, QuoteListItem } from "@/src/features/crm/quotes/types";
 import { toQuoteListItem } from "@/src/features/crm/quotes/utils/mappers";
@@ -75,7 +75,7 @@ export const getQuoteList = cache(async (): Promise<QuoteListItem[]> => {
       monthly: described.estimate.rto,
       customers: quoteCustomers,
       contractSent: contractQuoteIds.has(quote.id),
-      invoiceSent: related.some((deal) => deal.status === "invoice_sent"),
+      invoiceSent: related.some((deal) => quoteIssued(deal.status)),
     });
     if (item) items.push(item);
   }

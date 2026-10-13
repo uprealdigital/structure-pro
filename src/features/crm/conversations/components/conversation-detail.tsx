@@ -1,26 +1,111 @@
 "use client";
 
-import { ArrowUpRight, CircleX, Paperclip, Pencil, Phone, X } from "lucide-react";
+import { ArrowUpRight, CircleX, EllipsisVertical, Paperclip, Pencil, Phone, Plus, RotateCcw, X } from "lucide-react";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { BuildingConfigurator } from "@/src/features/cpq/components/building-configurator";
 import { activityChannelLabel, ConversationThread } from "@/src/features/crm/conversations/components/conversation-thread";
 import { DealMenu } from "@/src/features/crm/conversations/components/deal-menu";
 import { DealSummary } from "@/src/features/crm/conversations/components/deal-summary";
-import { QuotePanel } from "@/src/features/crm/conversations/components/quote-panel";
+import { QuotePanel, QuoteRevisionMenu } from "@/src/features/crm/conversations/components/quote-panel";
 import { ReviewSendModal } from "@/src/features/crm/conversations/components/review-send-modal";
 import { useConversationActivities } from "@/src/features/crm/conversations/hooks/use-conversation-activities";
 import { copy } from "@/src/features/crm/conversations/locales/en";
-import { sendManualActivity } from "@/src/features/crm/conversations/server/actions";
-import type { ComposerChannel, ConversationQuote, ConversationWorkspace } from "@/src/features/crm/conversations/types";
-import { productTitle } from "@/src/features/crm/conversations/utils/formatting";
-import { conversationQuoteFromSelections } from "@/src/features/crm/conversations/utils/mappers";
-import { saveQuoteSelections } from "@/src/features/crm/quotes/server/actions";
+import { sendConversationQuote, sendManualActivity } from "@/src/features/crm/conversations/server/actions";
+import type {
+  ComposerChannel,
+  ConversationQuote,
+  ConversationQuoteRevision,
+  ConversationWorkspace,
+} from "@/src/features/crm/conversations/types";
+import { productTitle, revisionVersionLabel } from "@/src/features/crm/conversations/utils/formatting";
+import {
+  conversationQuoteFromSelections,
+  conversationQuoteWithActiveRevision,
+  conversationQuoteWithSentRevision,
+} from "@/src/features/crm/conversations/utils/mappers";
+import { activateQuoteRevision, saveQuoteSelections } from "@/src/features/crm/quotes/server/actions";
 import type { QuoteSelections } from "@/src/features/cpq/types";
+import { DealStatusBadge } from "@/src/features/crm/deals/components/deal-status-badge";
+import type { DealStatus } from "@/src/features/crm/deals/types";
 import { contactInitials } from "@/src/features/crm/common/utils/formatting";
 
-function quoteStatus(workspace: ConversationWorkspace): { label: string; sent: boolean } {
-  const sent = Boolean(workspace.quote);
-  return { label: sent ? copy.quoteSent : copy.statusOpen, sent };
+function revisionStatusLabel(revision: ConversationQuoteRevision): string {
+  return revisionVersionLabel(revision.status, revision.revisionNumber);
+}
+
+function viewedRevision(
+  quote: ConversationQuote | null,
+  selectedRevisionId: string | null,
+): ConversationQuoteRevision | null {
+  if (!quote) return null;
+  return (
+    quote.revisions.find((revision) => revision.id === selectedRevisionId) ??
+    quote.revisions.find((revision) => revision.id === quote.activeRevisionId) ??
+    quote.revisions[0] ??
+    null
+  );
+}
+
+function DealActionsMenu({
+  lost,
+  pending,
+  onMarkLost,
+  onReopen,
+}: {
+  lost: boolean;
+  pending: boolean;
+  onMarkLost: () => void;
+  onReopen: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const menu = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function close(event: MouseEvent) {
+      if (!menu.current?.contains(event.target as Node)) setOpen(false);
+    }
+    document.addEventListener("mousedown", close);
+    return () => document.removeEventListener("mousedown", close);
+  }, []);
+
+  return (
+    <div ref={menu} className="relative">
+      <button
+        type="button"
+        aria-expanded={open}
+        aria-haspopup="menu"
+        aria-label={copy.moreDealActions}
+        onClick={() => setOpen((value) => !value)}
+        className="flex h-7 w-7 cursor-pointer items-center justify-center rounded-full bg-gray-50/90 text-gray-600 shadow-xs transition-colors hover:bg-gray-100 hover:text-gray-900"
+      >
+        <EllipsisVertical className="h-4 w-4" aria-hidden="true" />
+      </button>
+      {open ? (
+        <div role="menu" className="absolute top-full left-0 z-50 mt-1.5 w-44 rounded-xl border border-gray-200 bg-white p-1 shadow-xl">
+          <button
+            type="button"
+            role="menuitem"
+            disabled={pending}
+            onClick={() => {
+              setOpen(false);
+              if (lost) onReopen();
+              else onMarkLost();
+            }}
+            className={`flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-xs font-medium disabled:opacity-50 ${
+              lost ? "text-gray-700 hover:bg-gray-50" : "text-red-600 hover:bg-red-50"
+            }`}
+          >
+            {lost ? (
+              <RotateCcw className="h-3.5 w-3.5 shrink-0 text-gray-600" aria-hidden="true" />
+            ) : (
+              <CircleX className="h-3.5 w-3.5 shrink-0 text-red-600" aria-hidden="true" />
+            )}
+            <span>{lost ? copy.reopenDeal : copy.markAsLost}</span>
+          </button>
+        </div>
+      ) : null}
+    </div>
+  );
 }
 
 function DetailsToggle({
@@ -61,21 +146,39 @@ function DetailsToggle({
 export function ConversationDetail({
   workspace,
   onBack,
+  onMarkLost,
+  onReopen,
 }: {
   workspace: ConversationWorkspace;
   onBack: () => void;
+  onMarkLost: (dealId: string) => Promise<{ success: true } | { error: string }>;
+  onReopen: (
+    dealId: string,
+  ) => Promise<{ success: true; data: { status: DealStatus } } | { error: string }>;
 }) {
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [focusedDealId, setFocusedDealId] = useState(workspace.deal.id);
+  const [selectedRevisionId, setSelectedRevisionId] = useState<string | null>(null);
   const [quotePatches, setQuotePatches] = useState<Record<string, ConversationQuote>>({});
+  const [dealStatusPatches, setDealStatusPatches] = useState<Record<string, DealStatus>>({});
   const deals = workspace.deals.map((option) => {
+    const status = dealStatusPatches[option.id];
+    const deal = status
+      ? {
+          ...option.deal,
+          previousStatus: option.deal.status === status ? option.deal.previousStatus : option.deal.status,
+          status,
+        }
+      : option.deal;
     const patch = option.quote ? quotePatches[option.quote.id] : undefined;
-    if (!patch) return option;
+    if (!patch && !status) return option;
     return {
       ...option,
-      title: productTitle(patch.specs) || option.title,
-      priceLabel: patch.totalLabel,
-      quote: patch,
+      title: patch ? productTitle(patch.specs) || option.title : option.title,
+      priceLabel: patch?.totalLabel ?? option.priceLabel,
+      stage: deal.status,
+      deal,
+      quote: patch ?? option.quote,
     };
   });
   const focusedOption = deals.find((deal) => deal.id === focusedDealId) ?? deals[0];
@@ -90,11 +193,14 @@ export function ConversationDetail({
   const [sendError, setSendError] = useState("");
   const [reviewOpen, setReviewOpen] = useState(false);
   const [editing, setEditing] = useState(false);
+  const [updatingStatus, setUpdatingStatus] = useState(false);
+  const [statusError, setStatusError] = useState("");
+  const [revisionError, setRevisionError] = useState("");
   const channelMenu = useRef<HTMLDivElement>(null);
   const thread = useRef<HTMLDivElement>(null);
   const specs = focused.quote?.specs ?? [];
-  const title = productTitle(specs);
-  const status = quoteStatus(focused);
+  const viewed = viewedRevision(focused.quote, selectedRevisionId);
+  const title = productTitle(viewed?.specs ?? specs);
   const channels: ComposerChannel[] = ["sms", "facebook", "email"];
 
   useEffect(() => {
@@ -123,6 +229,39 @@ export function ConversationDetail({
     setDetailsOpen((open) => !open);
   }
 
+  function selectDeal(id: string) {
+    setFocusedDealId(id);
+    setSelectedRevisionId(null);
+    setRevisionError("");
+    setEditing(false);
+  }
+
+  async function selectRevision(revisionId: string) {
+    const quote = focused.quote;
+    if (!quote) return;
+    if (quote.activeRevisionId === revisionId) {
+      setSelectedRevisionId(revisionId);
+      setRevisionError("");
+      return;
+    }
+    const previousPatch = quotePatches[quote.id];
+    const next = conversationQuoteWithActiveRevision(quote, revisionId);
+    if (!next) return;
+    setRevisionError("");
+    setQuotePatches((current) => ({ ...current, [next.id]: next }));
+    setSelectedRevisionId(revisionId);
+    const result = await activateQuoteRevision({ quoteId: quote.id, revisionId });
+    if (!("error" in result)) return;
+    setQuotePatches((current) => {
+      const restored = { ...current };
+      if (previousPatch) restored[quote.id] = previousPatch;
+      else delete restored[quote.id];
+      return restored;
+    });
+    setSelectedRevisionId(quote.activeRevisionId);
+    setRevisionError(copy.activateRevisionError);
+  }
+
   function toggleEditing() {
     if (!editing) setDetailsOpen(false);
     setEditing((open) => !open);
@@ -133,10 +272,26 @@ export function ConversationDetail({
     if (!quote) throw new Error(copy.saveQuoteError);
     const result = await saveQuoteSelections({ quoteId: quote.id, selections });
     if ("error" in result) throw new Error(result.error);
-    const next = conversationQuoteFromSelections(quote, selections);
+    const next = conversationQuoteFromSelections(quote, selections, result.data);
     if (!next) throw new Error(copy.saveQuoteError);
     setQuotePatches((current) => ({ ...current, [next.id]: next }));
+    setSelectedRevisionId(result.data.id);
     setEditing(false);
+  }
+
+  async function sendViewedQuote() {
+    const quote = focused.quote;
+    if (!quote || !viewed) throw new Error(copy.sendQuoteError);
+    const result = await sendConversationQuote({
+      quoteId: quote.id,
+      revisionId: viewed.id,
+      dealId: focused.deal.id,
+    });
+    if ("error" in result) throw new Error(result.error);
+    const next = conversationQuoteWithSentRevision(quote, result.data.revisionId, result.data.updatedAt);
+    if (!next) throw new Error(copy.sendQuoteError);
+    setQuotePatches((current) => ({ ...current, [next.id]: next }));
+    setDealStatusPatches((current) => ({ ...current, [focused.deal.id]: result.data.dealStatus }));
   }
 
   async function submitMessage(event: FormEvent<HTMLFormElement>) {
@@ -153,6 +308,34 @@ export function ConversationDetail({
     }
     setActivities((current) => [...current, result.data]);
     setDraft("");
+  }
+
+  async function markLost() {
+    if (updatingStatus || focused.deal.status === "deal_lost") return;
+    const dealId = focused.deal.id;
+    setUpdatingStatus(true);
+    setStatusError("");
+    const result = await onMarkLost(dealId);
+    setUpdatingStatus(false);
+    if ("error" in result) {
+      setStatusError(copy.markAsLostError);
+      return;
+    }
+    setDealStatusPatches((current) => ({ ...current, [dealId]: "deal_lost" }));
+  }
+
+  async function reopen() {
+    if (updatingStatus || focused.deal.status !== "deal_lost") return;
+    const dealId = focused.deal.id;
+    setUpdatingStatus(true);
+    setStatusError("");
+    const result = await onReopen(dealId);
+    setUpdatingStatus(false);
+    if ("error" in result) {
+      setStatusError(copy.reopenDealError);
+      return;
+    }
+    setDealStatusPatches((current) => ({ ...current, [dealId]: result.data.status }));
   }
 
   return (
@@ -183,71 +366,67 @@ export function ConversationDetail({
                 </a>
               </div>
             </div>
-            <DealMenu deals={deals} selectedId={focused.deal.id} onSelect={setFocusedDealId} />
-            <span
-              className={`inline-flex items-center rounded border px-2 py-0.5 text-[11px] font-medium shadow-xs ${
-                status.sent
-                  ? "border-amber-200 bg-amber-50 text-amber-800"
-                  : "border-gray-200 bg-gray-50 text-gray-700"
-              }`}
-            >
-              {status.label}
-            </span>
+            <div className="relative z-40 flex items-center gap-1.5">
+              <DealMenu deals={deals} selectedId={focused.deal.id} onSelect={selectDeal} />
+              <DealActionsMenu
+                lost={focused.deal.status === "deal_lost"}
+                pending={updatingStatus}
+                onMarkLost={() => void markLost()}
+                onReopen={() => void reopen()}
+              />
+            </div>
+            <DealStatusBadge status={focused.deal.status} />
+            {statusError ? <p className="text-[11px] text-red-600">{statusError}</p> : null}
           </div>
 
           <div className="flex shrink-0 items-center gap-2.5">
-            {focused.quote ? (
+            {focused.quote && viewed ? (
               <div className="flex flex-row items-center gap-3 p-1">
-                <div className="flex shrink-0 flex-col items-center gap-1">
-                  <div className="relative flex h-16 w-20 items-center justify-center overflow-hidden rounded-lg">
-                    <img
-                      alt={title || copy.quote}
-                      src={focused.quote.imageUrl}
-                      className="h-full w-full object-contain p-0.5"
-                    />
-                  </div>
-                  <span className="pt-0.5 text-base leading-none font-semibold tracking-tight text-gray-950">
-                    {focused.quote.totalLabel}
-                  </span>
+                <div className="relative flex h-16 w-20 shrink-0 items-center justify-center overflow-hidden rounded-lg">
+                  <img
+                    alt={title || copy.quote}
+                    src={viewed.imageUrl}
+                    className="h-full w-full object-contain p-0.5"
+                  />
                 </div>
                 <div className="flex shrink-0 flex-col gap-1.5">
-                  <button
-                    type="button"
-                    onClick={() => setReviewOpen(true)}
-                    className="inline-flex items-center justify-center gap-1.5 rounded-md border border-black bg-black px-2.5 py-1 text-xs font-medium text-white shadow-xs transition-colors hover:bg-gray-800"
-                  >
-                    <ArrowUpRight className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-                    <span>{copy.reviewAndSendQuote}</span>
-                  </button>
-                  <button
-                    type="button"
-                    aria-pressed={editing}
-                    onClick={toggleEditing}
-                    className={`inline-flex items-center justify-center gap-1.5 rounded-md border bg-white px-2.5 py-1 text-xs font-medium shadow-xs transition-colors ${
-                      editing
-                        ? "border-red-500 text-red-600 hover:bg-red-50"
-                        : "border-gray-300 text-gray-700 hover:bg-gray-50"
-                    }`}
-                  >
-                    {editing ? (
-                      <X className="h-3.5 w-3.5 shrink-0 text-red-500" aria-hidden="true" />
-                    ) : (
-                      <Pencil className="h-3.5 w-3.5 shrink-0 text-gray-500" aria-hidden="true" />
-                    )}
-                    <span>{editing ? copy.cancelQuoteEdits : copy.editQuote}</span>
-                  </button>
-                  <button
-                    type="button"
-                    className="inline-flex items-center justify-center gap-1.5 rounded-md bg-transparent px-2.5 py-1 text-xs font-medium text-gray-700 transition-colors hover:bg-red-50"
-                  >
-                    <CircleX className="h-3.5 w-3.5 shrink-0 text-red-500" aria-hidden="true" />
-                    <span>{copy.markAsLost}</span>
-                  </button>
+                  <QuoteRevisionMenu
+                    revisions={focused.quote.revisions}
+                    activeRevisionId={focused.quote.activeRevisionId}
+                    revision={viewed}
+                    error={revisionError}
+                    onSelectRevision={(id) => void selectRevision(id)}
+                  />
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      aria-pressed={editing}
+                      onClick={toggleEditing}
+                      className={`inline-flex items-center justify-center gap-1 rounded-md border bg-white px-2.5 py-1 text-xs font-medium whitespace-nowrap shadow-xs transition-colors ${
+                        editing
+                          ? "border-red-500 text-red-600 hover:bg-red-50"
+                          : "border-gray-300 text-gray-700 hover:bg-gray-50"
+                      }`}
+                    >
+                      {editing ? (
+                        <X className="h-3.5 w-3.5 shrink-0 text-red-500" aria-hidden="true" />
+                      ) : (
+                        <Pencil className="h-3.5 w-3.5 shrink-0 text-gray-500" aria-hidden="true" />
+                      )}
+                      <span>{editing ? copy.cancelQuoteEdits : copy.editQuote}</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setReviewOpen(true)}
+                      className="inline-flex items-center justify-center gap-1.5 rounded-md bg-black px-2.5 py-1 text-xs font-medium whitespace-nowrap text-white shadow-xs transition-colors hover:bg-gray-800"
+                    >
+                      <ArrowUpRight className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                      <span>{copy.reviewAndSendQuote}</span>
+                    </button>
+                  </div>
                 </div>
               </div>
-            ) : (
-              <p className="max-w-48 text-right text-xs text-gray-500">{copy.quoteUnavailable}</p>
-            )}
+            ) : null}
           </div>
           {editing ? null : <DetailsToggle open={detailsOpen} onClick={toggleDetails} />}
         </header>
@@ -256,7 +435,7 @@ export function ConversationDetail({
           <div className="relative z-10 shrink-0 overflow-visible border-b border-gray-200 bg-white shadow-sm">
             <div className="grid grid-cols-1 gap-6 bg-white px-6 py-4 lg:grid-cols-2">
               <DealSummary workspace={focused} />
-              <QuotePanel quote={focused.quote} />
+              <QuotePanel revision={viewed} />
             </div>
           </div>
         ) : null}
@@ -274,6 +453,15 @@ export function ConversationDetail({
         className="shrink-0 border-t border-gray-200 bg-white p-4"
         onSubmit={submitMessage}
       >
+        <div className="mb-2.5 flex items-center">
+          <button
+            type="button"
+            className="inline-flex items-center gap-1.5 rounded-full border border-gray-200 bg-white px-3 py-1.5 text-xs font-medium text-gray-800 shadow-xs transition-colors hover:bg-gray-50"
+          >
+            <Plus className="h-3.5 w-3.5 shrink-0 text-gray-500" strokeWidth={2} aria-hidden="true" />
+            <span>{copy.attachDesignPreview}</span>
+          </button>
+        </div>
         <div className="relative flex items-center rounded-lg border border-gray-300 bg-white shadow-xs focus-within:border-black focus-within:ring-2 focus-within:ring-black">
           <button
             type="button"
@@ -347,24 +535,26 @@ export function ConversationDetail({
         </div>
         {sendError ? <p className="mt-2 text-xs text-red-600">{sendError}</p> : null}
       </form>
-        {editing && focused.quote ? (
+        {editing && focused.quote && viewed ? (
           <div className="absolute inset-0 z-30 flex min-h-0 flex-col overflow-hidden">
             <BuildingConfigurator
-              key={focused.quote.id}
+              key={`${focused.quote.id}:${viewed.id}`}
               mode="internal"
-              selections={focused.quote.selections}
+              selections={viewed.selections}
               onSave={saveFocusedQuote}
             />
           </div>
         ) : null}
       </div>
-      {reviewOpen && focused.quote ? (
+      {reviewOpen && focused.quote && viewed ? (
         <ReviewSendModal
           customerName={workspace.customer.fullName}
           title={title || copy.quote}
-          priceLabel={focused.quote.totalLabel}
+          priceLabel={viewed.totalLabel}
           invoiceId={focused.quote.invoiceId}
-          imageUrl={focused.quote.imageUrl}
+          imageUrl={viewed.imageUrl}
+          statusLabel={revisionStatusLabel(viewed)}
+          onSend={sendViewedQuote}
           onClose={() => setReviewOpen(false)}
         />
       ) : null}

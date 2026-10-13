@@ -27,7 +27,7 @@ export function DealSummary({ workspace }: { workspace: ConversationWorkspace })
     <div className="col-span-1 space-y-3.5 border-gray-200 pr-4">
       <div className="space-y-3">
         <div className="space-y-2 p-2.5">
-          <span className="text-xs font-semibold text-gray-900">{copy.dealSummary}</span>
+          <h3 className="text-sm font-bold tracking-wider text-gray-900 uppercase">{copy.dealSummary}</h3>
           <p className="text-xs leading-relaxed font-normal text-gray-700">{summary}</p>
         </div>
         <div className="space-y-2 border-gray-200 pt-3">

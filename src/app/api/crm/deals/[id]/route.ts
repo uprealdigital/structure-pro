@@ -2,7 +2,7 @@ import type { RouteContext } from "@/src/common/types";
 import { assertInternal } from "@/src/common/utils/internal-call";
 import { deleteDeal, updateDeal } from "@/src/features/crm/deals/db/deal";
 import { getDeal } from "@/src/features/crm/deals/server/queries";
-import type { DealStatus } from "@/src/features/crm/deals/types";
+import { dealStatusSchema, type DealStatus } from "@/src/features/crm/deals/types";
 
 export const runtime = "nodejs";
 
@@ -17,8 +17,8 @@ async function payloadOf(request: Request): Promise<Record<string, unknown> | nu
 }
 
 function statusOf(value: unknown): DealStatus | undefined {
-  if (value === "open" || value === "invoice_sent") return value;
-  return undefined;
+  const parsed = dealStatusSchema.safeParse(value);
+  return parsed.success ? parsed.data : undefined;
 }
 
 export async function GET(request: Request, context: RouteContext) {

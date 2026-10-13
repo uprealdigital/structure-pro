@@ -6,6 +6,7 @@
 -- If activities has no generated_by column, run migrate-crm-activity-author.sql before this file.
 -- If activities still has a source column, run migrate-crm-activity-channel.sql before this file.
 -- If activities.channel still uses inbound_call or outbound_call, run migrate-crm-activity-call.sql before this file.
+-- If crm.quotes has no active_revision_id, run migrate-crm-quote-revisions.sql before this file.
 -- Fixed ids. Running this twice does not duplicate rows.
 
 insert into crm.quotes (id, invoice_id, selections, created_at, updated_at)
@@ -60,7 +61,7 @@ values
     '22222222-2222-4222-8222-222222222201',
     '11111111-1111-4111-8111-111111111101',
     'quote',
-    'open',
+    'lead',
     now() - interval '3 days',
     now() - interval '3 days'
   ),
@@ -68,7 +69,7 @@ values
     '22222222-2222-4222-8222-222222222202',
     '11111111-1111-4111-8111-111111111102',
     'yard_preview',
-    'invoice_sent',
+    'quote_sent',
     now() - interval '2 days',
     now() - interval '2 days'
   ),
@@ -76,7 +77,7 @@ values
     '22222222-2222-4222-8222-222222222203',
     '11111111-1111-4111-8111-111111111103',
     'quote',
-    'open',
+    'lead',
     now() - interval '5 days',
     now() - interval '5 days'
   ),
@@ -84,7 +85,7 @@ values
     '22222222-2222-4222-8222-222222222204',
     '11111111-1111-4111-8111-111111111104',
     'quote',
-    'open',
+    'lead',
     now() - interval '1 day',
     now() - interval '1 day'
   ),
@@ -92,7 +93,7 @@ values
     '22222222-2222-4222-8222-222222222205',
     '11111111-1111-4111-8111-111111111105',
     'quote',
-    'open',
+    'lead',
     now() - interval '18 hours',
     now() - interval '18 hours'
   ),
@@ -100,7 +101,7 @@ values
     '22222222-2222-4222-8222-222222222206',
     '11111111-1111-4111-8111-111111111106',
     'quote',
-    'invoice_sent',
+    'quote_sent',
     now() - interval '6 hours',
     now() - interval '6 hours'
   )
@@ -346,3 +347,30 @@ where conversation_id in (
   '44444444-4444-4444-8444-444444444405'
 )
   and position between 0 and 7;
+
+insert into crm.quote_revisions (quote_id, revision_number, status, selections, created_at, updated_at)
+select
+  q.id,
+  1,
+  case
+    when exists (
+      select 1
+      from crm.deals d
+      where d.quote_id = q.id
+        and d.status in ('quote_sent', 'quote_viewed', 'partially_signed', 'deal_won')
+    ) then 'sent'
+    else 'draft'
+  end,
+  q.selections,
+  q.created_at,
+  q.updated_at
+from crm.quotes q
+where not exists (
+  select 1 from crm.quote_revisions r where r.quote_id = q.id
+);
+
+update crm.quotes q
+set active_revision_id = r.id
+from crm.quote_revisions r
+where r.quote_id = q.id
+  and q.active_revision_id is null;

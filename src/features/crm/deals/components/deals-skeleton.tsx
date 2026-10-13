@@ -2,17 +2,17 @@ import { Bone, SkeletonStatus } from "@/src/features/crm/common/components/skele
 import { copy } from "@/src/features/crm/deals/locales/en";
 
 const columns: { label: string; cards: number; tone: "default" | "won" | "lost" }[] = [
-  { label: copy.stageNewLeads, cards: 2, tone: "default" },
-  { label: copy.stageConfigured, cards: 2, tone: "default" },
-  { label: copy.stageQuoteSent, cards: 2, tone: "default" },
-  { label: copy.stageContract, cards: 1, tone: "default" },
-  { label: copy.stageWon, cards: 1, tone: "won" },
-  { label: copy.stageLost, cards: 1, tone: "lost" },
+  { label: copy.statusLead, cards: 2, tone: "default" },
+  { label: copy.statusQuoteSent, cards: 2, tone: "default" },
+  { label: copy.statusQuoteViewed, cards: 1, tone: "default" },
+  { label: copy.statusPartiallySigned, cards: 1, tone: "default" },
+  { label: copy.statusDealWon, cards: 1, tone: "won" },
+  { label: copy.statusDealLost, cards: 1, tone: "lost" },
 ];
 
 function columnClass(tone: "default" | "won" | "lost"): string {
   if (tone === "won") return "border-emerald-200 bg-emerald-50/50";
-  if (tone === "lost") return "border-gray-200 bg-gray-100/50";
+  if (tone === "lost") return "border-red-100 bg-red-50/40";
   return "border-gray-200/90 bg-gray-100/70";
 }
 

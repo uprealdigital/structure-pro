@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { loadConversationWorkspace } from "@/src/features/crm/conversations/server/actions";
 import type { ConversationWorkspace } from "@/src/features/crm/conversations/types";
+import type { DealStatus } from "@/src/features/crm/deals/types";
 
 type SelectionStatus = "ready" | "pending" | "missing" | "error";
 
@@ -66,5 +67,35 @@ export function useConversationSelection({
     replaceUrl();
   }
 
-  return { selectedId, workspace, status, selectConversation, clearConversation };
+  function patchDealStatus(dealId: string, nextStatus: DealStatus) {
+    setWorkspace((current) => {
+      if (!current) return current;
+      const deals = current.deals.map((option) =>
+        option.deal.id === dealId
+          ? {
+              ...option,
+              stage: nextStatus,
+              deal: {
+                ...option.deal,
+                previousStatus:
+                  option.deal.status === nextStatus ? option.deal.previousStatus : option.deal.status,
+                status: nextStatus,
+              },
+            }
+          : option,
+      );
+      const deal =
+        current.deal.id === dealId
+          ? {
+              ...current.deal,
+              previousStatus:
+                current.deal.status === nextStatus ? current.deal.previousStatus : current.deal.status,
+              status: nextStatus,
+            }
+          : current.deal;
+      return { ...current, deal, deals };
+    });
+  }
+
+  return { selectedId, workspace, status, selectConversation, clearConversation, patchDealStatus };
 }

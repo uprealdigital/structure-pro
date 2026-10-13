@@ -205,7 +205,12 @@ export function BuildingConfigurator({
                   </span>
                 </div>
               </div>
-              <QuoteActions mode={mode} variant="header" pending={saving} onPrimary={submitQuote} />
+              <QuoteActions
+                mode={mode}
+                variant="header"
+                pending={saving}
+                onPrimary={submitQuote}
+              />
             </div>
             {saveError ? <p className="mt-3 text-right text-xs text-red-600">{saveError}</p> : null}
           </header>

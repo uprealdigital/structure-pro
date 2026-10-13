@@ -563,7 +563,7 @@ export function QuoteActions({
           type="button"
           onClick={activate}
           disabled={pending}
-          className="mt-2 block w-full rounded-full bg-black py-3 text-center text-sm font-medium text-white disabled:opacity-60"
+          className={`mt-2 block w-full rounded-full py-3 text-center text-sm font-medium text-white disabled:opacity-60 ${internal ? "border border-transparent bg-black" : "bg-black"}`}
         >
           {label}
         </button>
@@ -581,8 +581,12 @@ export function QuoteActions({
 
   const primaryClass =
     variant === "header"
-      ? "shrink-0 rounded-full bg-[#1A1A1A] px-5 py-3 text-[13px] leading-none font-medium whitespace-nowrap text-white hover:bg-black disabled:opacity-60 lg:px-8 lg:py-3.5 lg:text-sm"
-      : "shrink-0 rounded-full bg-black px-5 py-3 text-sm leading-none font-medium whitespace-nowrap text-white disabled:opacity-60";
+      ? internal
+        ? "shrink-0 rounded-full border border-transparent bg-[#1A1A1A] px-5 py-2.5 text-[13px] leading-tight font-medium whitespace-nowrap text-white hover:bg-black disabled:opacity-60"
+        : "shrink-0 rounded-full bg-[#1A1A1A] px-5 py-3 text-[13px] leading-none font-medium whitespace-nowrap text-white hover:bg-black disabled:opacity-60 lg:px-8 lg:py-3.5 lg:text-sm"
+      : internal
+        ? "shrink-0 rounded-full border border-transparent bg-black px-5 py-3 text-sm leading-none font-medium whitespace-nowrap text-white disabled:opacity-60"
+        : "shrink-0 rounded-full bg-black px-5 py-3 text-sm leading-none font-medium whitespace-nowrap text-white disabled:opacity-60";
   const secondaryClass =
     variant === "header"
       ? "max-w-[11rem] rounded-full border border-gray-300 bg-white px-4 py-2.5 text-center text-[13px] leading-tight font-medium text-balance text-gray-900 hover:bg-gray-50"

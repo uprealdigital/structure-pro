@@ -95,6 +95,8 @@ export function ReviewSendModal({
   priceLabel,
   invoiceId,
   imageUrl,
+  statusLabel,
+  onSend,
   onClose,
 }: {
   customerName: string;
@@ -102,6 +104,8 @@ export function ReviewSendModal({
   priceLabel: string;
   invoiceId: string;
   imageUrl: string;
+  statusLabel: string;
+  onSend: () => Promise<void>;
   onClose: () => void;
 }) {
   const [subject, setSubject] = useState(() => reviewQuoteSubject(invoiceId, title));
@@ -109,7 +113,22 @@ export function ReviewSendModal({
   const [smsTemplate, setSmsTemplate] = useState("standard");
   const [emailRecipient, setEmailRecipient] = useState(true);
   const [smsRecipient, setSmsRecipient] = useState(true);
+  const [sending, setSending] = useState(false);
+  const [sendError, setSendError] = useState("");
   const operatorFirst = copy.operatorName.split(" ")[0] || copy.operatorName;
+
+  async function submit() {
+    if (sending) return;
+    setSending(true);
+    setSendError("");
+    try {
+      await onSend();
+      onClose();
+    } catch (error) {
+      setSendError(error instanceof Error ? error.message : copy.sendQuoteError);
+      setSending(false);
+    }
+  }
 
   useEffect(() => {
     function onKey(event: KeyboardEvent) {
@@ -152,7 +171,7 @@ export function ReviewSendModal({
                 <div className="flex items-center gap-2">
                   <h4 className="truncate text-xs font-bold text-gray-950">{title}</h4>
                   <span className="inline-flex shrink-0 items-center rounded border border-gray-200 bg-gray-100 px-2 py-0.5 text-[10px] font-semibold text-gray-700">
-                    {copy.draft}
+                    {statusLabel}
                   </span>
                 </div>
                 <span className="mt-1 block text-base leading-none font-semibold text-gray-900">{priceLabel}</span>
@@ -258,12 +277,15 @@ export function ReviewSendModal({
           </button>
           <button
             type="button"
-            className="flex cursor-pointer items-center gap-2 rounded-lg bg-black px-5 py-2 text-xs font-semibold text-white shadow-sm transition-all hover:bg-gray-800"
+            disabled={sending}
+            onClick={() => void submit()}
+            className="flex cursor-pointer items-center gap-2 rounded-lg bg-black px-5 py-2 text-xs font-semibold text-white shadow-sm transition-all hover:bg-gray-800 disabled:opacity-60"
           >
             <span>{copy.sendNow}</span>
             <Send className="h-3.5 w-3.5" aria-hidden="true" />
           </button>
         </div>
+        {sendError ? <p className="mt-3 text-xs text-red-600">{sendError}</p> : null}
       </div>
     </div>
   );

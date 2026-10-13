@@ -5,26 +5,7 @@ import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { copy } from "@/src/features/crm/conversations/locales/en";
 import type { ConversationDealOption } from "@/src/features/crm/conversations/types";
-import { copy as dealCopy } from "@/src/features/crm/deals/locales/en";
-import type { DealStage } from "@/src/features/crm/deals/types";
-
-const stageLabel: Record<DealStage, string> = {
-  new_lead: dealCopy.stageNewLeads,
-  configured: dealCopy.stageConfigured,
-  quote_sent: dealCopy.stageQuoteSent,
-  contract: dealCopy.stageContract,
-  won: dealCopy.stageWon,
-  lost: dealCopy.stageLost,
-};
-
-const stageBadge: Record<DealStage, string> = {
-  new_lead: "border-blue-200 bg-blue-50 text-blue-700",
-  configured: "border-purple-200 bg-purple-50 text-purple-700",
-  quote_sent: "border-amber-200 bg-amber-50 text-amber-800",
-  contract: "border-emerald-200 bg-emerald-50 text-emerald-800",
-  won: "border-emerald-200 bg-emerald-50 text-emerald-700",
-  lost: "border-gray-200 bg-gray-100 text-gray-600",
-};
+import { dealStatusOption } from "@/src/features/crm/deals/utils/status";
 
 export function DealMenu({
   deals,
@@ -95,9 +76,9 @@ export function DealMenu({
                           {deal.title || copy.quote}
                         </span>
                         <span
-                          className={`shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-medium ${stageBadge[deal.stage]}`}
+                          className={`shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-medium ${dealStatusOption(deal.stage)?.badge ?? ""}`}
                         >
-                          {stageLabel[deal.stage]}
+                          {dealStatusOption(deal.stage)?.label}
                         </span>
                       </span>
                       <span className="mt-0.5 flex items-center justify-between gap-2 text-xs text-gray-500">

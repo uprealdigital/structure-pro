@@ -15,5 +15,6 @@ export const copy = {
   operatorRole: "Admin",
   profileOptions: "Profile options",
   navigation: "CRM",
+  requiresAttention: "Requires your attention",
   loading: "Loading",
 };

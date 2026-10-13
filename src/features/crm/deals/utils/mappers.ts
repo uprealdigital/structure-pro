@@ -1,9 +1,10 @@
 import {
   dealBoardItemSchema,
   dealSchema,
+  dealStatusSchema,
   type Deal,
   type DealBoardItem,
-  type DealStage,
+  type DealStatus,
 } from "@/src/features/crm/deals/types";
 
 export type DealRow = {
@@ -11,18 +12,42 @@ export type DealRow = {
   quote_id: string;
   source: string;
   status: string;
+  previous_status?: string | null;
   created_at?: string | null;
 };
+
+const legacyStatus: Record<string, DealStatus> = {
+  open: "lead",
+  invoice_sent: "quote_sent",
+};
+
+function storedStatus(value: string | null | undefined): DealStatus | null {
+  if (!value) return null;
+  const parsed = dealStatusSchema.safeParse(legacyStatus[value] ?? value);
+  return parsed.success ? parsed.data : null;
+}
 
 export function toDeal(row: DealRow): Deal | undefined {
   const deal = dealSchema.safeParse({
     id: row.id,
     quoteId: row.quote_id,
     source: row.source,
-    status: row.status,
+    status: legacyStatus[row.status] ?? row.status,
+    previousStatus: storedStatus(row.previous_status),
     createdAt: row.created_at ?? undefined,
   });
   return deal.success ? deal.data : undefined;
+}
+
+const quotedStatuses = new Set<DealStatus>([
+  "quote_sent",
+  "quote_viewed",
+  "partially_signed",
+  "deal_won",
+]);
+
+export function quoteIssued(status: DealStatus): boolean {
+  return quotedStatuses.has(status);
 }
 
 export function contractOnDeal(
@@ -32,14 +57,7 @@ export function contractOnDeal(
 ): boolean {
   if (!contractSent) return false;
   if (primaryDealCount <= 1) return true;
-  return status === "invoice_sent";
-}
-
-export function dealStageFor(status: Deal["status"], contractSent: boolean, hasQuote: boolean): DealStage {
-  if (contractSent) return "contract";
-  if (status === "invoice_sent") return "quote_sent";
-  if (hasQuote) return "configured";
-  return "new_lead";
+  return status === "partially_signed" || status === "deal_won";
 }
 
 export function toDealBoardItem(input: {
@@ -48,8 +66,6 @@ export function toDealBoardItem(input: {
   productName: string;
   detail: string;
   valueLabel: string;
-  contractSent: boolean;
-  hasQuote: boolean;
   conversationId?: string;
 }): DealBoardItem | undefined {
   const item = dealBoardItemSchema.safeParse({
@@ -59,7 +75,7 @@ export function toDealBoardItem(input: {
     productName: input.productName,
     detail: input.detail,
     source: input.deal.source,
-    stage: dealStageFor(input.deal.status, input.contractSent, input.hasQuote),
+    stage: input.deal.status,
     valueLabel: input.valueLabel,
   });
   return item.success ? item.data : undefined;

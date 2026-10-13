@@ -5,6 +5,7 @@ import {
   activitySchema,
   callSchema,
   conversationInboxItemSchema,
+  conversationQuoteRevisionSchema,
   conversationQuoteSchema,
   conversationSchema,
   conversationSummarySchema,
@@ -13,8 +14,10 @@ import {
   type Conversation,
   type ConversationInboxItem,
   type ConversationQuote,
+  type ConversationQuoteRevision,
   type ConversationSummary,
 } from "@/src/features/crm/conversations/types";
+import { revisionSummary } from "@/src/features/crm/conversations/utils/formatting";
 import type { Deal } from "@/src/features/crm/deals/types";
 
 export type ConversationRow = {
@@ -117,11 +120,37 @@ export function toConversationInboxItem(input: {
     contactName: input.customer.fullName,
     contactPhone: input.customer.phone,
     contactEmail: input.customer.email,
+    dealId: input.deal.id,
     dealStatus: input.deal.status,
     dealSource: input.deal.source,
     contractSent: input.summary.contractSent,
   });
   return item.success ? item.data : undefined;
+}
+
+export function toConversationQuoteRevision(input: {
+  id: string;
+  revisionNumber: number;
+  status: "draft" | "sent";
+  createdAt: string;
+  updatedAt: string;
+  selections: QuoteSelections;
+}): ConversationQuoteRevision | undefined {
+  const summary = priceSummary(input.selections);
+  const revision = conversationQuoteRevisionSchema.safeParse({
+    id: input.id,
+    revisionNumber: input.revisionNumber,
+    status: input.status,
+    createdAt: input.createdAt,
+    updatedAt: input.updatedAt,
+    totalLabel: summary.totalLabel,
+    summary: revisionSummary(summary.specs),
+    specs: summary.specs,
+    lines: summary.lines,
+    imageUrl: summary.imageUrl,
+    selections: input.selections,
+  });
+  return revision.success ? revision.data : undefined;
 }
 
 export function toConversationQuote(input: {
@@ -132,6 +161,8 @@ export function toConversationQuote(input: {
   lines: { label: string; amountLabel: string }[];
   imageUrl: string;
   selections: QuoteSelections;
+  activeRevisionId: string;
+  revisions: ConversationQuoteRevision[];
 }): ConversationQuote | undefined {
   const quote = conversationQuoteSchema.safeParse(input);
   return quote.success ? quote.data : undefined;
@@ -140,7 +171,17 @@ export function toConversationQuote(input: {
 export function conversationQuoteFromSelections(
   quote: ConversationQuote,
   selections: QuoteSelections,
+  saved: { id: string; revisionNumber: number; createdAt: string; updatedAt: string },
 ): ConversationQuote | undefined {
+  const revision = toConversationQuoteRevision({
+    id: saved.id,
+    revisionNumber: saved.revisionNumber,
+    status: "draft",
+    createdAt: saved.createdAt,
+    updatedAt: saved.updatedAt,
+    selections,
+  });
+  if (!revision) return undefined;
   const summary = priceSummary(selections);
   return toConversationQuote({
     id: quote.id,
@@ -150,5 +191,46 @@ export function conversationQuoteFromSelections(
     lines: summary.lines,
     imageUrl: summary.imageUrl,
     selections,
+    activeRevisionId: revision.id,
+    revisions: [...quote.revisions.filter((item) => item.id !== revision.id), revision],
+  });
+}
+
+export function conversationQuoteWithActiveRevision(
+  quote: ConversationQuote,
+  revisionId: string,
+): ConversationQuote | undefined {
+  const revision = quote.revisions.find((item) => item.id === revisionId);
+  if (!revision) return undefined;
+  return toConversationQuote({
+    id: quote.id,
+    invoiceId: quote.invoiceId,
+    totalLabel: revision.totalLabel,
+    specs: revision.specs,
+    lines: revision.lines,
+    imageUrl: revision.imageUrl,
+    selections: revision.selections,
+    activeRevisionId: revision.id,
+    revisions: quote.revisions,
+  });
+}
+
+export function conversationQuoteWithSentRevision(
+  quote: ConversationQuote,
+  revisionId: string,
+  updatedAt: string,
+): ConversationQuote | undefined {
+  return toConversationQuote({
+    id: quote.id,
+    invoiceId: quote.invoiceId,
+    totalLabel: quote.totalLabel,
+    specs: quote.specs,
+    lines: quote.lines,
+    imageUrl: quote.imageUrl,
+    selections: quote.selections,
+    activeRevisionId: quote.activeRevisionId,
+    revisions: quote.revisions.map((revision) =>
+      revision.id === revisionId ? { ...revision, status: "sent", updatedAt } : revision,
+    ),
   });
 }

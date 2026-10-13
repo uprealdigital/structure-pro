@@ -7,7 +7,7 @@ function crm() {
   return db("crm");
 }
 
-const dealColumns = "id, quote_id, source, status, created_at";
+const dealColumns = "id, quote_id, source, status, previous_status, created_at";
 
 export async function createDeal(input: {
   quoteId: string;
@@ -19,7 +19,7 @@ export async function createDeal(input: {
     .insert({
       quote_id: deal.quoteId,
       source: deal.source,
-      status: "open",
+      status: "lead",
     })
     .select(dealColumns)
     .single();
@@ -60,7 +60,11 @@ export async function updateDeal(
 ): Promise<void> {
   const next = dealPatchSchema.parse(patch);
   const row: Record<string, unknown> = { updated_at: new Date().toISOString() };
-  if (next.status) row.status = next.status;
+  if (next.status) {
+    const current = await readDeal(id);
+    row.status = next.status;
+    if (current && current.status !== next.status) row.previous_status = current.status;
+  }
   if (next.quoteId) row.quote_id = next.quoteId;
   const { error } = await crm().from("deals").update(row).eq("id", id);
   throwIfError(error);

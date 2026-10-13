@@ -8,7 +8,7 @@ import { readConversations } from "@/src/features/crm/conversations/db/conversat
 import { readDeal, readDeals } from "@/src/features/crm/deals/db/deal";
 import type { DealBoardItem } from "@/src/features/crm/deals/types";
 import { dealDetailLine, dealProductName } from "@/src/features/crm/deals/utils/formatting";
-import { contractOnDeal, toDealBoardItem } from "@/src/features/crm/deals/utils/mappers";
+import { toDealBoardItem } from "@/src/features/crm/deals/utils/mappers";
 
 export async function getDeal(id: string) {
   return readDeal(id);
@@ -45,9 +45,6 @@ export const getDealBoard = cache(async (): Promise<DealBoardItem[]> => {
     if (related.length === 0) continue;
     const primary = related.find((entry) => entry.isPrimary)?.customer;
     const conversation = primary ? conversationByCustomer.get(primary.id) : undefined;
-    const primaryDealCount = primary
-      ? links.filter((link) => link.customerId === primary.id && link.isPrimary).length
-      : 0;
     const quote = await getQuoteForPage(deal.quoteId);
     const specs = quote?.summary.specs ?? [];
     const item = toDealBoardItem({
@@ -56,8 +53,6 @@ export const getDealBoard = cache(async (): Promise<DealBoardItem[]> => {
       productName: dealProductName(specs),
       detail: dealDetailLine(specs),
       valueLabel: quote?.summary.totalLabel ?? "",
-      contractSent: contractOnDeal(deal.status, conversation?.contractSent === true, primaryDealCount),
-      hasQuote: Boolean(quote),
       conversationId: conversation?.id,
     });
     if (item) items.push(item);

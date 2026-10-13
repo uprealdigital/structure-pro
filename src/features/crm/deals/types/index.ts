@@ -3,14 +3,24 @@ import { z } from "zod";
 export const dealSourceSchema = z.enum(["quote", "yard_preview"]);
 export type DealSource = z.infer<typeof dealSourceSchema>;
 
-export const dealStatusSchema = z.enum(["open", "invoice_sent"]);
+export const dealStatusSchema = z.enum([
+  "lead",
+  "quote_sent",
+  "quote_viewed",
+  "partially_signed",
+  "deal_won",
+  "deal_lost",
+]);
 export type DealStatus = z.infer<typeof dealStatusSchema>;
+
+export const dealIdSchema = z.string().trim().min(1);
 
 export const dealSchema = z.object({
   id: z.string(),
   quoteId: z.string(),
   source: dealSourceSchema,
   status: dealStatusSchema,
+  previousStatus: dealStatusSchema.nullable(),
   createdAt: z.string().optional(),
 });
 
@@ -26,16 +36,9 @@ export const dealPatchSchema = z.object({
   quoteId: z.string().optional(),
 });
 
-export const dealStageSchema = z.enum([
-  "new_lead",
-  "configured",
-  "quote_sent",
-  "contract",
-  "won",
-  "lost",
-]);
+export const dealStageSchema = dealStatusSchema;
 
-export type DealStage = z.infer<typeof dealStageSchema>;
+export type DealStage = DealStatus;
 
 export const dealBoardItemSchema = z.object({
   id: z.string(),

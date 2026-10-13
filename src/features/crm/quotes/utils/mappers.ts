@@ -1,7 +1,9 @@
 import {
   quoteListItemSchema,
+  quoteRevisionSchema,
   type QuoteCustomer,
   type QuoteListItem,
+  type QuoteRevision,
   type QuoteStatus,
 } from "@/src/features/crm/quotes/types";
 import {
@@ -10,6 +12,29 @@ import {
   quoteDealLabel,
   quoteZip,
 } from "@/src/features/crm/quotes/utils/formatting";
+
+export type QuoteRevisionRow = {
+  id: string;
+  quote_id: string;
+  revision_number: number;
+  status: string;
+  selections: unknown;
+  created_at?: string | null;
+  updated_at?: string | null;
+};
+
+export function toQuoteRevision(row: QuoteRevisionRow): QuoteRevision | undefined {
+  const revision = quoteRevisionSchema.safeParse({
+    id: row.id,
+    quoteId: row.quote_id,
+    revisionNumber: row.revision_number,
+    status: row.status,
+    selections: row.selections,
+    createdAt: row.created_at ?? "",
+    updatedAt: row.updated_at ?? row.created_at ?? "",
+  });
+  return revision.success ? revision.data : undefined;
+}
 
 function quoteStatus(contractSent: boolean, invoiceSent: boolean): QuoteStatus {
   if (contractSent) return "contract";

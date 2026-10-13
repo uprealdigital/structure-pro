@@ -44,6 +44,7 @@ export function ConversationDetailSkeleton() {
         </div>
       </div>
       <div className="shrink-0 border-t border-gray-200 bg-white p-4">
+        <Bone className="mb-2.5 h-7 w-40 rounded-full" />
         <Bone className="h-11 w-full rounded-lg" />
       </div>
     </div>

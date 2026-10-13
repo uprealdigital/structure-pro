@@ -120,12 +120,31 @@ export const conversationInboxItemSchema = z.object({
   contactName: z.string(),
   contactPhone: z.string(),
   contactEmail: z.string(),
+  dealId: z.string(),
   dealStatus: dealStatusSchema,
   dealSource: dealSourceSchema,
   contractSent: z.boolean(),
 });
 
 export type ConversationInboxItem = z.infer<typeof conversationInboxItemSchema>;
+
+export const quoteRevisionViewStatusSchema = z.enum(["draft", "sent"]);
+
+export const conversationQuoteRevisionSchema = z.object({
+  id: z.string(),
+  revisionNumber: z.number().int().positive(),
+  status: quoteRevisionViewStatusSchema,
+  createdAt: z.string(),
+  updatedAt: z.string(),
+  totalLabel: z.string(),
+  summary: z.string(),
+  specs: z.array(z.object({ label: z.string(), value: z.string() })),
+  lines: z.array(z.object({ label: z.string(), amountLabel: z.string() })),
+  imageUrl: z.string().min(1),
+  selections: quoteSelectionsSchema,
+});
+
+export type ConversationQuoteRevision = z.infer<typeof conversationQuoteRevisionSchema>;
 
 export const conversationQuoteSchema = z.object({
   id: z.string(),
@@ -135,6 +154,8 @@ export const conversationQuoteSchema = z.object({
   lines: z.array(z.object({ label: z.string(), amountLabel: z.string() })),
   imageUrl: z.string().min(1),
   selections: quoteSelectionsSchema,
+  activeRevisionId: z.string(),
+  revisions: z.array(conversationQuoteRevisionSchema),
 });
 
 export type ConversationQuote = z.infer<typeof conversationQuoteSchema>;
