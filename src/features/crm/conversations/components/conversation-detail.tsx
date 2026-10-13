@@ -11,8 +11,11 @@ import { ReviewSendModal } from "@/src/features/crm/conversations/components/rev
 import { useConversationActivities } from "@/src/features/crm/conversations/hooks/use-conversation-activities";
 import { copy } from "@/src/features/crm/conversations/locales/en";
 import { sendManualActivity } from "@/src/features/crm/conversations/server/actions";
-import type { ComposerChannel, ConversationWorkspace } from "@/src/features/crm/conversations/types";
+import type { ComposerChannel, ConversationQuote, ConversationWorkspace } from "@/src/features/crm/conversations/types";
 import { productTitle } from "@/src/features/crm/conversations/utils/formatting";
+import { conversationQuoteFromSelections } from "@/src/features/crm/conversations/utils/mappers";
+import { saveQuoteSelections } from "@/src/features/crm/quotes/server/actions";
+import type { QuoteSelections } from "@/src/features/cpq/types";
 import { contactInitials } from "@/src/features/crm/common/utils/formatting";
 
 function quoteStatus(workspace: ConversationWorkspace): { label: string; sent: boolean } {
@@ -64,7 +67,18 @@ export function ConversationDetail({
 }) {
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [focusedDealId, setFocusedDealId] = useState(workspace.deal.id);
-  const focusedOption = workspace.deals.find((deal) => deal.id === focusedDealId) ?? workspace.deals[0];
+  const [quotePatches, setQuotePatches] = useState<Record<string, ConversationQuote>>({});
+  const deals = workspace.deals.map((option) => {
+    const patch = option.quote ? quotePatches[option.quote.id] : undefined;
+    if (!patch) return option;
+    return {
+      ...option,
+      title: productTitle(patch.specs) || option.title,
+      priceLabel: patch.totalLabel,
+      quote: patch,
+    };
+  });
+  const focusedOption = deals.find((deal) => deal.id === focusedDealId) ?? deals[0];
   const focused = focusedOption
     ? { ...workspace, deal: focusedOption.deal, quote: focusedOption.quote }
     : workspace;
@@ -114,6 +128,17 @@ export function ConversationDetail({
     setEditing((open) => !open);
   }
 
+  async function saveFocusedQuote(selections: QuoteSelections) {
+    const quote = focused.quote;
+    if (!quote) throw new Error(copy.saveQuoteError);
+    const result = await saveQuoteSelections({ quoteId: quote.id, selections });
+    if ("error" in result) throw new Error(result.error);
+    const next = conversationQuoteFromSelections(quote, selections);
+    if (!next) throw new Error(copy.saveQuoteError);
+    setQuotePatches((current) => ({ ...current, [next.id]: next }));
+    setEditing(false);
+  }
+
   async function submitMessage(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const text = draft.trim();
@@ -158,7 +183,7 @@ export function ConversationDetail({
                 </a>
               </div>
             </div>
-            <DealMenu deals={workspace.deals} selectedId={focused.deal.id} onSelect={setFocusedDealId} />
+            <DealMenu deals={deals} selectedId={focused.deal.id} onSelect={setFocusedDealId} />
             <span
               className={`inline-flex items-center rounded border px-2 py-0.5 text-[11px] font-medium shadow-xs ${
                 status.sent
@@ -324,7 +349,12 @@ export function ConversationDetail({
       </form>
         {editing && focused.quote ? (
           <div className="absolute inset-0 z-30 flex min-h-0 flex-col overflow-hidden">
-            <BuildingConfigurator key={focused.quote.id} selections={focused.quote.selections} />
+            <BuildingConfigurator
+              key={focused.quote.id}
+              mode="internal"
+              selections={focused.quote.selections}
+              onSave={saveFocusedQuote}
+            />
           </div>
         ) : null}
       </div>

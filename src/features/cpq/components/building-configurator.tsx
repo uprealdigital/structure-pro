@@ -16,12 +16,12 @@ import {
   X,
 } from "lucide-react";
 import type { BuildingCapture } from "@/src/features/cpq/components/building-scene";
-import { BuildingControls } from "@/src/features/cpq/components/building-controls";
+import { BuildingControls, QuoteActions } from "@/src/features/cpq/components/building-controls";
 import { ShareModal } from "@/src/features/cpq/components/share-modal";
 import { YardModal } from "@/src/features/cpq/components/yard-modal";
 import { useBuildingSelection } from "@/src/features/cpq/hooks/use-building-selection";
 import { createQuoteAction } from "@/src/features/cpq/server/actions";
-import type { QuoteSelections } from "@/src/features/cpq/types";
+import type { ConfiguratorMode, QuoteSelections } from "@/src/features/cpq/types";
 import { CATALOG, type BuildingConfig } from "@/src/features/cpq/utils/catalog";
 import { copy } from "@/src/features/cpq/locales/en";
 import { formatUsd } from "@/src/features/cpq/utils/pricing";
@@ -37,9 +37,19 @@ const BuildingScene = dynamic(() => import("@/src/features/cpq/components/buildi
 
 export function BuildingConfigurator({
   selections: initialSelections,
-}: { selections?: QuoteSelections } = {}) {
+  mode = "external",
+  onSave,
+}: {
+  selections?: QuoteSelections;
+  mode?: ConfiguratorMode;
+  onSave?: (selections: QuoteSelections) => Promise<void>;
+} = {}) {
+  const internal = mode === "internal";
   const [yardOpen, setYardOpen] = useState(false);
   const [quoteOpen, setQuoteOpen] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState("");
+  const savingRef = useRef(false);
   const captureBuildingRef = useRef<BuildingCapture | null>(null);
   const {
     assistantNote,
@@ -60,6 +70,29 @@ export function BuildingConfigurator({
     zip,
   } = useBuildingSelection(initialSelections);
 
+  async function saveInternalQuote() {
+    if (!onSave || savingRef.current) return;
+    savingRef.current = true;
+    setSaving(true);
+    setSaveError("");
+    try {
+      await onSave(selections);
+    } catch (error) {
+      setSaveError(error instanceof Error ? error.message : copy.saveQuoteError);
+    } finally {
+      savingRef.current = false;
+      setSaving(false);
+    }
+  }
+
+  function submitQuote() {
+    if (internal) {
+      void saveInternalQuote();
+      return;
+    }
+    setQuoteOpen(true);
+  }
+
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden lg:flex-row">
       <section className="studio-viewport relative flex h-[40vh] shrink-0 flex-col overflow-hidden lg:h-auto lg:min-h-0 lg:flex-1">
@@ -75,52 +108,64 @@ export function BuildingConfigurator({
         </div>
 
         <div className="pointer-events-none absolute inset-x-0 top-0 z-20 flex items-start justify-between px-3 py-3 lg:items-center lg:px-6 lg:py-5">
-          <div className="pointer-events-auto flex items-center space-x-3">
-            <div className="rounded-sm bg-black p-2 font-serif text-base leading-none font-bold tracking-widest text-white shadow-md">
-              {CATALOG.brand.mark}
+          {internal ? null : (
+            <div className="pointer-events-auto flex items-center space-x-3">
+              <div className="rounded-sm bg-black p-2 font-serif text-base leading-none font-bold tracking-widest text-white shadow-md">
+                {CATALOG.brand.mark}
+              </div>
+              <div>
+                <span className="block font-serif text-sm leading-snug font-bold tracking-wide text-gray-900">
+                  {CATALOG.brand.name}
+                </span>
+                <span className="block text-[11px] font-semibold tracking-wider text-gray-500 uppercase">
+                  {CATALOG.brand.region}
+                </span>
+              </div>
             </div>
-            <div>
-              <span className="block font-serif text-sm leading-snug font-bold tracking-wide text-gray-900">
-                {CATALOG.brand.name}
-              </span>
-              <span className="block text-[11px] font-semibold tracking-wider text-gray-500 uppercase">
-                {CATALOG.brand.region}
-              </span>
-            </div>
-          </div>
-          <div className="pointer-events-auto flex flex-col items-center space-y-2 lg:flex-row lg:space-y-0 lg:space-x-2.5">
-            <IconButton
-              label="Fullscreen"
-              onClick={() => void document.documentElement.requestFullscreen()}
-            >
-              <Expand className="h-4 w-4" />
-            </IconButton>
-            <IconButton label={copy.viewInSpace}>
-              <Box className="h-4 w-4" />
-            </IconButton>
-            <button
-              type="button"
-              onClick={() => setYardOpen(true)}
-              aria-label={copy.viewInYard}
-              title={copy.viewInYard}
-              className="relative flex h-8 w-8 items-center justify-center rounded-full border border-gray-300 bg-white/90 text-gray-800 shadow-[0_4px_20px_-2px_rgba(0,0,0,0.08)] lg:h-10 lg:w-auto lg:space-x-2 lg:px-4"
-            >
-              <Home className="h-4 w-4" />
-              <span className="hidden text-xs font-medium lg:inline">{copy.viewInYard}</span>
-              <span className="absolute -top-1.5 -right-1.5 rounded-full bg-black px-1.5 py-0.5 text-[10px] leading-none font-bold text-white uppercase">
-                {copy.newBadge}
-              </span>
-            </button>
-            <IconButton
-              label={copy.share}
-              disabled={!configReady || (shareOpen && shareStatus === "saving")}
-              onClick={() => void shareConfiguration()}
-            >
-              <Share className="h-4 w-4" />
-            </IconButton>
-            <IconButton label="Save">
-              <Heart className="h-4 w-4" />
-            </IconButton>
+          )}
+          <div className="pointer-events-auto ml-auto flex flex-col items-center space-y-2 lg:flex-row lg:space-y-0 lg:space-x-2.5">
+            {internal ? null : (
+              <>
+                <IconButton
+                  label="Fullscreen"
+                  onClick={() => void document.documentElement.requestFullscreen()}
+                >
+                  <Expand className="h-4 w-4" />
+                </IconButton>
+                <IconButton label={copy.viewInSpace}>
+                  <Box className="h-4 w-4" />
+                </IconButton>
+              </>
+            )}
+            {internal ? null : (
+              <button
+                type="button"
+                onClick={() => setYardOpen(true)}
+                aria-label={copy.viewInYard}
+                title={copy.viewInYard}
+                className="relative flex h-8 w-8 items-center justify-center rounded-full border border-gray-300 bg-white/90 text-gray-800 shadow-[0_4px_20px_-2px_rgba(0,0,0,0.08)] lg:h-10 lg:w-auto lg:space-x-2 lg:px-4"
+              >
+                <Home className="h-4 w-4" />
+                <span className="hidden text-xs font-medium lg:inline">{copy.viewInYard}</span>
+                <span className="absolute -top-1.5 -right-1.5 rounded-full bg-black px-1.5 py-0.5 text-[10px] leading-none font-bold text-white uppercase">
+                  {copy.newBadge}
+                </span>
+              </button>
+            )}
+            {internal ? null : (
+              <>
+                <IconButton
+                  label={copy.share}
+                  disabled={!configReady || (shareOpen && shareStatus === "saving")}
+                  onClick={() => void shareConfiguration()}
+                >
+                  <Share className="h-4 w-4" />
+                </IconButton>
+                <IconButton label="Save">
+                  <Heart className="h-4 w-4" />
+                </IconButton>
+              </>
+            )}
           </div>
         </div>
 
@@ -135,7 +180,9 @@ export function BuildingConfigurator({
         <BuildingControls
           config={config}
           onChange={setConfig}
-          onSubmit={() => setQuoteOpen(true)}
+          onSubmit={submitQuote}
+          pending={saving}
+          mode={mode}
           estimate={estimate}
           zip={zip}
         >
@@ -158,14 +205,9 @@ export function BuildingConfigurator({
                   </span>
                 </div>
               </div>
-              <button
-                type="button"
-                onClick={() => setQuoteOpen(true)}
-                className="shrink-0 rounded-full bg-[#1A1A1A] px-5 py-3 text-[13px] leading-none font-medium whitespace-nowrap text-white hover:bg-black lg:px-8 lg:py-3.5 lg:text-sm"
-              >
-                {copy.submitQuote}
-              </button>
+              <QuoteActions mode={mode} variant="header" pending={saving} onPrimary={submitQuote} />
             </div>
+            {saveError ? <p className="mt-3 text-right text-xs text-red-600">{saveError}</p> : null}
           </header>
         </BuildingControls>
 
@@ -219,13 +261,7 @@ export function BuildingConfigurator({
             <p className="text-[11px] leading-relaxed text-gray-500">
               {copy.satisfaction}
             </p>
-            <button
-              type="button"
-              onClick={() => setQuoteOpen(true)}
-              className="mt-2 block w-full rounded-full bg-black py-3 text-center text-sm font-medium text-white"
-            >
-              {copy.submitQuote}
-            </button>
+            <QuoteActions mode={mode} variant="panel" pending={saving} onPrimary={submitQuote} />
             <div className="flex items-center space-x-2 pt-3 text-xs text-gray-600">
               <span>
                 {copy.deliveryTo}{" "}

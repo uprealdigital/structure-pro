@@ -30,6 +30,7 @@ export const copy = {
   send: "Send",
   reviewAndSendQuote: "Review & Send Quote",
   editQuote: "Edit Quote",
+  saveQuoteError: "Could not save this quote. Try again.",
   cancelQuoteEdits: "Cancel Editing",
   markAsLost: "Mark as Lost",
   seeQuoteDetails: "See quote details",

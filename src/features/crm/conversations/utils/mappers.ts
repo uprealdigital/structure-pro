@@ -1,4 +1,5 @@
 import type { QuoteSelections } from "@/src/features/cpq/types";
+import { priceSummary } from "@/src/features/cpq/utils/pricing";
 import type { Customer } from "@/src/features/crm/common/types";
 import {
   activitySchema,
@@ -134,4 +135,20 @@ export function toConversationQuote(input: {
 }): ConversationQuote | undefined {
   const quote = conversationQuoteSchema.safeParse(input);
   return quote.success ? quote.data : undefined;
+}
+
+export function conversationQuoteFromSelections(
+  quote: ConversationQuote,
+  selections: QuoteSelections,
+): ConversationQuote | undefined {
+  const summary = priceSummary(selections);
+  return toConversationQuote({
+    id: quote.id,
+    invoiceId: quote.invoiceId,
+    totalLabel: summary.totalLabel,
+    specs: summary.specs,
+    lines: summary.lines,
+    imageUrl: summary.imageUrl,
+    selections,
+  });
 }

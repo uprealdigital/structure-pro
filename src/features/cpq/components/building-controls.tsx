@@ -10,6 +10,7 @@ import {
   type Ref,
 } from "react";
 import { copy } from "@/src/features/cpq/locales/en";
+import type { ConfiguratorMode } from "@/src/features/cpq/types";
 import { ColorSwatch } from "@/src/features/cpq/components/color-swatch";
 import {
   CATALOG,
@@ -39,6 +40,8 @@ type BuildingControlsProps = {
   config: BuildingConfig;
   onChange: (next: BuildingConfig) => void;
   onSubmit: () => void;
+  pending?: boolean;
+  mode?: ConfiguratorMode;
   children?: ReactNode;
   estimate: {
     total: number;
@@ -56,6 +59,8 @@ export function BuildingControls({
   config,
   onChange,
   onSubmit,
+  pending = false,
+  mode = "external",
   children,
   estimate,
   zip,
@@ -511,17 +516,21 @@ export function BuildingControls({
           <EstimateBreakdownBody
             estimate={estimate}
             zip={zip}
+            mode={mode}
+            pending={pending}
             onQuote={onSubmit}
           />
         </Accordion>
       </div>
-      <button type="button" className="sr-only" onClick={onSubmit}>
-        {copy.submitQuote}
+      <button type="button" className="sr-only" onClick={onSubmit} disabled={pending}>
+        {pending && mode === "internal" ? copy.savingQuote : mode === "internal" ? copy.save : copy.submitQuote}
       </button>
       </div>
       <MobileQuoteBar
         visible={quoteBarVisible}
         total={estimate.total}
+        mode={mode}
+        pending={pending}
         onQuote={onSubmit}
         onPriceClick={() => selectSection("details")}
       />
@@ -529,14 +538,82 @@ export function BuildingControls({
   );
 }
 
+export function QuoteActions({
+  mode,
+  variant,
+  onPrimary,
+  pending = false,
+}: {
+  mode: ConfiguratorMode;
+  variant: "header" | "panel" | "bar";
+  onPrimary: () => void;
+  pending?: boolean;
+}) {
+  const internal = mode === "internal";
+  const label = pending && internal ? copy.savingQuote : internal ? copy.save : copy.submitQuote;
+  function activate() {
+    if (pending) return;
+    onPrimary();
+  }
+
+  if (variant === "panel") {
+    return (
+      <>
+        <button
+          type="button"
+          onClick={activate}
+          disabled={pending}
+          className="mt-2 block w-full rounded-full bg-black py-3 text-center text-sm font-medium text-white disabled:opacity-60"
+        >
+          {label}
+        </button>
+        {internal ? (
+          <button
+            type="button"
+            className="mt-2 block w-full rounded-full border border-gray-300 bg-white py-3 text-center text-sm font-medium text-gray-900 hover:bg-gray-50"
+          >
+            {copy.saveAndAttach}
+          </button>
+        ) : null}
+      </>
+    );
+  }
+
+  const primaryClass =
+    variant === "header"
+      ? "shrink-0 rounded-full bg-[#1A1A1A] px-5 py-3 text-[13px] leading-none font-medium whitespace-nowrap text-white hover:bg-black disabled:opacity-60 lg:px-8 lg:py-3.5 lg:text-sm"
+      : "shrink-0 rounded-full bg-black px-5 py-3 text-sm leading-none font-medium whitespace-nowrap text-white disabled:opacity-60";
+  const secondaryClass =
+    variant === "header"
+      ? "max-w-[11rem] rounded-full border border-gray-300 bg-white px-4 py-2.5 text-center text-[13px] leading-tight font-medium text-balance text-gray-900 hover:bg-gray-50"
+      : "shrink-0 rounded-full border border-gray-300 bg-white px-5 py-3 text-center text-sm leading-none font-medium text-gray-900 hover:bg-gray-50";
+
+  return (
+    <div className={internal ? "flex shrink-0 flex-col items-end gap-2" : "contents"}>
+      <button type="button" onClick={activate} disabled={pending} className={primaryClass}>
+        {label}
+      </button>
+      {internal ? (
+        <button type="button" className={secondaryClass}>
+          {copy.saveAndAttach}
+        </button>
+      ) : null}
+    </div>
+  );
+}
+
 function MobileQuoteBar({
   visible,
   total,
+  mode,
+  pending,
   onQuote,
   onPriceClick,
 }: {
   visible: boolean;
   total: number;
+  mode: ConfiguratorMode;
+  pending: boolean;
   onQuote: () => void;
   onPriceClick: () => void;
 }) {
@@ -560,13 +637,7 @@ function MobileQuoteBar({
             {copy.seeDetails}
           </button>
         </div>
-        <button
-          type="button"
-          className="shrink-0 rounded-full bg-black px-5 py-3 text-sm leading-none font-medium whitespace-nowrap text-white"
-          onClick={onQuote}
-        >
-          {copy.submitQuote}
-        </button>
+        <QuoteActions mode={mode} variant="bar" pending={pending} onPrimary={onQuote} />
       </div>
     </div>
   );
@@ -681,6 +752,8 @@ function Accordion({
 function EstimateBreakdownBody({
   estimate,
   zip,
+  mode,
+  pending,
   onQuote,
 }: {
   estimate: {
@@ -689,6 +762,8 @@ function EstimateBreakdownBody({
     lines: { label: string; amount: number }[];
   };
   zip: string;
+  mode: ConfiguratorMode;
+  pending: boolean;
   onQuote: () => void;
 }) {
   return (
@@ -737,13 +812,7 @@ function EstimateBreakdownBody({
         {copy.quoteDisclaimer}
       </p>
       <p className="text-[11px] leading-relaxed text-gray-500">{copy.satisfaction}</p>
-      <button
-        type="button"
-        onClick={onQuote}
-        className="mt-2 block w-full rounded-full bg-black py-3 text-center text-sm font-medium text-white"
-      >
-        {copy.submitQuote}
-      </button>
+      <QuoteActions mode={mode} variant="panel" pending={pending} onPrimary={onQuote} />
       <div className="flex items-center space-x-2 pt-3 text-xs text-gray-600">
         <span>
           {copy.deliveryTo}{" "}

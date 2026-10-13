@@ -34,6 +34,8 @@ export const storedConfigurationSchema = quoteSelectionsSchema.extend({
   lng: localeCodeSchema,
 });
 
+export type ConfiguratorMode = "internal" | "external";
+
 export type BuildingConfig = z.infer<typeof buildingConfigSchema>;
 export type QuoteSelections = z.infer<typeof quoteSelectionsSchema>;
 export type StoredConfiguration = z.infer<typeof storedConfigurationSchema>;
