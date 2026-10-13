@@ -1,12 +1,13 @@
 "use client";
 
-import { ArrowUpRight, ChevronDown, Paperclip, Pencil, Phone } from "lucide-react";
+import { ArrowUpRight, CircleX, Paperclip, Pencil, Phone } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { activityChannelLabel, ConversationThread } from "@/src/features/crm/conversations/components/conversation-thread";
 import { DealMenu } from "@/src/features/crm/conversations/components/deal-menu";
 import { DealSummary } from "@/src/features/crm/conversations/components/deal-summary";
 import { QuotePanel } from "@/src/features/crm/conversations/components/quote-panel";
+import { ReviewSendModal } from "@/src/features/crm/conversations/components/review-send-modal";
 import { useConversationActivities } from "@/src/features/crm/conversations/hooks/use-conversation-activities";
 import { copy } from "@/src/features/crm/conversations/locales/en";
 import { sendManualActivity } from "@/src/features/crm/conversations/server/actions";
@@ -73,6 +74,7 @@ export function ConversationDetail({
   const { activities, setActivities } = useConversationActivities(workspace.id, workspace.activities);
   const [sending, setSending] = useState(false);
   const [sendError, setSendError] = useState("");
+  const [reviewOpen, setReviewOpen] = useState(false);
   const channelMenu = useRef<HTMLDivElement>(null);
   const thread = useRef<HTMLDivElement>(null);
   const specs = focused.quote?.specs ?? [];
@@ -116,7 +118,7 @@ export function ConversationDetail({
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col bg-[#f9f9fb]">
       <div className="relative z-20 shrink-0">
-        <header className="relative flex flex-row items-center justify-between gap-4 overflow-visible border-b border-gray-200 bg-white px-5 py-3 shadow-xs">
+        <header className="relative z-20 flex flex-row items-center justify-between gap-4 overflow-visible border-b border-gray-200 bg-white px-5 py-3 shadow-xs">
           <div className="flex shrink-0 flex-col items-start justify-start gap-2 p-1">
             <div className="mb-1 lg:hidden">
               <button type="button" onClick={onBack} className="text-xs font-medium text-gray-900">
@@ -128,22 +130,9 @@ export function ConversationDetail({
                 {contactInitials(workspace.customer.fullName)}
               </div>
               <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={toggleDetails}
-                  aria-expanded={detailsOpen}
-                  className="group flex items-center gap-1 text-left focus:outline-none"
-                >
-                  <h2 className="font-serif text-base font-bold tracking-tight text-gray-950 transition-colors group-hover:text-gray-700">
-                    {workspace.customer.fullName}
-                  </h2>
-                  <ChevronDown
-                    className={`h-3.5 w-3.5 shrink-0 text-gray-500 transition-transform group-hover:text-black ${
-                      detailsOpen ? "rotate-180" : ""
-                    }`}
-                    aria-hidden="true"
-                  />
-                </button>
+                <h2 className="font-serif text-base font-bold tracking-tight text-gray-950">
+                  {workspace.customer.fullName}
+                </h2>
                 <a
                   href={`tel:${workspace.customer.phone}`}
                   aria-label={copy.callNow}
@@ -184,29 +173,33 @@ export function ConversationDetail({
                 <div className="flex shrink-0 flex-col gap-1.5">
                   <button
                     type="button"
-                    className="inline-flex items-center justify-center gap-1.5 rounded-md border border-gray-300 bg-white px-2.5 py-1 text-xs font-semibold text-gray-900 shadow-xs transition-colors hover:bg-gray-50"
+                    onClick={() => setReviewOpen(true)}
+                    className="inline-flex items-center justify-center gap-1.5 rounded-md border border-black bg-black px-2.5 py-1 text-xs font-medium text-white shadow-xs transition-colors hover:bg-gray-800"
                   >
                     <ArrowUpRight className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-                    <span>{copy.send}</span>
+                    <span>{copy.reviewAndSendQuote}</span>
                   </button>
                   <Link
                     href="/"
                     className="inline-flex items-center justify-center gap-1.5 rounded-md border border-gray-300 bg-white px-2.5 py-1 text-xs font-medium text-gray-700 shadow-xs transition-colors hover:bg-gray-50"
                   >
                     <Pencil className="h-3.5 w-3.5 shrink-0 text-gray-500" aria-hidden="true" />
-                    <span>{copy.modify}</span>
+                    <span>{copy.editQuote}</span>
                   </Link>
-                  {status.sent ? (
-                    <div className="mt-0.5 inline-flex items-center justify-center rounded border border-amber-200 bg-amber-50 px-2 py-0.5 text-[11px] font-medium text-amber-800 shadow-xs">
-                      {copy.sent}
-                    </div>
-                  ) : null}
+                  <button
+                    type="button"
+                    className="inline-flex items-center justify-center gap-1.5 rounded-md bg-transparent px-2.5 py-1 text-xs font-medium text-gray-700 transition-colors hover:bg-red-50"
+                  >
+                    <CircleX className="h-3.5 w-3.5 shrink-0 text-red-500" aria-hidden="true" />
+                    <span>{copy.markAsLost}</span>
+                  </button>
                 </div>
               </div>
             ) : (
               <p className="max-w-48 text-right text-xs text-gray-500">{copy.quoteUnavailable}</p>
             )}
           </div>
+          <DetailsToggle open={detailsOpen} onClick={toggleDetails} />
         </header>
 
         {detailsOpen ? (
@@ -217,8 +210,6 @@ export function ConversationDetail({
             </div>
           </div>
         ) : null}
-
-        <DetailsToggle open={detailsOpen} onClick={toggleDetails} />
       </div>
 
       <div ref={thread} className="min-h-0 flex-1 overflow-y-auto">
@@ -305,6 +296,16 @@ export function ConversationDetail({
         </div>
         {sendError ? <p className="mt-2 text-xs text-red-600">{sendError}</p> : null}
       </form>
+      {reviewOpen && focused.quote ? (
+        <ReviewSendModal
+          customerName={workspace.customer.fullName}
+          title={title || copy.quote}
+          priceLabel={focused.quote.totalLabel}
+          invoiceId={focused.quote.invoiceId}
+          imageUrl={focused.quote.imageUrl}
+          onClose={() => setReviewOpen(false)}
+        />
+      ) : null}
     </div>
   );
 }

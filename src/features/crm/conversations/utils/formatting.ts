@@ -38,6 +38,10 @@ export function productTitle(specs: { label: string; value: string }[]): string 
   return style || size;
 }
 
+export function reviewQuoteSubject(invoiceId: string, title: string): string {
+  return `TimberCraft Quote #${invoiceId} • ${title}`;
+}
+
 export function dealSummarySentence(input: {
   source: "quote" | "yard_preview";
   style: string;
