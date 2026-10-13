@@ -22,13 +22,20 @@ import {
 import { configurationShareUrl } from "@/src/features/cpq/utils/formatting";
 import { estimateBuilding } from "@/src/features/cpq/utils/pricing";
 
-export function useBuildingSelection() {
-  const [config, setConfig] = useState<BuildingConfig>(DEFAULT_BUILDING_CONFIG);
+function buildingFrom(selections: QuoteSelections): BuildingConfig {
+  const { zip: _zip, ...building } = selections;
+  return building;
+}
+
+export function useBuildingSelection(initial?: QuoteSelections) {
+  const [config, setConfig] = useState<BuildingConfig>(
+    initial ? buildingFrom(initial) : DEFAULT_BUILDING_CONFIG,
+  );
   const [assistantNote, setAssistantNote] = useState("");
   const [assistantNoteId, setAssistantNoteId] = useState(0);
-  const [zip, setZip] = useState(DEFAULT_ZIP);
+  const [zip, setZip] = useState(initial?.zip ?? DEFAULT_ZIP);
   const [lng, setLng] = useState(DEFAULT_LNG);
-  const [configReady, setConfigReady] = useState(false);
+  const [configReady, setConfigReady] = useState(Boolean(initial));
   const [shareOpen, setShareOpen] = useState(false);
   const [shareStatus, setShareStatus] = useState<"saving" | "copied" | "error">("saving");
   const [shareUrl, setShareUrl] = useState("");
@@ -41,6 +48,14 @@ export function useBuildingSelection() {
   const estimate = useMemo(() => estimateBuilding(config), [config]);
 
   useEffect(() => {
+    if (initial) {
+      const { zip: savedZip, ...building } = initial;
+      setConfig(building);
+      setZip(savedZip);
+      setConfigReady(true);
+      return;
+    }
+
     let cancelled = false;
 
     async function loadSharedConfiguration() {
@@ -76,7 +91,7 @@ export function useBuildingSelection() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [initial]);
 
   async function shareConfiguration() {
     setShareOpen(true);
@@ -88,9 +103,14 @@ export function useBuildingSelection() {
       const result = await saveConfigAction({ selections: { lng, ...selections } });
       if ("error" in result) throw new Error(result.error);
 
-      const href = configurationShareUrl(window.location.href, result.data.id);
-      const url = new URL(href);
-      window.history.replaceState(null, "", `${url.pathname}${url.search}${url.hash}`);
+      const href = configurationShareUrl(
+        initial ? `${window.location.origin}/` : window.location.href,
+        result.data.id,
+      );
+      if (!initial) {
+        const url = new URL(href);
+        window.history.replaceState(null, "", `${url.pathname}${url.search}${url.hash}`);
+      }
       setShareUrl(href);
       await navigator.clipboard.writeText(href);
       setShareStatus("copied");

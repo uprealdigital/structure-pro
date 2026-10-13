@@ -1,3 +1,4 @@
+import type { QuoteSelections } from "@/src/features/cpq/types";
 import type { Customer } from "@/src/features/crm/common/types";
 import {
   activitySchema,
@@ -129,6 +130,7 @@ export function toConversationQuote(input: {
   specs: { label: string; value: string }[];
   lines: { label: string; amountLabel: string }[];
   imageUrl: string;
+  selections: QuoteSelections;
 }): ConversationQuote | undefined {
   const quote = conversationQuoteSchema.safeParse(input);
   return quote.success ? quote.data : undefined;

@@ -1,8 +1,8 @@
 "use client";
 
-import { ArrowUpRight, CircleX, Paperclip, Pencil, Phone } from "lucide-react";
-import Link from "next/link";
+import { ArrowUpRight, CircleX, Paperclip, Pencil, Phone, X } from "lucide-react";
 import { useEffect, useRef, useState, type FormEvent } from "react";
+import { BuildingConfigurator } from "@/src/features/cpq/components/building-configurator";
 import { activityChannelLabel, ConversationThread } from "@/src/features/crm/conversations/components/conversation-thread";
 import { DealMenu } from "@/src/features/crm/conversations/components/deal-menu";
 import { DealSummary } from "@/src/features/crm/conversations/components/deal-summary";
@@ -75,6 +75,7 @@ export function ConversationDetail({
   const [sending, setSending] = useState(false);
   const [sendError, setSendError] = useState("");
   const [reviewOpen, setReviewOpen] = useState(false);
+  const [editing, setEditing] = useState(false);
   const channelMenu = useRef<HTMLDivElement>(null);
   const thread = useRef<HTMLDivElement>(null);
   const specs = focused.quote?.specs ?? [];
@@ -95,8 +96,22 @@ export function ConversationDetail({
     if (pane) pane.scrollTop = pane.scrollHeight;
   }, [activities.length]);
 
+  useEffect(() => {
+    if (!editing) return;
+    function onKey(event: KeyboardEvent) {
+      if (event.key === "Escape") setEditing(false);
+    }
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [editing]);
+
   function toggleDetails() {
     setDetailsOpen((open) => !open);
+  }
+
+  function toggleEditing() {
+    if (!editing) setDetailsOpen(false);
+    setEditing((open) => !open);
   }
 
   async function submitMessage(event: FormEvent<HTMLFormElement>) {
@@ -117,7 +132,7 @@ export function ConversationDetail({
 
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col bg-[#f9f9fb]">
-      <div className="relative z-20 shrink-0">
+      <div className="relative z-40 shrink-0">
         <header className="relative z-20 flex flex-row items-center justify-between gap-4 overflow-visible border-b border-gray-200 bg-white px-5 py-3 shadow-xs">
           <div className="flex shrink-0 flex-col items-start justify-start gap-2 p-1">
             <div className="mb-1 lg:hidden">
@@ -179,13 +194,23 @@ export function ConversationDetail({
                     <ArrowUpRight className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
                     <span>{copy.reviewAndSendQuote}</span>
                   </button>
-                  <Link
-                    href="/"
-                    className="inline-flex items-center justify-center gap-1.5 rounded-md border border-gray-300 bg-white px-2.5 py-1 text-xs font-medium text-gray-700 shadow-xs transition-colors hover:bg-gray-50"
+                  <button
+                    type="button"
+                    aria-pressed={editing}
+                    onClick={toggleEditing}
+                    className={`inline-flex items-center justify-center gap-1.5 rounded-md border bg-white px-2.5 py-1 text-xs font-medium shadow-xs transition-colors ${
+                      editing
+                        ? "border-red-500 text-red-600 hover:bg-red-50"
+                        : "border-gray-300 text-gray-700 hover:bg-gray-50"
+                    }`}
                   >
-                    <Pencil className="h-3.5 w-3.5 shrink-0 text-gray-500" aria-hidden="true" />
-                    <span>{copy.editQuote}</span>
-                  </Link>
+                    {editing ? (
+                      <X className="h-3.5 w-3.5 shrink-0 text-red-500" aria-hidden="true" />
+                    ) : (
+                      <Pencil className="h-3.5 w-3.5 shrink-0 text-gray-500" aria-hidden="true" />
+                    )}
+                    <span>{editing ? copy.cancelQuoteEdits : copy.editQuote}</span>
+                  </button>
                   <button
                     type="button"
                     className="inline-flex items-center justify-center gap-1.5 rounded-md bg-transparent px-2.5 py-1 text-xs font-medium text-gray-700 transition-colors hover:bg-red-50"
@@ -199,7 +224,7 @@ export function ConversationDetail({
               <p className="max-w-48 text-right text-xs text-gray-500">{copy.quoteUnavailable}</p>
             )}
           </div>
-          <DetailsToggle open={detailsOpen} onClick={toggleDetails} />
+          {editing ? null : <DetailsToggle open={detailsOpen} onClick={toggleDetails} />}
         </header>
 
         {detailsOpen ? (
@@ -212,12 +237,13 @@ export function ConversationDetail({
         ) : null}
       </div>
 
-      <div ref={thread} className="min-h-0 flex-1 overflow-y-auto">
-        <ConversationThread
-          activities={activities}
-          contactName={workspace.customer.fullName}
-        />
-      </div>
+      <div className="relative flex min-h-0 flex-1 flex-col">
+        <div ref={thread} className="min-h-0 flex-1 overflow-y-auto">
+          <ConversationThread
+            activities={activities}
+            contactName={workspace.customer.fullName}
+          />
+        </div>
 
       <form
         className="shrink-0 border-t border-gray-200 bg-white p-4"
@@ -296,6 +322,12 @@ export function ConversationDetail({
         </div>
         {sendError ? <p className="mt-2 text-xs text-red-600">{sendError}</p> : null}
       </form>
+        {editing && focused.quote ? (
+          <div className="absolute inset-0 z-30 flex min-h-0 flex-col overflow-hidden">
+            <BuildingConfigurator key={focused.quote.id} selections={focused.quote.selections} />
+          </div>
+        ) : null}
+      </div>
       {reviewOpen && focused.quote ? (
         <ReviewSendModal
           customerName={workspace.customer.fullName}

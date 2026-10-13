@@ -21,6 +21,7 @@ import { ShareModal } from "@/src/features/cpq/components/share-modal";
 import { YardModal } from "@/src/features/cpq/components/yard-modal";
 import { useBuildingSelection } from "@/src/features/cpq/hooks/use-building-selection";
 import { createQuoteAction } from "@/src/features/cpq/server/actions";
+import type { QuoteSelections } from "@/src/features/cpq/types";
 import { CATALOG, type BuildingConfig } from "@/src/features/cpq/utils/catalog";
 import { copy } from "@/src/features/cpq/locales/en";
 import { formatUsd } from "@/src/features/cpq/utils/pricing";
@@ -34,7 +35,9 @@ const BuildingScene = dynamic(() => import("@/src/features/cpq/components/buildi
   ),
 });
 
-export function BuildingConfigurator() {
+export function BuildingConfigurator({
+  selections: initialSelections,
+}: { selections?: QuoteSelections } = {}) {
   const [yardOpen, setYardOpen] = useState(false);
   const [quoteOpen, setQuoteOpen] = useState(false);
   const captureBuildingRef = useRef<BuildingCapture | null>(null);
@@ -55,7 +58,7 @@ export function BuildingConfigurator() {
     style,
     submitPrompt,
     zip,
-  } = useBuildingSelection();
+  } = useBuildingSelection(initialSelections);
 
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden lg:flex-row">

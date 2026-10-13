@@ -60,6 +60,7 @@ async function dealOption(
         specs: quoteRecord.summary.specs,
         lines: quoteRecord.summary.lines,
         imageUrl: quoteRecord.summary.imageUrl,
+        selections: quoteRecord.selections,
       })
     : undefined;
   const specs = quoteRecord?.summary.specs ?? [];

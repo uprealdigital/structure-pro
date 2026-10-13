@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { quoteSelectionsSchema } from "@/src/features/cpq/types";
 import { customerSchema } from "@/src/features/crm/common/types";
 import { dealSchema, dealSourceSchema, dealStageSchema, dealStatusSchema } from "@/src/features/crm/deals/types";
 
@@ -133,6 +134,7 @@ export const conversationQuoteSchema = z.object({
   specs: z.array(z.object({ label: z.string(), value: z.string() })),
   lines: z.array(z.object({ label: z.string(), amountLabel: z.string() })),
   imageUrl: z.string().min(1),
+  selections: quoteSelectionsSchema,
 });
 
 export type ConversationQuote = z.infer<typeof conversationQuoteSchema>;
