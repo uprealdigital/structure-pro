@@ -18,7 +18,7 @@ export const dealStatusOptions: DealStatusOption[] = [
   {
     id: "quote_sent",
     label: copy.statusQuoteSent,
-    badge: "border-indigo-200 bg-indigo-50 text-indigo-700",
+    badge: "border-blue-200 bg-blue-50 text-blue-700",
     tone: "default",
   },
   {

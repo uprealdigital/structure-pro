@@ -19,9 +19,13 @@ function crm() {
   return db("crm");
 }
 
-const conversationColumns = "id, lookup_key, chat_id, customer_id, contract_sent";
+const conversationColumns =
+  "id, lookup_key, channel_key, chat_id, customer_id, deal_id, contract_sent";
 
-async function findRow(column: "lookup_key" | "chat_id", key: string): Promise<ConversationRow | undefined> {
+async function findRow(
+  column: "lookup_key" | "channel_key" | "chat_id",
+  key: string,
+): Promise<ConversationRow | undefined> {
   const { data, error } = await crm()
     .from("conversations")
     .select(conversationColumns)
@@ -34,8 +38,10 @@ async function findRow(column: "lookup_key" | "chat_id", key: string): Promise<C
 
 export async function createConversation(input: {
   lookupKey: string;
+  channelKey?: string;
   chatId?: string;
   customerId: string;
+  dealId?: string;
   contractSent: boolean;
   activities: ActivityInsert[];
 }): Promise<string> {
@@ -45,8 +51,10 @@ export async function createConversation(input: {
     .upsert(
       {
         lookup_key: conversation.lookupKey,
+        channel_key: conversation.channelKey ?? null,
         chat_id: conversation.chatId ?? null,
         customer_id: conversation.customerId,
+        deal_id: conversation.dealId ?? null,
         contract_sent: conversation.contractSent,
         updated_at: new Date().toISOString(),
       },
@@ -65,7 +73,10 @@ export async function createConversation(input: {
 }
 
 export async function readConversation(key: string): Promise<Conversation | undefined> {
-  const row = (await findRow("lookup_key", key)) ?? (await findRow("chat_id", key));
+  const row =
+    (await findRow("channel_key", key)) ??
+    (await findRow("chat_id", key)) ??
+    (await findRow("lookup_key", key));
   if (!row) return undefined;
   return toConversation(row, await readActivities(row.id));
 }
@@ -89,10 +100,26 @@ export async function readConversationSummaryByCustomer(
     .from("conversations")
     .select(`${conversationColumns}, updated_at`)
     .eq("customer_id", customerId)
-    .maybeSingle();
+    .order("updated_at", { ascending: false })
+    .limit(1);
   throwIfError(error);
-  if (!data) return undefined;
-  return toConversationSummary(data as ConversationSummaryRow);
+  const row = data?.[0] as ConversationSummaryRow | undefined;
+  if (!row) return undefined;
+  return toConversationSummary(row);
+}
+
+export async function readConversationsForCustomer(customerId: string): Promise<Conversation[]> {
+  const { data, error } = await crm()
+    .from("conversations")
+    .select(`${conversationColumns}, created_at`)
+    .eq("customer_id", customerId)
+    .order("updated_at", { ascending: false });
+  throwIfError(error);
+  const rows = (data ?? []) as ConversationRow[];
+  const conversations = await Promise.all(
+    rows.map(async (row) => toConversation(row, await readActivities(row.id))),
+  );
+  return conversations.filter((conversation): conversation is Conversation => conversation != null);
 }
 
 export async function readConversations(): Promise<ConversationSummary[]> {
@@ -123,8 +150,12 @@ export async function updateConversation(
 }
 
 export async function deleteConversation(key: string): Promise<void> {
-  const byKey = await crm().from("conversations").delete().eq("lookup_key", key);
+  const byKey = await crm().from("conversations").delete().eq("lookup_key", key).select("id");
   throwIfError(byKey.error);
-  const byChat = await crm().from("conversations").delete().eq("chat_id", key);
-  throwIfError(byChat.error);
+  if ((byKey.data ?? []).length > 0) return;
+
+  const row = (await findRow("channel_key", key)) ?? (await findRow("chat_id", key));
+  if (!row) return;
+  const deleted = await crm().from("conversations").delete().eq("id", row.id);
+  throwIfError(deleted.error);
 }

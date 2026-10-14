@@ -71,7 +71,10 @@ export function ConversationSkeleton() {
                 </div>
                 <Bone className="h-2.5 w-10" />
               </div>
-              <Bone className="mt-2 ml-10.5 h-3 w-44" />
+              <div className="mt-2 flex items-end justify-between gap-2.5 pl-10.5">
+                <Bone className="h-3 w-36" />
+                <Bone className="h-6 w-16 rounded-full" />
+              </div>
             </li>
           ))}
         </ul>

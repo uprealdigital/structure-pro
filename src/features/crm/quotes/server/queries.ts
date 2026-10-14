@@ -36,18 +36,19 @@ export const getQuoteList = cache(async (): Promise<QuoteListItem[]> => {
     dealsByQuote.set(deal.quoteId, related);
   }
   const dealById = new Map(deals.map((deal) => [deal.id, deal]));
-  const conversationByCustomer = new Map(conversations.map((conversation) => [conversation.customerId, conversation]));
+  const conversationByDeal = new Map(
+    conversations.flatMap((conversation) =>
+      conversation.dealId ? [[conversation.dealId, conversation] as const] : [],
+    ),
+  );
   const contractQuoteIds = new Set<string>();
   for (const link of links) {
     if (!link.isPrimary) continue;
-    const conversation = conversationByCustomer.get(link.customerId);
+    const conversation = conversationByDeal.get(link.dealId);
     if (!conversation?.contractSent) continue;
     const deal = dealById.get(link.dealId);
     if (!deal) continue;
-    const primaryDealCount = links.filter(
-      (item) => item.customerId === link.customerId && item.isPrimary,
-    ).length;
-    if (contractOnDeal(deal.status, true, primaryDealCount)) contractQuoteIds.add(deal.quoteId);
+    if (contractOnDeal(deal.status, true, 1)) contractQuoteIds.add(deal.quoteId);
   }
 
   const items: QuoteListItem[] = [];

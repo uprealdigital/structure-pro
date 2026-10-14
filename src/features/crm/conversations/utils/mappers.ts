@@ -23,8 +23,10 @@ import type { Deal } from "@/src/features/crm/deals/types";
 export type ConversationRow = {
   id: string;
   lookup_key: string;
+  channel_key?: string | null;
   chat_id: string | null;
   customer_id: string;
+  deal_id?: string | null;
   contract_sent: boolean;
   created_at?: string | null;
 };
@@ -59,8 +61,10 @@ export function toConversation(row: ConversationRow, activities: Activity[]): Co
   const conversation = conversationSchema.safeParse({
     id: row.id,
     lookupKey: row.lookup_key,
+    channelKey: row.channel_key ?? undefined,
     chatId: row.chat_id ?? undefined,
     customerId: row.customer_id,
+    dealId: row.deal_id ?? undefined,
     contractSent: row.contract_sent,
     createdAt: row.created_at ?? undefined,
     activities,
@@ -99,8 +103,10 @@ export function toConversationSummary(row: ConversationSummaryRow): Conversation
   const summary = conversationSummarySchema.safeParse({
     id: row.id,
     lookupKey: row.lookup_key,
+    channelKey: row.channel_key ?? undefined,
     chatId: row.chat_id ?? undefined,
     customerId: row.customer_id,
+    dealId: row.deal_id ?? undefined,
     contractSent: row.contract_sent,
     updatedAt: row.updated_at,
   });

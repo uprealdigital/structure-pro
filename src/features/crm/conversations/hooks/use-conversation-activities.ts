@@ -22,8 +22,15 @@ function sameActivities(left: Activity[], right: Activity[]): boolean {
 
 export function useConversationActivities(conversationId: string, initial: Activity[]) {
   const [activities, setActivities] = useState(initial);
+  const [trackedId, setTrackedId] = useState(conversationId);
+  if (trackedId !== conversationId) {
+    setTrackedId(conversationId);
+    setActivities(initial);
+  }
 
   useEffect(() => {
+    if (!conversationId) return;
+
     let cancelled = false;
 
     async function refresh() {
@@ -31,8 +38,21 @@ export function useConversationActivities(conversationId: string, initial: Activ
       if (cancelled || "error" in result || !result.data) return;
       const next = result.data.activities;
       setActivities((current) => {
-        if (next.length < current.length || sameActivities(current, next)) return current;
-        return next;
+        if (sameActivities(current, next)) return current;
+        const serverHasLocalMessages =
+          next.length < current.length &&
+          next.every((activity, index) => {
+            const local = current[index];
+            return (
+              local != null &&
+              activity.role === local.role &&
+              activity.channel === local.channel &&
+              activity.text === local.text &&
+              activity.generatedBy === local.generatedBy &&
+              activity.createdAt === local.createdAt
+            );
+          });
+        return serverHasLocalMessages ? current : next;
       });
     }
 

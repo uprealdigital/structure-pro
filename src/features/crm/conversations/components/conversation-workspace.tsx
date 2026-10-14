@@ -86,7 +86,7 @@ export function ConversationWorkspaceView({
   }
 
   return (
-    <>
+    <div className="flex min-h-0 min-w-0 flex-1 self-stretch overflow-hidden">
       <ConversationList
         items={visible}
         inboxEmpty={displayed.length === 0}
@@ -114,6 +114,7 @@ export function ConversationWorkspaceView({
             onBack={selection.clearConversation}
             onMarkLost={onMarkLost}
             onReopen={onReopen}
+            onSelectConversation={selection.highlightConversation}
           />
         ) : showDetail && selection.status === "pending" ? (
           <ConversationDetailSkeleton />
@@ -130,6 +131,6 @@ export function ConversationWorkspaceView({
           </div>
         )}
       </section>
-    </>
+    </div>
   );
 }

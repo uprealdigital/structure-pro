@@ -1,6 +1,5 @@
 import { assertInternal } from "@/src/common/utils/internal-call";
 import { openConversation, removeConversation } from "@/src/features/crm/conversations/server/actions";
-import { getConversationByCustomer } from "@/src/features/crm/conversations/server/queries";
 import { demoChatId, ensureTelegramWebhook, sendTelegramMessage } from "@/src/common/lib/telegram/telegram.service";
 import { sendSms } from "@/src/common/lib/twilio/twilio.service";
 
@@ -28,9 +27,13 @@ export async function POST(request: Request) {
   const phone = text(payload.phone);
   const openingMessage = text(payload.openingMessage);
   const customerId = text(payload.customerId);
+  const dealId = text(payload.dealId);
   const channel = payload.channel === "telegram" ? "telegram" : "twilio";
-  if (!phone || !openingMessage || !customerId) {
-    return Response.json({ error: "phone, openingMessage, and customerId are required" }, { status: 400 });
+  if (!phone || !openingMessage || !customerId || !dealId) {
+    return Response.json(
+      { error: "phone, openingMessage, customerId, and dealId are required" },
+      { status: 400 },
+    );
   }
 
   let chatId: string | undefined;
@@ -41,26 +44,24 @@ export async function POST(request: Request) {
     return Response.json({ error: message }, { status: 502 });
   }
 
-  const lookupKey = chatId ?? phone;
-  const existing = await getConversationByCustomer(customerId);
-  if (existing) {
-    return Response.json({ lookupKey: existing.lookupKey, chatId: existing.chatId ?? null, created: false });
-  }
+  const channelKey = chatId ?? phone;
+  const lookupKey = `${channelKey}:${dealId}`;
+  const openingActivity = {
+    role: "model" as const,
+    text: openingMessage,
+    channel: channel === "telegram" ? ("telegram" as const) : ("sms" as const),
+    generatedBy: "ai" as const,
+  };
 
   try {
     await openConversation({
       lookupKey,
+      channelKey,
       chatId,
       customerId,
+      dealId,
       contractSent: false,
-      activities: [
-        {
-          role: "model",
-          text: openingMessage,
-          channel: channel === "telegram" ? "telegram" : "sms",
-          generatedBy: "ai",
-        },
-      ],
+      activities: [openingActivity],
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Could not save conversation";

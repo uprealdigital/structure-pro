@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { createActivities, readActivities } from "@/src/features/crm/conversations/db/activity";
+import { createActivities, deleteLatestActivity, readActivities } from "@/src/features/crm/conversations/db/activity";
 import { createConversation, deleteConversation, updateConversation } from "@/src/features/crm/conversations/db/conversation";
 import { getConversation, getConversationWorkspace } from "@/src/features/crm/conversations/server/queries";
 import {
@@ -19,8 +19,10 @@ import { readQuoteRevision, updateQuoteRevision } from "@/src/features/crm/quote
 
 export async function openConversation(input: {
   lookupKey: string;
+  channelKey?: string;
   chatId?: string;
   customerId: string;
+  dealId?: string;
   contractSent: boolean;
   activities: ActivityInsert[];
 }): Promise<string> {
@@ -38,6 +40,12 @@ export async function appendActivity(
   const id = conversationIdSchema.parse(conversationId);
   const row = activityInsertSchema.parse(activity);
   await createActivities(id, [row]);
+  revalidatePath("/crm/conversations");
+}
+
+export async function removeLatestActivity(conversationId: string): Promise<void> {
+  const id = conversationIdSchema.parse(conversationId);
+  await deleteLatestActivity(id);
   revalidatePath("/crm/conversations");
 }
 

@@ -79,8 +79,10 @@ export type ActivityInsert = z.infer<typeof activityInsertSchema>;
 export const conversationSchema = z.object({
   id: z.string(),
   lookupKey: z.string(),
+  channelKey: z.string().optional(),
   chatId: z.string().optional(),
   customerId: z.string(),
+  dealId: z.string().optional(),
   contractSent: z.boolean(),
   createdAt: z.string().optional(),
   activities: z.array(activitySchema),
@@ -92,8 +94,10 @@ export const conversationIdSchema = z.string().trim().min(1);
 
 export const conversationWriteSchema = z.object({
   lookupKey: z.string(),
+  channelKey: z.string().optional(),
   chatId: z.string().optional(),
   customerId: z.string(),
+  dealId: z.string().optional(),
   contractSent: z.boolean(),
   activities: z.array(activityInsertSchema),
 });
@@ -105,8 +109,10 @@ export const conversationPatchSchema = z.object({
 export const conversationSummarySchema = z.object({
   id: z.string(),
   lookupKey: z.string(),
+  channelKey: z.string().optional(),
   chatId: z.string().optional(),
   customerId: z.string(),
+  dealId: z.string().optional(),
   contractSent: z.boolean(),
   updatedAt: z.string(),
 });
@@ -174,6 +180,8 @@ export const conversationDealOptionSchema = z.object({
   dateLabel: z.string(),
   deal: dealSchema,
   quote: conversationQuoteSchema.nullable(),
+  conversationId: z.string().optional(),
+  activities: z.array(activitySchema).default([]),
 });
 
 export type ConversationDealOption = z.infer<typeof conversationDealOptionSchema>;

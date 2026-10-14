@@ -38,6 +38,14 @@ export function useConversationSelection({
     window.history.replaceState(window.history.state, "", conversationPath(id));
   }
 
+  function highlightConversation(id: string) {
+    if (!id || id === selectedId) return;
+    request.current += 1;
+    setSelectedId(id);
+    setStatus("ready");
+    replaceUrl(id);
+  }
+
   async function selectConversation(id: string) {
     if (id === selectedId && (status === "ready" || status === "pending")) return;
 
@@ -97,5 +105,13 @@ export function useConversationSelection({
     });
   }
 
-  return { selectedId, workspace, status, selectConversation, clearConversation, patchDealStatus };
+  return {
+    selectedId,
+    workspace,
+    status,
+    selectConversation,
+    highlightConversation,
+    clearConversation,
+    patchDealStatus,
+  };
 }

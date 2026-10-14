@@ -109,6 +109,7 @@ export async function createQuoteAction(input: {
           phone,
           channel,
           customerId: savedCustomer.id,
+          dealId: deal.id,
           openingMessage,
         },
       }),

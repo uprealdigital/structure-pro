@@ -27,7 +27,11 @@ export const getDealBoard = cache(async (): Promise<DealBoardItem[]> => {
     readDealCustomers(),
   ]);
   const customerById = new Map(customers.map((customer) => [customer.id, customer]));
-  const conversationByCustomer = new Map(conversations.map((conversation) => [conversation.customerId, conversation]));
+  const conversationByDeal = new Map(
+    conversations.flatMap((conversation) =>
+      conversation.dealId ? [[conversation.dealId, conversation] as const] : [],
+    ),
+  );
   const customersByDeal = new Map<string, { customer: (typeof customers)[number]; isPrimary: boolean }[]>();
   for (const link of links) {
     const customer = customerById.get(link.customerId);
@@ -43,8 +47,7 @@ export const getDealBoard = cache(async (): Promise<DealBoardItem[]> => {
       (left, right) => Number(right.isPrimary) - Number(left.isPrimary),
     );
     if (related.length === 0) continue;
-    const primary = related.find((entry) => entry.isPrimary)?.customer;
-    const conversation = primary ? conversationByCustomer.get(primary.id) : undefined;
+    const conversation = conversationByDeal.get(deal.id);
     const quote = await getQuoteForPage(deal.quoteId);
     const specs = quote?.summary.specs ?? [];
     const item = toDealBoardItem({

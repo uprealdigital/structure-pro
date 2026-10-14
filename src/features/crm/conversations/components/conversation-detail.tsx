@@ -148,6 +148,7 @@ export function ConversationDetail({
   onBack,
   onMarkLost,
   onReopen,
+  onSelectConversation,
 }: {
   workspace: ConversationWorkspace;
   onBack: () => void;
@@ -155,6 +156,7 @@ export function ConversationDetail({
   onReopen: (
     dealId: string,
   ) => Promise<{ success: true; data: { status: DealStatus } } | { error: string }>;
+  onSelectConversation: (conversationId: string) => void;
 }) {
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [focusedDealId, setFocusedDealId] = useState(workspace.deal.id);
@@ -188,7 +190,9 @@ export function ConversationDetail({
   const [draft, setDraft] = useState("");
   const [channel, setChannel] = useState<ComposerChannel>("sms");
   const [channelOpen, setChannelOpen] = useState(false);
-  const { activities, setActivities } = useConversationActivities(workspace.id, workspace.activities);
+  const threadId = focusedOption?.conversationId ?? "";
+  const threadActivities = focusedOption?.activities ?? [];
+  const { activities, setActivities } = useConversationActivities(threadId, threadActivities);
   const [sending, setSending] = useState(false);
   const [sendError, setSendError] = useState("");
   const [reviewOpen, setReviewOpen] = useState(false);
@@ -234,6 +238,8 @@ export function ConversationDetail({
     setSelectedRevisionId(null);
     setRevisionError("");
     setEditing(false);
+    const conversationId = deals.find((deal) => deal.id === id)?.conversationId;
+    if (conversationId) onSelectConversation(conversationId);
   }
 
   async function selectRevision(revisionId: string) {
@@ -297,10 +303,10 @@ export function ConversationDetail({
   async function submitMessage(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const text = draft.trim();
-    if (!text || sending) return;
+    if (!text || sending || !threadId) return;
     setSending(true);
     setSendError("");
-    const result = await sendManualActivity({ conversationId: workspace.id, text, channel });
+    const result = await sendManualActivity({ conversationId: threadId, text, channel });
     setSending(false);
     if ("error" in result) {
       setSendError(copy.sendFailed);

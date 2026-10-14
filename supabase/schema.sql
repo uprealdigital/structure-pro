@@ -86,14 +86,20 @@ create unique index if not exists deal_customers_one_primary_idx
 create table if not exists crm.conversations (
   id uuid primary key default gen_random_uuid(),
   lookup_key text not null unique,
+  channel_key text,
   chat_id text,
-  customer_id uuid not null unique references crm.customers (id) on delete cascade,
+  customer_id uuid not null references crm.customers (id) on delete cascade,
+  deal_id uuid references crm.deals (id) on delete cascade,
   contract_sent boolean not null default false,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
 
 create index if not exists conversations_chat_id_idx on crm.conversations (chat_id);
+create index if not exists conversations_channel_key_idx on crm.conversations (channel_key);
+create unique index if not exists conversations_deal_id_key
+  on crm.conversations (deal_id)
+  where deal_id is not null;
 
 create table if not exists crm.calls (
   id uuid primary key default gen_random_uuid(),

@@ -76,3 +76,22 @@ export async function deleteActivities(conversationId: string): Promise<void> {
   const { error } = await crm().from("activities").delete().eq("conversation_id", conversationId);
   throwIfError(error);
 }
+
+export async function deleteLatestActivity(conversationId: string): Promise<void> {
+  const existing = await crm()
+    .from("activities")
+    .select("position")
+    .eq("conversation_id", conversationId)
+    .order("position", { ascending: false })
+    .limit(1);
+  throwIfError(existing.error);
+  const position = existing.data?.[0]?.position;
+  if (typeof position !== "number") return;
+
+  const deleted = await crm()
+    .from("activities")
+    .delete()
+    .eq("conversation_id", conversationId)
+    .eq("position", position);
+  throwIfError(deleted.error);
+}
