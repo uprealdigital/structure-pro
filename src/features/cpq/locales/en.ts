@@ -101,6 +101,19 @@ export const copy = {
   fullName: "Full Name",
   phone: "Phone",
   email: "Email",
+  quoteSmsConsent:
+    "By submitting this form, I agree to receive conversational SMS/text messages regarding my building quote",
+  quoteSmsDetails:
+    "Msg & data rates may apply. Message frequency varies. Reply STOP to opt out, HELP for help.",
+  quoteTermsLink: "View Terms",
+  quotePrivacyLink: "Privacy Policy",
+  viewportTerms: "Terms and Conditions",
+  viewportPrivacy: "Privacy Policy",
+  quoteNameRequired: "Enter your full name.",
+  quotePhoneRequired: "Enter your phone number.",
+  quoteEmailRequired: "Enter your email.",
+  quoteEmailInvalid: "Enter a valid email address.",
+  quoteConsentRequired: "Select this box to agree to the terms and privacy policy.",
   quoteSubmitting: "Sending quote…",
   quoteSubmitSuccessTitle: "Request submitted",
   quoteSubmitSuccess:

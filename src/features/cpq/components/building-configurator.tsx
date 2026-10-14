@@ -1,6 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
+import Link from "next/link";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import {
   Box,
@@ -168,6 +169,27 @@ export function BuildingConfigurator({
             )}
           </div>
         </div>
+
+        <nav
+          aria-label="Legal"
+          className="absolute bottom-2 left-3 z-20 flex items-center gap-1.5 text-[11px] leading-none text-gray-500/80"
+        >
+          <Link
+            href="/terms"
+            className="transition-colors hover:text-gray-800 hover:underline hover:underline-offset-2"
+          >
+            {copy.viewportTerms}
+          </Link>
+          <span aria-hidden className="text-[8px] leading-none text-gray-400">
+            •
+          </span>
+          <Link
+            href="/privacy"
+            className="transition-colors hover:text-gray-800 hover:underline hover:underline-offset-2"
+          >
+            {copy.viewportPrivacy}
+          </Link>
+        </nav>
 
         <AssistantPromptForm
           note={assistantNote}
@@ -593,7 +615,7 @@ function AssistantPromptForm({
   }
 
   return (
-    <div className="absolute bottom-3 left-1/2 z-30 w-[min(90%,calc(100%-2.75rem))] max-w-md -translate-x-1/2 lg:bottom-8">
+    <div className="absolute bottom-8 left-1/2 z-30 w-[min(90%,calc(100%-2.75rem))] max-w-md -translate-x-1/2">
       {showStatusNote ? (
         <div className="mb-2 flex items-start gap-2 rounded-2xl border border-white/35 bg-white/10 px-3.5 py-2.5 shadow-[0_4px_20px_-2px_rgba(0,0,0,0.08)] backdrop-blur-md">
           <p className="min-w-0 flex-1 text-center text-xs leading-relaxed text-gray-800">
@@ -698,6 +720,56 @@ function IconButton({
 const quoteFieldClassName =
   "w-full rounded-lg border border-neutral-200 bg-neutral-50 px-3.5 py-2.5 text-sm text-neutral-800 placeholder-neutral-400 outline-none transition-colors focus:border-black focus:bg-white";
 
+type QuoteFieldErrors = {
+  fullName?: string;
+  phone?: string;
+  email?: string;
+  consent?: string;
+};
+
+function quoteInputClassName(invalid: boolean) {
+  return invalid ? `${quoteFieldClassName} border-red-400 bg-white` : quoteFieldClassName;
+}
+
+function quoteFieldErrors(input: {
+  fullName: string;
+  phone: string;
+  email: string;
+  agreedToTerms: boolean;
+}): QuoteFieldErrors {
+  const errors: QuoteFieldErrors = {};
+  if (!input.fullName.trim()) errors.fullName = copy.quoteNameRequired;
+  if (!input.phone.trim()) errors.phone = copy.quotePhoneRequired;
+  const email = input.email.trim();
+  if (!email) errors.email = copy.quoteEmailRequired;
+  else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) errors.email = copy.quoteEmailInvalid;
+  if (!input.agreedToTerms) errors.consent = copy.quoteConsentRequired;
+  return errors;
+}
+
+function FieldError({ message }: { message: string }) {
+  return (
+    <p className="text-xs text-red-600" role="alert">
+      {message}
+    </p>
+  );
+}
+
+function QuoteField({
+  error,
+  children,
+}: {
+  error?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="space-y-1">
+      {children}
+      {error ? <FieldError message={error} /> : null}
+    </div>
+  );
+}
+
 function QuoteModal({
   config,
   zip,
@@ -710,19 +782,37 @@ function QuoteModal({
   const [fullName, setFullName] = useState("");
   const [phone, setPhone] = useState("");
   const [email, setEmail] = useState("");
+  const [agreedToTerms, setAgreedToTerms] = useState(false);
+  const [fieldErrors, setFieldErrors] = useState<QuoteFieldErrors>({});
   const [status, setStatus] = useState<"idle" | "submitting" | "success" | "error">(
     "idle",
   );
   const [errorMessage, setErrorMessage] = useState("");
+  const submittingRef = useRef(false);
 
   function requiredPlaceholder(label: string) {
     return `${label}*`;
   }
 
+  function clearFieldError(field: keyof QuoteFieldErrors) {
+    setFieldErrors((current) =>
+      current[field] ? { ...current, [field]: undefined } : current,
+    );
+  }
+
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (status === "submitting") return;
+    if (submittingRef.current) return;
 
+    const nextErrors = quoteFieldErrors({ fullName, phone, email, agreedToTerms });
+    setFieldErrors(nextErrors);
+    if (Object.values(nextErrors).some(Boolean)) {
+      setStatus("idle");
+      setErrorMessage("");
+      return;
+    }
+
+    submittingRef.current = true;
     setStatus("submitting");
     setErrorMessage("");
 
@@ -734,12 +824,14 @@ function QuoteModal({
         selections: { ...config, zip },
       });
       if ("error" in result) {
+        submittingRef.current = false;
         setStatus("error");
         setErrorMessage(result.error || copy.quoteSubmitError);
         return;
       }
       setStatus("success");
     } catch {
+      submittingRef.current = false;
       setStatus("error");
       setErrorMessage(copy.quoteSubmitError);
     }
@@ -804,38 +896,91 @@ function QuoteModal({
               </button>
             </div>
 
-            <form className="space-y-4 pt-4" onSubmit={handleSubmit}>
+            <form className="space-y-4 pt-4" onSubmit={handleSubmit} noValidate>
             <div className="space-y-3">
-              <input
-                type="text"
-                required
-                autoComplete="name"
-                placeholder={requiredPlaceholder(copy.fullName)}
-                value={fullName}
-                onChange={(event) => setFullName(event.target.value)}
-                className={quoteFieldClassName}
-                disabled={submitting}
-              />
-              <input
-                type="tel"
-                required
-                autoComplete="tel"
-                placeholder={requiredPlaceholder(copy.phone)}
-                value={phone}
-                onChange={(event) => setPhone(event.target.value)}
-                className={quoteFieldClassName}
-                disabled={submitting}
-              />
-              <input
-                type="email"
-                required
-                autoComplete="email"
-                placeholder={requiredPlaceholder(copy.email)}
-                value={email}
-                onChange={(event) => setEmail(event.target.value)}
-                className={quoteFieldClassName}
-                disabled={submitting}
-              />
+              <QuoteField error={fieldErrors.fullName}>
+                <input
+                  type="text"
+                  autoComplete="name"
+                  placeholder={requiredPlaceholder(copy.fullName)}
+                  value={fullName}
+                  onChange={(event) => {
+                    setFullName(event.target.value);
+                    clearFieldError("fullName");
+                  }}
+                  aria-invalid={Boolean(fieldErrors.fullName)}
+                  className={quoteInputClassName(Boolean(fieldErrors.fullName))}
+                  disabled={submitting}
+                />
+              </QuoteField>
+              <QuoteField error={fieldErrors.phone}>
+                <input
+                  type="tel"
+                  autoComplete="tel"
+                  placeholder={requiredPlaceholder(copy.phone)}
+                  value={phone}
+                  onChange={(event) => {
+                    setPhone(event.target.value);
+                    clearFieldError("phone");
+                  }}
+                  aria-invalid={Boolean(fieldErrors.phone)}
+                  className={quoteInputClassName(Boolean(fieldErrors.phone))}
+                  disabled={submitting}
+                />
+              </QuoteField>
+              <QuoteField error={fieldErrors.email}>
+                <input
+                  type="email"
+                  autoComplete="email"
+                  placeholder={requiredPlaceholder(copy.email)}
+                  value={email}
+                  onChange={(event) => {
+                    setEmail(event.target.value);
+                    clearFieldError("email");
+                  }}
+                  aria-invalid={Boolean(fieldErrors.email)}
+                  className={quoteInputClassName(Boolean(fieldErrors.email))}
+                  disabled={submitting}
+                />
+              </QuoteField>
+            </div>
+            <div className="space-y-1.5">
+              <div className="flex items-start gap-2.5 text-[11px] leading-relaxed text-neutral-500">
+                <input
+                  id="quote-consent"
+                  type="checkbox"
+                  checked={agreedToTerms}
+                  onChange={(event) => {
+                    setAgreedToTerms(event.target.checked);
+                    if (event.target.checked) clearFieldError("consent");
+                  }}
+                  aria-invalid={Boolean(fieldErrors.consent)}
+                  disabled={submitting}
+                  className="mt-0.5 size-3.5 shrink-0 rounded border-neutral-300 accent-black"
+                />
+                <p>
+                  <label htmlFor="quote-consent">
+                    {copy.quoteSmsConsent}{" "}
+                    <span className="font-medium text-stone-800">*</span>
+                  </label>
+                  . {copy.quoteSmsDetails}{" "}
+                  <Link
+                    href="/terms"
+                    className="font-medium text-neutral-600 underline underline-offset-2 hover:text-black"
+                  >
+                    {copy.quoteTermsLink}
+                  </Link>
+                  {" & "}
+                  <Link
+                    href="/privacy"
+                    className="font-medium text-neutral-600 underline underline-offset-2 hover:text-black"
+                  >
+                    {copy.quotePrivacyLink}
+                  </Link>
+                  .
+                </p>
+              </div>
+              {fieldErrors.consent ? <FieldError message={fieldErrors.consent} /> : null}
             </div>
             {status === "error" ? (
               <p className="text-sm text-red-600">{errorMessage}</p>
@@ -843,8 +988,7 @@ function QuoteModal({
             <div className="pt-2">
               <button
                 type="submit"
-                disabled={submitting}
-                className="w-full rounded-full bg-black px-6 py-3.5 text-center text-sm font-medium text-white shadow-md transition-all hover:bg-stone-900 active:scale-95 disabled:opacity-60"
+                className="w-full rounded-full bg-black px-6 py-3.5 text-center text-sm font-medium text-white shadow-md transition-all hover:bg-stone-900 active:scale-95"
               >
                 {submitting ? copy.quoteSubmitting : copy.submitQuote}
               </button>
