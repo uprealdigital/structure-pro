@@ -122,6 +122,12 @@ export const conversationInboxItemSchema = z.object({
   contactEmail: z.string(),
   dealId: z.string(),
   dealStatus: dealStatusSchema,
+  dealStatuses: z.array(
+    z.object({
+      id: z.string(),
+      status: dealStatusSchema,
+    }),
+  ),
   dealSource: dealSourceSchema,
   contractSent: z.boolean(),
 });

@@ -11,6 +11,24 @@ import { markDealLost, reopenDeal } from "@/src/features/crm/conversations/serve
 import type { ConversationInboxItem, ConversationWorkspace } from "@/src/features/crm/conversations/types";
 import type { DealStatus } from "@/src/features/crm/deals/types";
 
+function patchedInbox(
+  items: ConversationInboxItem[],
+  statusByDeal: Record<string, DealStatus>,
+): ConversationInboxItem[] {
+  return items.map((item) => {
+    let changed = false;
+    const dealStatuses = item.dealStatuses.map((deal) => {
+      const nextStatus = statusByDeal[deal.id];
+      if (!nextStatus || nextStatus === deal.status) return deal;
+      changed = true;
+      return { ...deal, status: nextStatus };
+    });
+    if (!changed) return item;
+    const primary = dealStatuses.find((deal) => deal.id === item.dealId);
+    return { ...item, dealStatus: primary?.status ?? item.dealStatus, dealStatuses };
+  });
+}
+
 export function ConversationWorkspaceView({
   inbox,
   workspace,
@@ -28,10 +46,7 @@ export function ConversationWorkspaceView({
   });
   const filters = useConversationFilters();
   const [statusByDeal, setStatusByDeal] = useState<Record<string, DealStatus>>({});
-  const displayed = inbox.map((item) => {
-    const nextStatus = statusByDeal[item.dealId];
-    return nextStatus ? { ...item, dealStatus: nextStatus } : item;
-  });
+  const displayed = patchedInbox(inbox, statusByDeal);
   const visible = filters.visibleItems(displayed);
   const showDetail = Boolean(selection.selectedId);
   const showLoadError = loadError || (showDetail && selection.status === "error");
@@ -40,13 +55,13 @@ export function ConversationWorkspaceView({
     const currentId = selection.selectedId;
     const before = filters.visibleItems(displayed);
     const index = before.findIndex((item) => item.id === currentId);
-    const nextDisplayed = displayed.map((item) =>
-      item.dealId === dealId ? { ...item, dealStatus: nextStatus } : item,
-    );
-    setStatusByDeal((current) => ({ ...current, [dealId]: nextStatus }));
+    const nextPatches = { ...statusByDeal, [dealId]: nextStatus };
+    setStatusByDeal(nextPatches);
     selection.patchDealStatus(dealId, nextStatus);
 
-    const stillVisible = filters.visibleItems(nextDisplayed).some((item) => item.id === currentId);
+    const stillVisible = filters.visibleItems(patchedInbox(inbox, nextPatches)).some(
+      (item) => item.id === currentId,
+    );
     if (!stillVisible && currentId && index >= 0) {
       const next = before[index + 1] ?? before[index - 1];
       if (next && next.id !== currentId) void selection.selectConversation(next.id);
@@ -79,6 +94,8 @@ export function ConversationWorkspaceView({
         onQueryChange={filters.setQuery}
         includedStatuses={filters.included}
         onToggleStatus={filters.toggleStatus}
+        onClearFilters={filters.clearFilters}
+        dealStatusCount={filters.dealStatusCount}
         activeFilterCount={filters.activeCount}
         selectedId={selection.selectedId}
         onSelect={selection.selectConversation}

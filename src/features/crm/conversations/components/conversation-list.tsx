@@ -1,6 +1,6 @@
 "use client";
 
-import { Filter, Search } from "lucide-react";
+import { Check, Filter, Search, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { copy } from "@/src/features/crm/conversations/locales/en";
 import type { ConversationInboxItem } from "@/src/features/crm/conversations/types";
@@ -9,6 +9,15 @@ import { contactInitials } from "@/src/features/crm/common/utils/formatting";
 import { dealStatusOptions } from "@/src/features/crm/deals/utils/status";
 import type { DealStatus } from "@/src/features/crm/deals/types";
 
+const selectedStatusClass: Record<DealStatus, string> = {
+  lead: "border-gray-300 bg-gray-100 text-gray-800 shadow-xs",
+  quote_sent: "border-blue-200 bg-blue-50 text-blue-700 shadow-xs",
+  quote_viewed: "border-purple-200 bg-purple-50 text-purple-700 shadow-xs",
+  partially_signed: "border-amber-200 bg-amber-50 text-amber-800 shadow-xs",
+  deal_won: "border-gray-200 bg-gray-50 text-emerald-700 shadow-xs",
+  deal_lost: "border-red-200 bg-red-50 text-red-600 shadow-xs",
+};
+
 export function ConversationList({
   items,
   inboxEmpty,
@@ -16,6 +25,8 @@ export function ConversationList({
   onQueryChange,
   includedStatuses,
   onToggleStatus,
+  onClearFilters,
+  dealStatusCount,
   activeFilterCount,
   selectedId,
   onSelect,
@@ -26,6 +37,8 @@ export function ConversationList({
   onQueryChange: (value: string) => void;
   includedStatuses: DealStatus[];
   onToggleStatus: (status: DealStatus) => void;
+  onClearFilters: () => void;
+  dealStatusCount: number;
   activeFilterCount: number;
   selectedId?: string;
   onSelect: (id: string) => void;
@@ -87,12 +100,19 @@ export function ConversationList({
               <div
                 role="dialog"
                 aria-label={copy.filters}
-                className="absolute top-full right-0 z-30 mt-2 w-72 rounded-xl border border-gray-200 bg-white p-3 shadow-lg"
+                className="absolute top-full right-0 z-40 mt-2 w-72 space-y-3 rounded-xl border border-gray-200 bg-white px-4 pt-4 pb-4 shadow-2xl"
               >
-                <p className="text-[11px] font-semibold tracking-wide text-gray-500 uppercase">
-                  {copy.filterDealStatus}
-                </p>
-                <div className="mt-2.5 flex flex-wrap gap-1.5">
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[10px] font-bold tracking-wider text-gray-700 uppercase">
+                    {copy.filterDealStatus}
+                  </span>
+                  {dealStatusCount > 0 ? (
+                    <span className="inline-flex items-center justify-center rounded-full bg-gray-100 px-1.5 py-0.5 font-mono text-[10px] font-semibold text-gray-600">
+                      {dealStatusCount}
+                    </span>
+                  ) : null}
+                </div>
+                <div className="flex flex-wrap gap-2 py-1">
                   {dealStatusOptions.map((option) => {
                     const included = includedStatuses.includes(option.id);
                     return (
@@ -101,14 +121,29 @@ export function ConversationList({
                         type="button"
                         aria-pressed={included}
                         onClick={() => onToggleStatus(option.id)}
-                        className={`cursor-pointer rounded-full border px-2.5 py-1 text-[11px] font-medium transition-colors ${
-                          included ? option.badge : "border-gray-200 bg-white text-gray-400 hover:bg-gray-50"
+                        className={`inline-flex cursor-pointer items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium transition-colors ${
+                          included
+                            ? selectedStatusClass[option.id]
+                            : "border-gray-200 bg-gray-50 text-gray-400 hover:bg-gray-100 hover:text-gray-700"
                         }`}
                       >
+                        {included ? (
+                          <Check className="h-3 w-3 shrink-0" strokeWidth={2.5} aria-hidden="true" />
+                        ) : null}
                         {option.label}
                       </button>
                     );
                   })}
+                </div>
+                <div className="flex items-center justify-end border-t border-gray-100 pt-3">
+                  <button
+                    type="button"
+                    onClick={onClearFilters}
+                    className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-2.5 py-1 text-xs font-medium text-gray-600 shadow-xs transition-colors hover:bg-gray-100 hover:text-gray-950"
+                  >
+                    <X className="h-3 w-3 shrink-0 text-gray-500" strokeWidth={2} aria-hidden="true" />
+                    {copy.clearFilters}
+                  </button>
                 </div>
               </div>
             ) : null}

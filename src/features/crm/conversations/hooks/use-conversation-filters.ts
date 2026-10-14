@@ -12,8 +12,9 @@ const orderedStatuses = dealStatusOptions.map((option) => option.id);
 
 export function useConversationFilters() {
   const [query, setQuery] = useState("");
-  const [included, setIncluded] = useState<DealStatus[]>(defaultIncludedDealStatuses);
-  const activeCount = included.length === orderedStatuses.length ? 0 : 1;
+  const [included, setIncluded] = useState<DealStatus[]>([...defaultIncludedDealStatuses]);
+  const dealStatusCount = orderedStatuses.length - included.length;
+  const activeCount = dealStatusCount;
 
   function toggleStatus(status: DealStatus) {
     setIncluded((current) => {
@@ -24,10 +25,16 @@ export function useConversationFilters() {
     });
   }
 
+  function clearFilters() {
+    setIncluded([...defaultIncludedDealStatuses]);
+  }
+
   function visibleItems(items: ConversationInboxItem[]): ConversationInboxItem[] {
     const needle = query.trim().toLowerCase();
     return items.filter((item) => {
-      if (!included.includes(item.dealStatus)) return false;
+      const statuses =
+        item.dealStatuses.length > 0 ? item.dealStatuses.map((deal) => deal.status) : [item.dealStatus];
+      if (!statuses.some((status) => included.includes(status))) return false;
       if (!needle) return true;
       return [item.contactName, item.contactPhone, item.contactEmail, item.preview]
         .join(" ")
@@ -36,5 +43,14 @@ export function useConversationFilters() {
     });
   }
 
-  return { query, setQuery, included, toggleStatus, activeCount, visibleItems };
+  return {
+    query,
+    setQuery,
+    included,
+    toggleStatus,
+    clearFilters,
+    dealStatusCount,
+    activeCount,
+    visibleItems,
+  };
 }

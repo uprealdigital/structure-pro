@@ -111,8 +111,10 @@ export function toConversationInboxItem(input: {
   summary: ConversationSummary;
   customer: Customer;
   deal: Deal;
+  deals: Deal[];
   preview: string;
 }): ConversationInboxItem | undefined {
+  const linked = input.deals.length > 0 ? input.deals : [input.deal];
   const item = conversationInboxItemSchema.safeParse({
     id: input.summary.id,
     updatedAt: input.summary.updatedAt,
@@ -122,6 +124,7 @@ export function toConversationInboxItem(input: {
     contactEmail: input.customer.email,
     dealId: input.deal.id,
     dealStatus: input.deal.status,
+    dealStatuses: linked.map((deal) => ({ id: deal.id, status: deal.status })),
     dealSource: input.deal.source,
     contractSent: input.summary.contractSent,
   });

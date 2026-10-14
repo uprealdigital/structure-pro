@@ -51,6 +51,19 @@ export const defaultIncludedDealStatuses: DealStatus[] = dealStatusOptions
   .map((option) => option.id)
   .filter((id) => id !== "deal_lost");
 
+const advancement: Record<DealStatus, number> = {
+  deal_won: 5,
+  partially_signed: 4,
+  quote_viewed: 3,
+  quote_sent: 2,
+  lead: 1,
+  deal_lost: 0,
+};
+
 export function dealStatusOption(status: DealStatus): DealStatusOption | undefined {
   return dealStatusOptions.find((option) => option.id === status);
+}
+
+export function dealAdvancement(status: DealStatus): number {
+  return advancement[status];
 }

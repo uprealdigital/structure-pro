@@ -40,6 +40,11 @@ function byNewest(left: Deal, right: Deal): number {
   return (right.createdAt ?? "").localeCompare(left.createdAt ?? "");
 }
 
+function linkedDeals(links: DealCustomer[], deals: Deal[], customerId: string): Deal[] {
+  const ids = new Set(links.filter((link) => link.customerId === customerId).map((link) => link.dealId));
+  return deals.filter((deal) => ids.has(deal.id));
+}
+
 function latestPrimaryDeal(links: DealCustomer[], deals: Deal[], customerId: string): Deal | undefined {
   const ids = new Set(
     links.filter((link) => link.customerId === customerId && link.isPrimary).map((link) => link.dealId),
@@ -149,6 +154,7 @@ export const getConversationInbox = cache(async (): Promise<ConversationInboxIte
       summary,
       customer,
       deal,
+      deals: linkedDeals(links, deals, customer.id),
       preview: activityPreview(activities.at(-1)),
     });
     if (item) items.push(item);

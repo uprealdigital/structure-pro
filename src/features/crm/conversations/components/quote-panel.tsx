@@ -2,12 +2,24 @@
 
 import { Calendar, Check, ChevronDown } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import { useRevisionMenuHeight } from "@/src/features/crm/conversations/hooks/use-revision-menu-height";
 import { copy } from "@/src/features/crm/conversations/locales/en";
 import type { ConversationQuoteRevision } from "@/src/features/crm/conversations/types";
 import { formatDealMenuDate, formatUpdatedAgo, revisionVersionLabel } from "@/src/features/crm/conversations/utils/formatting";
 import { specValue } from "@/src/features/crm/common/utils/formatting";
 
 const sectionTitle = "text-sm font-bold tracking-wider text-gray-900 uppercase";
+
+function RevisionSectionLabel({ label, count }: { label: string; count: number }) {
+  return (
+    <div className="flex items-center gap-1.5 px-2.5 py-1.5">
+      <span className="text-[10px] font-semibold tracking-wider text-gray-500 uppercase">{label}</span>
+      <span className="inline-flex min-w-4 items-center justify-center rounded-full bg-gray-100 px-1.5 py-0.5 font-mono text-[10px] font-semibold text-gray-600 tabular-nums">
+        {count}
+      </span>
+    </div>
+  );
+}
 
 function RevisionRow({
   revision,
@@ -80,6 +92,12 @@ export function QuoteRevisionMenu({
   const sent = revisions
     .filter((item) => item.status === "sent")
     .sort((left, right) => right.revisionNumber - left.revisionNumber);
+  const { panelRef, draftListRef, sentListRef, limits } = useRevisionMenuHeight(
+    open,
+    drafts.length,
+    sent.length,
+    revision.id,
+  );
 
   useEffect(() => {
     function close(event: MouseEvent) {
@@ -108,15 +126,21 @@ export function QuoteRevisionMenu({
       </button>
       {error ? <p className="pt-1 text-[11px] text-red-600">{error}</p> : null}
       {open ? (
-        <div className="absolute top-full right-0 z-50 mt-1.5 w-80 rounded-xl border border-gray-200/80 bg-white p-2 text-gray-900 shadow-xl">
-          <div className="px-2.5 py-1.5">
-            <span className="block text-[10px] font-semibold tracking-wider text-gray-500 uppercase">
-              {copy.draftRevisions}
-            </span>
-          </div>
-          <ul role="listbox" aria-label={copy.draftRevisions} className="space-y-1">
+        <div
+          ref={panelRef}
+          className="absolute top-full right-0 z-50 mt-1.5 w-80 rounded-xl border border-gray-200/80 bg-white p-2 text-gray-900 shadow-xl"
+          style={limits.menu > 0 ? { maxHeight: limits.menu } : undefined}
+        >
+          <RevisionSectionLabel label={copy.draftRevisions} count={drafts.length} />
+          <ul
+            ref={draftListRef}
+            role="listbox"
+            aria-label={copy.draftRevisions}
+            className={`space-y-1 ${limits.draft ? "overflow-y-auto overscroll-contain" : ""}`}
+            style={limits.draft ? { maxHeight: limits.draft } : undefined}
+          >
             {drafts.map((item) => (
-              <li key={item.id}>
+              <li key={item.id} data-revision-id={item.id}>
                 <RevisionRow
                   revision={item}
                   active={item.id === activeRevisionId}
@@ -130,15 +154,19 @@ export function QuoteRevisionMenu({
             ))}
           </ul>
           <div className="my-1 border-t border-gray-100" />
-          <div className="px-2.5 py-1.5">
-            <span className="block text-[10px] font-semibold tracking-wider text-gray-500 uppercase">{copy.sentQuotes}</span>
-          </div>
+          <RevisionSectionLabel label={copy.sentQuotes} count={sent.length} />
           {sent.length === 0 ? (
             <p className="px-2.5 pb-1 text-[11px] text-gray-400">{copy.noSentQuotes}</p>
           ) : (
-            <ul role="listbox" aria-label={copy.sentQuotes} className="space-y-1">
+            <ul
+              ref={sentListRef}
+              role="listbox"
+              aria-label={copy.sentQuotes}
+              className={`space-y-1 ${limits.sent ? "overflow-y-auto overscroll-contain" : ""}`}
+              style={limits.sent ? { maxHeight: limits.sent } : undefined}
+            >
               {sent.map((item) => (
-                <li key={item.id}>
+                <li key={item.id} data-revision-id={item.id}>
                   <RevisionRow
                     revision={item}
                     active={item.id === activeRevisionId}
