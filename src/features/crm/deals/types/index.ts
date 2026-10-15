@@ -15,12 +15,17 @@ export type DealStatus = z.infer<typeof dealStatusSchema>;
 
 export const dealIdSchema = z.string().trim().min(1);
 
+export const dealNameMaxLength = 75;
+
+export const dealNameSchema = z.string().trim().min(1).max(dealNameMaxLength);
+
 export const dealSchema = z.object({
   id: z.string(),
   quoteId: z.string(),
   source: dealSourceSchema,
   status: dealStatusSchema,
   previousStatus: dealStatusSchema.nullable(),
+  name: z.string().nullable(),
   createdAt: z.string().optional(),
 });
 
@@ -34,6 +39,7 @@ export const dealWriteSchema = z.object({
 export const dealPatchSchema = z.object({
   status: dealStatusSchema.optional(),
   quoteId: z.string().optional(),
+  name: dealNameSchema.optional(),
 });
 
 export const dealStageSchema = dealStatusSchema;

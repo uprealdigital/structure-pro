@@ -1,22 +1,14 @@
 "use client";
 
-import { Check, ChevronUp, Filter, Search, X } from "lucide-react";
+import { Check, ChevronUp, Filter, RotateCcw, Search, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { copy } from "@/src/features/crm/conversations/locales/en";
 import type { ConversationInboxItem } from "@/src/features/crm/conversations/types";
 import { formatConversationListTime } from "@/src/features/crm/conversations/utils/formatting";
 import { contactInitials } from "@/src/features/crm/common/utils/formatting";
-import { dealStatusOption, dealStatusOptions } from "@/src/features/crm/deals/utils/status";
+import { DealStatusBadge } from "@/src/features/crm/deals/components/deal-status-badge";
+import { dealStatusOptions } from "@/src/features/crm/deals/utils/status";
 import type { DealStatus } from "@/src/features/crm/deals/types";
-
-const inboxStatusClass: Record<DealStatus, string> = {
-  lead: "border-gray-200 bg-gray-100 text-gray-600",
-  quote_sent: "border-blue-200 bg-blue-50 text-blue-700",
-  quote_viewed: "border-purple-200 bg-purple-50 text-purple-700",
-  partially_signed: "border-amber-300 bg-amber-50 text-amber-800",
-  deal_won: "border-gray-200 bg-gray-50 text-emerald-700",
-  deal_lost: "border-red-200 bg-red-50 text-red-600",
-};
 
 const selectedStatusClass: Record<DealStatus, string> = {
   lead: "border-gray-300 bg-gray-100 text-gray-800 shadow-xs",
@@ -27,6 +19,33 @@ const selectedStatusClass: Record<DealStatus, string> = {
   deal_lost: "border-red-200 bg-red-50 text-red-600 shadow-xs",
 };
 
+function SectionSelection({
+  onSelectAll,
+  onDeselectAll,
+}: {
+  onSelectAll: () => void;
+  onDeselectAll: () => void;
+}) {
+  return (
+    <div className="inline-flex shrink-0 overflow-hidden rounded-md border border-gray-200 bg-white">
+      <button
+        type="button"
+        onClick={onSelectAll}
+        className="cursor-pointer border-r border-gray-200 px-2 py-1 text-[10px] font-medium text-gray-600 transition-colors hover:bg-gray-50 hover:text-gray-950"
+      >
+        {copy.selectAll}
+      </button>
+      <button
+        type="button"
+        onClick={onDeselectAll}
+        className="cursor-pointer px-2 py-1 text-[10px] font-medium text-gray-600 transition-colors hover:bg-gray-50 hover:text-gray-950"
+      >
+        {copy.deselectAll}
+      </button>
+    </div>
+  );
+}
+
 export function ConversationList({
   items,
   inboxEmpty,
@@ -36,6 +55,8 @@ export function ConversationList({
   onToggleStatus,
   onClearFilters,
   onResetFilters,
+  onSelectAllStatuses,
+  onDeselectAllStatuses,
   dealStatusCount,
   activeFilterCount,
   selectedId,
@@ -49,6 +70,8 @@ export function ConversationList({
   onToggleStatus: (status: DealStatus) => void;
   onClearFilters: () => void;
   onResetFilters: () => void;
+  onSelectAllStatuses: () => void;
+  onDeselectAllStatuses: () => void;
   dealStatusCount: number;
   activeFilterCount: number;
   selectedId?: string;
@@ -111,7 +134,7 @@ export function ConversationList({
     <section
       className={`${selectedId ? "hidden lg:flex" : "flex"} z-10 min-h-0 w-full shrink-0 flex-col self-stretch overflow-hidden border-r border-gray-200 bg-white lg:w-96`}
     >
-      <div className="relative z-20 border-b border-gray-200 px-4 pt-4 pb-3">
+      <div className="relative z-30 border-b border-gray-200 px-4 pt-4 pb-3">
         <div className="flex items-center gap-2">
           <label className="relative min-w-0 flex-1">
             <span className="sr-only">{copy.searchPlaceholder}</span>
@@ -145,17 +168,23 @@ export function ConversationList({
               <div
                 role="dialog"
                 aria-label={copy.filters}
-                className="absolute top-full right-0 z-40 mt-2 w-72 space-y-3 rounded-xl border border-gray-200 bg-white px-4 pt-4 pb-4 shadow-2xl"
+                className="absolute top-full right-0 z-40 mt-2 w-80 space-y-3 rounded-xl border border-gray-200 bg-white px-4 pt-4 pb-4 shadow-2xl"
               >
-                <div className="flex items-center gap-1.5">
-                  <span className="text-[10px] font-bold tracking-wider text-gray-700 uppercase">
-                    {copy.filterDealStatus}
-                  </span>
-                  {dealStatusCount > 0 ? (
-                    <span className="inline-flex items-center justify-center rounded-full bg-gray-100 px-1.5 py-0.5 font-mono text-[10px] font-semibold text-gray-600">
-                      {dealStatusCount}
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex min-w-0 items-center gap-1.5">
+                    <span className="text-[10px] font-bold tracking-wider text-gray-700 uppercase">
+                      {copy.filterDealStatus}
                     </span>
-                  ) : null}
+                    {dealStatusCount > 0 ? (
+                      <span className="inline-flex items-center justify-center rounded-full bg-gray-100 px-1.5 py-0.5 font-mono text-[10px] font-semibold text-gray-600">
+                        {dealStatusCount}
+                      </span>
+                    ) : null}
+                  </div>
+                  <SectionSelection
+                    onSelectAll={onSelectAllStatuses}
+                    onDeselectAll={onDeselectAllStatuses}
+                  />
                 </div>
                 <div className="flex flex-wrap gap-2 py-1">
                   {dealStatusOptions.map((option) => {
@@ -180,21 +209,22 @@ export function ConversationList({
                     );
                   })}
                 </div>
-                <div className="flex items-center justify-between border-t border-gray-100 pt-3">
-                  <button
-                    type="button"
-                    onClick={onClearFilters}
-                    className="cursor-pointer text-xs font-medium text-gray-500 transition-colors hover:text-gray-950"
-                  >
-                    {copy.clear}
-                  </button>
+                <div className="flex items-center justify-end gap-2 border-t border-gray-100 pt-3">
                   <button
                     type="button"
                     onClick={onResetFilters}
-                    className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-2.5 py-1 text-xs font-medium text-gray-600 shadow-xs transition-colors hover:bg-gray-100 hover:text-gray-950"
+                    className="inline-flex cursor-pointer items-center gap-1.5 text-xs font-medium text-gray-500 transition-colors hover:text-gray-950"
+                  >
+                    <RotateCcw className="h-3 w-3 shrink-0" strokeWidth={2} aria-hidden="true" />
+                    {copy.resetFilters}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={onClearFilters}
+                    className="inline-flex cursor-pointer items-center gap-1 rounded-lg border border-gray-200 bg-white px-2.5 py-1 text-xs font-medium text-gray-600 shadow-xs transition-colors hover:bg-gray-100 hover:text-gray-950"
                   >
                     <X className="h-3 w-3 shrink-0 text-gray-500" strokeWidth={2} aria-hidden="true" />
-                    {copy.resetFilters}
+                    {copy.clear}
                   </button>
                 </div>
               </div>
@@ -272,11 +302,7 @@ export function ConversationList({
                       {item.preview || copy.noMessages}
                     </span>
                     <span className="flex shrink-0 justify-end">
-                      <span
-                        className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium whitespace-nowrap ${inboxStatusClass[item.dealStatus]}`}
-                      >
-                        {dealStatusOption(item.dealStatus)?.label}
-                      </span>
+                      <DealStatusBadge status={item.dealStatus} />
                     </span>
                   </span>
                 </button>

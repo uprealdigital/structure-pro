@@ -24,7 +24,7 @@ import {
 import { readCustomer, updateCustomer } from "@/src/features/crm/common/db/customer";
 import { readDealCustomersForCustomer } from "@/src/features/crm/common/db/deal-customer";
 import { readDeal, updateDeal } from "@/src/features/crm/deals/db/deal";
-import { dealIdSchema, type DealStatus } from "@/src/features/crm/deals/types";
+import { dealIdSchema, dealNameSchema, type DealStatus } from "@/src/features/crm/deals/types";
 import { readQuoteRevision, updateQuoteRevision } from "@/src/features/crm/quotes/db/quote-revision";
 
 export async function openConversation(input: {
@@ -204,6 +204,27 @@ export async function sendConversationQuote(input: {
     };
   } catch (error) {
     const message = error instanceof Error ? error.message : "Could not send quote";
+    return { error: message };
+  }
+}
+
+export async function renameDeal(input: {
+  dealId: string;
+  name: string;
+}): Promise<{ success: true; data: { name: string } } | { error: string }> {
+  const id = dealIdSchema.safeParse(input.dealId);
+  const name = dealNameSchema.safeParse(input.name);
+  if (!id.success || !name.success) return { error: "A deal and name are required" };
+
+  try {
+    const deal = await readDeal(id.data);
+    if (!deal) return { error: "Deal was not found" };
+    await updateDeal(deal.id, { name: name.data });
+    revalidatePath("/crm/conversations");
+    revalidatePath("/crm/deals");
+    return { success: true, data: { name: name.data } };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Could not rename deal";
     return { error: message };
   }
 }

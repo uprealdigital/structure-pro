@@ -13,6 +13,7 @@ export type DealRow = {
   source: string;
   status: string;
   previous_status?: string | null;
+  name?: string | null;
   created_at?: string | null;
 };
 
@@ -34,6 +35,7 @@ export function toDeal(row: DealRow): Deal | undefined {
     source: row.source,
     status: legacyStatus[row.status] ?? row.status,
     previousStatus: storedStatus(row.previous_status),
+    name: row.name?.trim() || null,
     createdAt: row.created_at ?? undefined,
   });
   return deal.success ? deal.data : undefined;

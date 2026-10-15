@@ -1,13 +1,13 @@
 "use client";
 
-import { ArrowLeftRight, Check, ChevronDown, ChevronRight, CircleX, EllipsisVertical, Plus, RotateCcw } from "lucide-react";
+import { ArrowLeftRight, Check, ChevronDown, ChevronRight, EllipsisVertical, Pencil, Plus, RotateCcw, X } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { copy } from "@/src/features/crm/conversations/locales/en";
 import type { ConversationDealListItem, ConversationDealOption } from "@/src/features/crm/conversations/types";
 import { orderedDealMenu } from "@/src/features/crm/conversations/utils/deals";
 import { dealStatusOption } from "@/src/features/crm/deals/utils/status";
-import type { DealStatus } from "@/src/features/crm/deals/types";
+import { dealNameMaxLength, type DealStatus } from "@/src/features/crm/deals/types";
 
 function menuItems(deals: ConversationDealOption[]): ConversationDealListItem[] {
   return deals.map((deal) => ({
@@ -18,6 +18,111 @@ function menuItems(deals: ConversationDealOption[]): ConversationDealListItem[] 
     dateLabel: deal.dateLabel,
     createdAt: deal.deal.createdAt ?? "",
   }));
+}
+
+function DealNameEditor({
+  initial,
+  pending,
+  onConfirm,
+  onCancel,
+}: {
+  initial: string;
+  pending: boolean;
+  onConfirm: (name: string) => void;
+  onCancel: () => void;
+}) {
+  const [value, setValue] = useState(() => initial.slice(0, dealNameMaxLength));
+  const root = useRef<HTMLDivElement>(null);
+  const field = useRef<HTMLInputElement>(null);
+  const cancel = useRef(onCancel);
+  cancel.current = onCancel;
+
+  useEffect(() => {
+    field.current?.focus();
+    field.current?.select();
+  }, []);
+
+  useEffect(() => {
+    function outside(event: MouseEvent) {
+      if (pending) return;
+      if (root.current?.contains(event.target as Node)) return;
+      cancel.current();
+    }
+    const timer = window.setTimeout(() => document.addEventListener("mousedown", outside), 0);
+    return () => {
+      window.clearTimeout(timer);
+      document.removeEventListener("mousedown", outside);
+    };
+  }, [pending]);
+
+  function confirm() {
+    if (pending) return;
+    const next = value.trim().slice(0, dealNameMaxLength);
+    if (!next || next === initial.trim()) {
+      onCancel();
+      return;
+    }
+    onConfirm(next);
+  }
+
+  return (
+    <div
+      ref={root}
+      className="inline-flex items-center rounded-md border border-gray-300 bg-white py-0.5 pr-0.5 pl-2 shadow-xs"
+    >
+      <span className="inline-grid min-w-[4ch] items-center">
+        <span
+          aria-hidden="true"
+          className="invisible col-start-1 row-start-1 px-0.5 font-serif text-sm tracking-tight whitespace-pre"
+        >
+          {value || " "}
+        </span>
+        <input
+          ref={field}
+          value={value}
+          maxLength={dealNameMaxLength}
+          aria-label={copy.renameDeal}
+          disabled={pending}
+          onChange={(event) => setValue(event.target.value.slice(0, dealNameMaxLength))}
+          onKeyDown={(event) => {
+            if (event.key === "Enter") {
+              event.preventDefault();
+              confirm();
+            } else if (event.key === "Escape") {
+              event.preventDefault();
+              onCancel();
+            }
+          }}
+          className="col-start-1 row-start-1 w-full min-w-0 bg-transparent px-0.5 font-serif text-sm tracking-tight text-gray-950 outline-none"
+        />
+      </span>
+      <span aria-hidden="true" className="ml-1.5 shrink-0 text-[11px] tabular-nums text-gray-400">
+        {copy.renameCharacterCount(value.length, dealNameMaxLength)}
+      </span>
+      <span className="ml-1 inline-flex shrink-0 items-center gap-0.5">
+        <button
+          type="button"
+          aria-label={copy.confirmRename}
+          disabled={pending}
+          onMouseDown={(event) => event.preventDefault()}
+          onClick={confirm}
+          className="flex h-5 w-5 cursor-pointer items-center justify-center rounded-full bg-[#121314] text-white disabled:opacity-50"
+        >
+          <Check className="h-3 w-3" strokeWidth={2.5} aria-hidden="true" />
+        </button>
+        <button
+          type="button"
+          aria-label={copy.cancelRename}
+          disabled={pending}
+          onMouseDown={(event) => event.preventDefault()}
+          onClick={onCancel}
+          className="flex h-5 w-5 cursor-pointer items-center justify-center rounded-full text-gray-500 hover:bg-gray-100 disabled:opacity-50"
+        >
+          <X className="h-3 w-3" strokeWidth={2.5} aria-hidden="true" />
+        </button>
+      </span>
+    </div>
+  );
 }
 
 function DealSwitchList({
@@ -126,6 +231,7 @@ export function DealHeading({
   lost,
   pending,
   onSelectDeal,
+  onRename,
   onMarkLost,
   onReopen,
 }: {
@@ -136,6 +242,7 @@ export function DealHeading({
   lost: boolean;
   pending: boolean;
   onSelectDeal: (dealId: string) => void;
+  onRename: (name: string) => Promise<{ success: true } | { error: string }>;
   onMarkLost: () => void;
   onReopen: () => void;
 }) {
@@ -143,6 +250,9 @@ export function DealHeading({
   const [switchOpen, setSwitchOpen] = useState(false);
   const [dealsOpen, setDealsOpen] = useState(false);
   const [showLost, setShowLost] = useState(false);
+  const [renaming, setRenaming] = useState(false);
+  const [renamePending, setRenamePending] = useState(false);
+  const [renameError, setRenameError] = useState("");
   const menu = useRef<HTMLDivElement>(null);
   const items = menuItems(deals);
   const extra = Math.max(0, items.length - 1);
@@ -172,6 +282,12 @@ export function DealHeading({
     };
   }, []);
 
+  useEffect(() => {
+    setRenaming(false);
+    setRenamePending(false);
+    setRenameError("");
+  }, [selectedId]);
+
   function toggleActions() {
     setDealsOpen(false);
     setActionsOpen((value) => {
@@ -198,6 +314,32 @@ export function DealHeading({
     });
   }
 
+  function beginRename() {
+    setActionsOpen(false);
+    setSwitchOpen(false);
+    setDealsOpen(false);
+    setRenameError("");
+    setRenaming(true);
+  }
+
+  function cancelRename() {
+    if (renamePending) return;
+    setRenameError("");
+    setRenaming(false);
+  }
+
+  async function commitRename(name: string) {
+    setRenamePending(true);
+    setRenameError("");
+    const result = await onRename(name);
+    setRenamePending(false);
+    if ("error" in result) {
+      setRenameError(copy.renameDealError);
+      return;
+    }
+    setRenaming(false);
+  }
+
   function choose(dealId: string) {
     setActionsOpen(false);
     setSwitchOpen(false);
@@ -209,7 +351,19 @@ export function DealHeading({
   return (
     <div ref={menu} className="relative z-40 flex items-center gap-1.5">
       <div className="relative flex items-center">
-        {extra > 0 ? (
+        {renaming ? (
+          <div className="relative">
+            <DealNameEditor
+              initial={title || copy.quote}
+              pending={renamePending}
+              onConfirm={(name) => void commitRename(name)}
+              onCancel={cancelRename}
+            />
+            {renameError ? (
+              <p className="absolute top-full left-0 mt-1 whitespace-nowrap text-[11px] text-red-600">{renameError}</p>
+            ) : null}
+          </div>
+        ) : extra > 0 ? (
           <button
             type="button"
             title={copy.viewOtherDeals}
@@ -258,7 +412,7 @@ export function DealHeading({
           aria-haspopup="menu"
           aria-label={copy.moreDealActions}
           onClick={toggleActions}
-          className="flex h-7 w-7 cursor-pointer items-center justify-center rounded-full bg-gray-50/90 text-gray-600 shadow-xs transition-colors hover:bg-gray-100 hover:text-gray-900"
+          className="flex h-7 w-7 cursor-pointer items-center justify-center rounded-full bg-transparent text-gray-600 transition-colors hover:bg-gray-100 hover:text-gray-900"
         >
           <EllipsisVertical className="h-4 w-4" aria-hidden="true" />
         </button>
@@ -267,36 +421,47 @@ export function DealHeading({
             role="menu"
             className="absolute top-full left-0 z-50 mt-1.5 w-52 rounded-xl border border-gray-200/90 bg-white p-1 shadow-xl"
           >
-            <div className="relative">
-              <button
-                type="button"
-                role="menuitem"
-                aria-expanded={switchOpen}
-                aria-haspopup="menu"
-                onClick={toggleSwitch}
-                className={`flex w-full cursor-pointer items-center justify-between rounded-lg px-2.5 py-1.5 text-left text-xs font-medium transition-colors ${
-                  switchOpen ? "bg-gray-100 text-black" : "text-gray-800 hover:bg-gray-50"
-                }`}
-              >
-                <span className="flex items-center gap-2">
-                  <ArrowLeftRight className="h-3.5 w-3.5 shrink-0 text-gray-700" aria-hidden="true" />
-                  <span>{copy.switchActiveDeal}</span>
-                </span>
-                <ChevronRight className="h-3 w-3 shrink-0 text-gray-500" aria-hidden="true" />
-              </button>
-              {switchOpen ? (
-                <div className="absolute top-full left-0 z-50 mt-1 w-80 max-w-[calc(100vw-2.5rem)] overflow-hidden rounded-xl border border-gray-200/90 bg-white shadow-2xl md:top-0 md:left-full md:mt-0 md:ml-1.5">
-                  <DealSwitchList
-                    deals={visible}
-                    selectedId={selectedId}
-                    showLost={showLost}
-                    lostCount={lostCount}
-                    onShowLost={() => setShowLost((value) => !value)}
-                    onChoose={choose}
-                  />
-                </div>
-              ) : null}
-            </div>
+            {items.length > 1 ? (
+              <div className="relative">
+                <button
+                  type="button"
+                  role="menuitem"
+                  aria-expanded={switchOpen}
+                  aria-haspopup="menu"
+                  onClick={toggleSwitch}
+                  className={`flex w-full cursor-pointer items-center justify-between rounded-lg px-2.5 py-1.5 text-left text-xs font-medium transition-colors ${
+                    switchOpen ? "bg-gray-100 text-black" : "text-gray-800 hover:bg-gray-50"
+                  }`}
+                >
+                  <span className="flex items-center gap-2">
+                    <ArrowLeftRight className="h-3.5 w-3.5 shrink-0 text-gray-700" aria-hidden="true" />
+                    <span>{copy.switchActiveDeal}</span>
+                  </span>
+                  <ChevronRight className="h-3 w-3 shrink-0 text-gray-500" aria-hidden="true" />
+                </button>
+                {switchOpen ? (
+                  <div className="absolute top-full left-0 z-50 mt-1 w-80 max-w-[calc(100vw-2.5rem)] overflow-hidden rounded-xl border border-gray-200/90 bg-white shadow-2xl md:top-0 md:left-full md:mt-0 md:ml-1.5">
+                    <DealSwitchList
+                      deals={visible}
+                      selectedId={selectedId}
+                      showLost={showLost}
+                      lostCount={lostCount}
+                      onShowLost={() => setShowLost((value) => !value)}
+                      onChoose={choose}
+                    />
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
+            <button
+              type="button"
+              role="menuitem"
+              onClick={beginRename}
+              className="flex w-full cursor-pointer items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-xs font-medium text-gray-700 transition-colors hover:bg-gray-50 hover:text-black"
+            >
+              <Pencil className="h-3.5 w-3.5 shrink-0 text-gray-500" aria-hidden="true" />
+              <span>{copy.renameDeal}</span>
+            </button>
             <Link
               href="/"
               role="menuitem"
@@ -327,7 +492,7 @@ export function DealHeading({
               {lost ? (
                 <RotateCcw className="h-3.5 w-3.5 shrink-0 text-gray-600" aria-hidden="true" />
               ) : (
-                <CircleX className="h-3.5 w-3.5 shrink-0 text-red-600" aria-hidden="true" />
+                <X className="h-3.5 w-3.5 shrink-0 text-red-600" aria-hidden="true" />
               )}
               <span>{lost ? copy.reopenDeal : copy.markAsLost}</span>
             </button>

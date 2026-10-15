@@ -50,7 +50,7 @@ export const getDealBoard = cache(async (): Promise<DealBoardItem[]> => {
     const item = toDealBoardItem({
       deal,
       contactName: related.map((entry) => entry.customer.fullName).join(", "),
-      productName: dealProductName(specs),
+      productName: deal.name?.trim() || dealProductName(specs),
       detail: dealDetailLine(specs),
       valueLabel: quote?.summary.totalLabel ?? "",
       conversationId: conversation?.id,

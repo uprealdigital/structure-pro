@@ -8,6 +8,7 @@ import { CustomerMenu } from "@/src/features/crm/conversations/components/custom
 import { DealHeading } from "@/src/features/crm/conversations/components/deal-menu";
 import { DealSummary } from "@/src/features/crm/conversations/components/deal-summary";
 import { QuotePanel, QuoteRevisionMenu } from "@/src/features/crm/conversations/components/quote-panel";
+import { Toast } from "@/src/common/components/toast";
 import { ReviewSendModal } from "@/src/features/crm/conversations/components/review-send-modal";
 import { useConversationActivities } from "@/src/features/crm/conversations/hooks/use-conversation-activities";
 import { copy } from "@/src/features/crm/conversations/locales/en";
@@ -28,7 +29,7 @@ import {
 import { activateQuoteRevision, saveQuoteSelections } from "@/src/features/crm/quotes/server/actions";
 import type { QuoteSelections } from "@/src/features/cpq/types";
 import { DealStatusBadge } from "@/src/features/crm/deals/components/deal-status-badge";
-import type { DealStatus } from "@/src/features/crm/deals/types";
+import { dealNameMaxLength, type DealStatus } from "@/src/features/crm/deals/types";
 import { participantsForDeal } from "@/src/features/crm/conversations/utils/participants";
 
 function revisionStatusLabel(revision: ConversationQuoteRevision): string {
@@ -84,12 +85,14 @@ export function ConversationDetail({
   onBack,
   onMarkLost,
   onReopen,
+  onRename,
   onActivateDeal,
   onSelectCustomer,
 }: {
   workspace: ConversationWorkspace;
   onBack: () => void;
   onMarkLost: (dealId: string) => Promise<{ success: true } | { error: string }>;
+  onRename: (dealId: string, name: string) => Promise<{ success: true; data: { name: string } } | { error: string }>;
   onReopen: (
     dealId: string,
   ) => Promise<{ success: true; data: { status: DealStatus } } | { error: string }>;
@@ -101,20 +104,35 @@ export function ConversationDetail({
   const [selectedRevisionId, setSelectedRevisionId] = useState<string | null>(null);
   const [quotePatches, setQuotePatches] = useState<Record<string, ConversationQuote>>({});
   const [dealStatusPatches, setDealStatusPatches] = useState<Record<string, DealStatus>>({});
+  const [dealNamePatches, setDealNamePatches] = useState<Record<string, string>>({});
+  const [renameNotice, setRenameNotice] = useState<{
+    id: number;
+    dealId: string;
+    name: string;
+    previousName: string;
+  } | null>(null);
+  const [undoingRename, setUndoingRename] = useState(false);
+  const renameNoticeRef = useRef(renameNotice);
+  renameNoticeRef.current = renameNotice;
   const deals = workspace.deals.map((option) => {
     const status = dealStatusPatches[option.id];
-    const deal = status
-      ? {
-          ...option.deal,
-          previousStatus: option.deal.status === status ? option.deal.previousStatus : option.deal.status,
-          status,
-        }
-      : option.deal;
+    const renamed = dealNamePatches[option.id];
+    const deal = {
+      ...option.deal,
+      ...(status
+        ? {
+            previousStatus: option.deal.status === status ? option.deal.previousStatus : option.deal.status,
+            status,
+          }
+        : {}),
+      ...(renamed ? { name: renamed } : {}),
+    };
     const patch = option.quote ? quotePatches[option.quote.id] : undefined;
-    if (!patch && !status) return option;
+    const customName = deal.name?.trim();
+    if (!patch && !status && !renamed) return option;
     return {
       ...option,
-      title: patch ? productTitle(patch.specs) || option.title : option.title,
+      title: customName || (patch ? productTitle(patch.specs) || option.title : option.title),
       priceLabel: patch?.totalLabel ?? option.priceLabel,
       stage: deal.status,
       deal,
@@ -181,6 +199,10 @@ export function ConversationDetail({
   const viewed = viewedRevision(focused.quote, selectedRevisionId);
   const title = productTitle(viewed?.specs ?? specs);
   const channels: ComposerChannel[] = ["sms", "facebook", "email"];
+
+  useEffect(() => {
+    setRenameNotice(null);
+  }, [workspace.id]);
 
   useEffect(() => {
     function closeMenu(event: MouseEvent) {
@@ -291,6 +313,27 @@ export function ConversationDetail({
     setDraft("");
   }
 
+  async function rename(name: string) {
+    const dealId = focused.deal.id;
+    const previousName = (focusedOption?.title || copy.quote).slice(0, dealNameMaxLength);
+    const result = await onRename(dealId, name);
+    if ("error" in result) return result;
+    setDealNamePatches((current) => ({ ...current, [dealId]: result.data.name }));
+    setRenameNotice({ id: Date.now(), dealId, name: result.data.name, previousName });
+    return { success: true as const };
+  }
+
+  async function undoRename() {
+    const notice = renameNoticeRef.current;
+    if (!notice || undoingRename) return;
+    setUndoingRename(true);
+    const result = await onRename(notice.dealId, notice.previousName);
+    setUndoingRename(false);
+    if ("error" in result) return;
+    setDealNamePatches((current) => ({ ...current, [notice.dealId]: result.data.name }));
+    setRenameNotice((current) => (current?.id === notice.id ? null : current));
+  }
+
   async function markLost() {
     if (updatingStatus || focused.deal.status === "deal_lost") return;
     const dealId = focused.deal.id;
@@ -356,6 +399,7 @@ export function ConversationDetail({
               lost={focused.deal.status === "deal_lost"}
               pending={updatingStatus}
               onSelectDeal={selectDeal}
+              onRename={rename}
               onMarkLost={() => void markLost()}
               onReopen={() => void reopen()}
             />
@@ -414,6 +458,17 @@ export function ConversationDetail({
               </div>
             ) : null}
           </div>
+          {renameNotice ? (
+            <Toast
+              key={renameNotice.id}
+              message={copy.dealRenamedTo(renameNotice.name)}
+              actionLabel={copy.undo}
+              dismissLabel={copy.dismiss}
+              pending={undoingRename}
+              onAction={() => void undoRename()}
+              onDismiss={() => setRenameNotice((current) => (current?.id === renameNotice.id ? null : current))}
+            />
+          ) : null}
           {editing || detailsTop == null ? null : (
             <div
               ref={toggleRef}

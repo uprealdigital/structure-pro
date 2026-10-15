@@ -14,6 +14,7 @@
 -- If crm.conversations has one row per deal, run migrate-crm-conversation-per-customer.sql.
 -- If crm.customers has no active_deal_id, run migrate-crm-conversation-active-deal.sql.
 -- If any customer has no conversation, run migrate-crm-conversation-for-every-customer.sql.
+-- If crm.deals has no name, run migrate-crm-deal-name.sql.
 
 create schema if not exists cpq;
 create schema if not exists crm;
@@ -55,6 +56,7 @@ create table if not exists crm.deals (
   source text not null check (source in ('quote', 'yard_preview')),
   status text not null default 'lead' check (status in ('lead', 'quote_sent', 'quote_viewed', 'partially_signed', 'deal_won', 'deal_lost')),
   previous_status text check (previous_status in ('lead', 'quote_sent', 'quote_viewed', 'partially_signed', 'deal_won', 'deal_lost')),
+  name text check (name is null or char_length(name) between 1 and 75),
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );

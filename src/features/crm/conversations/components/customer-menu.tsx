@@ -1,11 +1,21 @@
 "use client";
 
-import { ChevronDown, Mail, Phone, Plus } from "lucide-react";
+import { ChevronDown, Eye, Mail, Phone, Plus } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { contactInitials } from "@/src/features/crm/common/utils/formatting";
 import { copy } from "@/src/features/crm/conversations/locales/en";
 import type { ConversationParticipant } from "@/src/features/crm/conversations/types";
 import type { Customer } from "@/src/features/crm/common/types";
+
+function menuOrder(participants: ConversationParticipant[], customerId: string): ConversationParticipant[] {
+  return [...participants].sort((left, right) => {
+    const leftActive = left.customer.id === customerId;
+    const rightActive = right.customer.id === customerId;
+    if (leftActive !== rightActive) return leftActive ? -1 : 1;
+    if (left.isPrimary !== right.isPrimary) return left.isPrimary ? -1 : 1;
+    return left.customer.fullName.localeCompare(right.customer.fullName);
+  });
+}
 
 function stackAvatars(participants: ConversationParticipant[], customerId: string): ConversationParticipant[] {
   const front = participants[0];
@@ -94,7 +104,7 @@ export function CustomerMenu({
           className="absolute top-full left-0 z-50 mt-2 w-80 overflow-hidden rounded-2xl border border-gray-200/80 bg-white shadow-xl"
         >
           <div className="space-y-2.5 border-b border-gray-100 p-3.5">
-            {participants.map((participant) => {
+            {menuOrder(participants, customer.id).map((participant) => {
               const primary = participant.isPrimary;
               const current = participant.customer.id === customer.id;
               return (
@@ -104,26 +114,42 @@ export function CustomerMenu({
                   role="menuitem"
                   aria-current={current ? "true" : undefined}
                   onClick={() => choose(participant)}
-                  className={`w-full rounded-xl border border-gray-200/60 p-2.5 text-left transition-colors ${
-                    primary ? "bg-gray-50/90 hover:bg-gray-100" : "bg-white hover:bg-gray-50"
+                  className={`w-full rounded-xl border p-2.5 text-left transition-colors ${
+                    current
+                      ? "border-gray-300 bg-gray-200/80 hover:bg-gray-200"
+                      : primary
+                        ? "border-gray-200/60 bg-gray-50/90 hover:bg-gray-100"
+                        : "border-gray-200/60 bg-white hover:bg-gray-50"
                   }`}
                 >
                   <span className="flex items-start gap-2.5">
                     <span
                       className={`mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full font-serif text-[11px] font-bold ${
-                        primary ? "bg-[#121314] text-white" : "bg-gray-200 text-gray-700"
+                        current || primary ? "bg-[#121314] text-white" : "bg-gray-200 text-gray-700"
                       }`}
                     >
                       {contactInitials(participant.customer.fullName)}
                     </span>
-                    <span className="min-w-0">
-                      <span className="flex items-center gap-1.5">
-                        <span className={`text-xs text-gray-950 ${primary ? "font-bold" : "font-semibold"}`}>
-                          {participant.customer.fullName}
+                    <span className="min-w-0 flex-1">
+                      <span className="flex items-start justify-between gap-2">
+                        <span className="flex min-w-0 items-center gap-1.5">
+                          <span className={`text-xs text-gray-950 ${current || primary ? "font-bold" : "font-semibold"}`}>
+                            {participant.customer.fullName}
+                          </span>
+                          {primary ? (
+                            <span
+                              className={`rounded-full px-1.5 py-0.5 text-[9px] leading-none font-semibold text-gray-800 ${
+                                current ? "bg-white" : "bg-gray-200"
+                              }`}
+                            >
+                              {copy.primary}
+                            </span>
+                          ) : null}
                         </span>
-                        {primary ? (
-                          <span className="rounded-full bg-gray-200 px-1.5 py-0.5 text-[9px] leading-none font-semibold text-gray-800">
-                            {copy.primary}
+                        {current ? (
+                          <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-white px-1.5 py-0.5 text-[9px] leading-none font-semibold text-gray-800">
+                            <Eye className="h-2.5 w-2.5 shrink-0" strokeWidth={2} aria-hidden="true" />
+                            {copy.viewing}
                           </span>
                         ) : null}
                       </span>

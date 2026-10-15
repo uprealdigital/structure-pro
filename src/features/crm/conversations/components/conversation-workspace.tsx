@@ -10,6 +10,7 @@ import { copy } from "@/src/features/crm/conversations/locales/en";
 import {
   ensureCustomerConversation,
   markDealLost,
+  renameDeal,
   reopenDeal,
   setCustomerActiveDeal,
 } from "@/src/features/crm/conversations/server/actions";
@@ -121,6 +122,10 @@ export function ConversationWorkspaceView({
     void selection.selectConversation(openedId, dealId);
   }
 
+  async function onRename(dealId: string, name: string) {
+    return renameDeal({ dealId, name });
+  }
+
   async function onMarkLost(dealId: string): Promise<{ success: true } | { error: string }> {
     const result = await markDealLost(dealId);
     if ("error" in result) return result;
@@ -148,6 +153,8 @@ export function ConversationWorkspaceView({
         onToggleStatus={filters.toggleStatus}
         onClearFilters={filters.clearFilters}
         onResetFilters={filters.resetFilters}
+        onSelectAllStatuses={filters.selectAllStatuses}
+        onDeselectAllStatuses={filters.deselectAllStatuses}
         dealStatusCount={filters.dealStatusCount}
         activeFilterCount={filters.activeCount}
         selectedId={selection.selectedId}
@@ -166,6 +173,7 @@ export function ConversationWorkspaceView({
             workspace={selection.workspace}
             onBack={selection.clearConversation}
             onMarkLost={onMarkLost}
+            onRename={onRename}
             onReopen={onReopen}
             onActivateDeal={activateDeal}
             onSelectCustomer={selectCustomer}

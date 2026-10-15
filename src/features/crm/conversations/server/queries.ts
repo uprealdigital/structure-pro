@@ -141,7 +141,7 @@ async function dealOption(
   const specs = active?.specs ?? quoteRecord?.summary.specs ?? [];
   const option = conversationDealOptionSchema.safeParse({
     id: deal.id,
-    title: productTitle(specs) || quoteRecord?.invoiceId || "",
+    title: deal.name?.trim() || productTitle(specs) || quoteRecord?.invoiceId || "",
     priceLabel: active?.totalLabel ?? quoteRecord?.summary.totalLabel ?? "",
     stage: deal.status,
     dateLabel: formatDealMenuDate(deal.createdAt ?? ""),

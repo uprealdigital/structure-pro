@@ -33,6 +33,14 @@ export function useConversationFilters() {
     setIncluded([...defaultIncludedDealStatuses]);
   }
 
+  function selectAllStatuses() {
+    setIncluded([...orderedStatuses]);
+  }
+
+  function deselectAllStatuses() {
+    setIncluded([]);
+  }
+
   function visibleItems(items: ConversationInboxItem[]): ConversationInboxItem[] {
     const needle = query.trim().toLowerCase();
     return items.filter((item) => {
@@ -52,6 +60,8 @@ export function useConversationFilters() {
     toggleStatus,
     clearFilters,
     resetFilters,
+    selectAllStatuses,
+    deselectAllStatuses,
     dealStatusCount,
     activeCount,
     visibleItems,

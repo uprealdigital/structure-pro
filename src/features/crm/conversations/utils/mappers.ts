@@ -147,7 +147,7 @@ export function toConversationDealListItem(input: {
   const summary = input.selections ? priceSummary(input.selections) : undefined;
   const item = conversationDealListItemSchema.safeParse({
     id: input.deal.id,
-    title: productTitle(summary?.specs ?? []) || input.invoiceId || "",
+    title: input.deal.name?.trim() || productTitle(summary?.specs ?? []) || input.invoiceId || "",
     priceLabel: summary?.totalLabel ?? "",
     stage: input.deal.status,
     dateLabel: formatDealMenuDate(input.deal.createdAt ?? ""),
