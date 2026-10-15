@@ -107,6 +107,18 @@ values
   )
 on conflict (id) do nothing;
 
+do $$
+begin
+  if exists (
+    select 1
+    from pg_trigger
+    where tgname = 'customers_create_conversation'
+      and tgrelid = 'crm.customers'::regclass
+  ) then
+    alter table crm.customers disable trigger customers_create_conversation;
+  end if;
+end $$;
+
 insert into crm.customers (id, full_name, phone, email, opted_out, created_at, updated_at)
 values
   (
@@ -232,6 +244,69 @@ values
     now() - interval '3 hours'
   )
 on conflict (id) do nothing;
+
+insert into crm.conversations (id, lookup_key, customer_id, contract_sent, created_at, updated_at)
+select
+  seed.id,
+  seed.lookup_key,
+  seed.customer_id,
+  seed.contract_sent,
+  seed.created_at,
+  seed.updated_at
+from (
+  values
+    (
+      '44444444-4444-4444-8444-444444444404'::uuid,
+      '+15550001004',
+      '33333333-3333-4333-8333-333333333304'::uuid,
+      false,
+      now() - interval '5 days',
+      now() - interval '1 day'
+    ),
+    (
+      '44444444-4444-4444-8444-444444444406'::uuid,
+      '+15550001006',
+      '33333333-3333-4333-8333-333333333306'::uuid,
+      false,
+      now() - interval '2 days',
+      now() - interval '2 days'
+    ),
+    (
+      '44444444-4444-4444-8444-444444444407'::uuid,
+      '+15550001007',
+      '33333333-3333-4333-8333-333333333307'::uuid,
+      false,
+      now() - interval '18 hours',
+      now() - interval '18 hours'
+    ),
+    (
+      '44444444-4444-4444-8444-444444444408'::uuid,
+      '+15550001008',
+      '33333333-3333-4333-8333-333333333308'::uuid,
+      false,
+      now() - interval '6 hours',
+      now() - interval '6 hours'
+    )
+) as seed (id, lookup_key, customer_id, contract_sent, created_at, updated_at)
+where not exists (
+  select 1
+  from crm.conversations as conversation
+  where conversation.customer_id = seed.customer_id
+     or conversation.lookup_key = seed.lookup_key
+);
+
+do $$
+begin
+  if exists (
+    select 1
+    from pg_trigger
+    where tgname = 'customers_create_conversation'
+      and tgrelid = 'crm.customers'::regclass
+      and tgenabled = 'D'
+  ) then
+    alter table crm.customers enable trigger customers_create_conversation;
+  end if;
+end $$;
 
 insert into crm.activities (
   conversation_id,

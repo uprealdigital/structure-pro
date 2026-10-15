@@ -78,6 +78,7 @@ export async function createQuoteAction(input: {
   let dealId: string | undefined;
   let createdConversation = false;
   let lookupKey: string | undefined;
+  let conversationId: string | undefined;
 
   try {
     quoteId = await createQuote({ invoiceId, selections: selections.data });
@@ -103,7 +104,11 @@ export async function createQuoteAction(input: {
     );
 
     const { POST: start } = await import("@/src/app/api/ai/conversations/route");
-    const started = await readJson<{ lookupKey: string; created?: boolean }>(
+    const started = await readJson<{
+      lookupKey: string;
+      conversationId?: string;
+      created?: boolean;
+    }>(
       await callRouter(start, "/api/ai/conversations", {
         body: {
           phone,
@@ -115,6 +120,7 @@ export async function createQuoteAction(input: {
       }),
     );
     lookupKey = started.lookupKey;
+    conversationId = started.conversationId;
     createdConversation = started.created === true;
 
     revalidatePath("/");
@@ -125,6 +131,12 @@ export async function createQuoteAction(input: {
       await callRouter(removeConversation, "/api/ai/conversations", {
         method: "DELETE",
         body: { lookupKey },
+      }).catch(() => undefined);
+    } else if (conversationId) {
+      const { DELETE: removeConversation } = await import("@/src/app/api/ai/conversations/route");
+      await callRouter(removeConversation, "/api/ai/conversations", {
+        method: "DELETE",
+        body: { conversationId, latestActivity: true },
       }).catch(() => undefined);
     }
     if (dealId) {

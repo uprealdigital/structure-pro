@@ -5,6 +5,7 @@ import { describeSelections } from "@/src/features/cpq/utils/pricing";
 import { readCustomers } from "@/src/features/crm/common/db/customer";
 import { readDealCustomers } from "@/src/features/crm/common/db/deal-customer";
 import { readConversations } from "@/src/features/crm/conversations/db/conversation";
+import { canonicalConversationByCustomer } from "@/src/features/crm/conversations/utils/conversations";
 import { readDeals } from "@/src/features/crm/deals/db/deal";
 import { contractOnDeal, quoteIssued } from "@/src/features/crm/deals/utils/mappers";
 import { readQuotes } from "@/src/features/crm/quotes/db/quote";
@@ -36,19 +37,21 @@ export const getQuoteList = cache(async (): Promise<QuoteListItem[]> => {
     dealsByQuote.set(deal.quoteId, related);
   }
   const dealById = new Map(deals.map((deal) => [deal.id, deal]));
-  const conversationByDeal = new Map(
-    conversations.flatMap((conversation) =>
-      conversation.dealId ? [[conversation.dealId, conversation] as const] : [],
-    ),
-  );
+  const conversationByCustomer = canonicalConversationByCustomer(conversations);
+  const primaryDealsByCustomer = new Map<string, number>();
+  for (const link of links) {
+    if (!link.isPrimary) continue;
+    primaryDealsByCustomer.set(link.customerId, (primaryDealsByCustomer.get(link.customerId) ?? 0) + 1);
+  }
   const contractQuoteIds = new Set<string>();
   for (const link of links) {
     if (!link.isPrimary) continue;
-    const conversation = conversationByDeal.get(link.dealId);
+    const conversation = conversationByCustomer.get(link.customerId);
     if (!conversation?.contractSent) continue;
     const deal = dealById.get(link.dealId);
     if (!deal) continue;
-    if (contractOnDeal(deal.status, true, 1)) contractQuoteIds.add(deal.quoteId);
+    const primaryDealCount = primaryDealsByCustomer.get(link.customerId) ?? 1;
+    if (contractOnDeal(deal.status, true, primaryDealCount)) contractQuoteIds.add(deal.quoteId);
   }
 
   const items: QuoteListItem[] = [];

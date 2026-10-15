@@ -26,15 +26,17 @@ export function useConversationFilters() {
   }
 
   function clearFilters() {
+    setIncluded([...orderedStatuses]);
+  }
+
+  function resetFilters() {
     setIncluded([...defaultIncludedDealStatuses]);
   }
 
   function visibleItems(items: ConversationInboxItem[]): ConversationInboxItem[] {
     const needle = query.trim().toLowerCase();
     return items.filter((item) => {
-      const statuses =
-        item.dealStatuses.length > 0 ? item.dealStatuses.map((deal) => deal.status) : [item.dealStatus];
-      if (!statuses.some((status) => included.includes(status))) return false;
+      if (!included.includes(item.dealStatus)) return false;
       if (!needle) return true;
       return [item.contactName, item.contactPhone, item.contactEmail, item.preview]
         .join(" ")
@@ -49,6 +51,7 @@ export function useConversationFilters() {
     included,
     toggleStatus,
     clearFilters,
+    resetFilters,
     dealStatusCount,
     activeCount,
     visibleItems,

@@ -4,6 +4,7 @@ import type { Customer } from "@/src/features/crm/common/types";
 import {
   activitySchema,
   callSchema,
+  conversationDealListItemSchema,
   conversationInboxItemSchema,
   conversationQuoteRevisionSchema,
   conversationQuoteSchema,
@@ -12,12 +13,13 @@ import {
   type Activity,
   type Call,
   type Conversation,
+  type ConversationDealListItem,
   type ConversationInboxItem,
   type ConversationQuote,
   type ConversationQuoteRevision,
   type ConversationSummary,
 } from "@/src/features/crm/conversations/types";
-import { revisionSummary } from "@/src/features/crm/conversations/utils/formatting";
+import { formatDealMenuDate, productTitle, revisionSummary } from "@/src/features/crm/conversations/utils/formatting";
 import type { Deal } from "@/src/features/crm/deals/types";
 
 export type ConversationRow = {
@@ -26,7 +28,6 @@ export type ConversationRow = {
   channel_key?: string | null;
   chat_id: string | null;
   customer_id: string;
-  deal_id?: string | null;
   contract_sent: boolean;
   created_at?: string | null;
 };
@@ -64,7 +65,6 @@ export function toConversation(row: ConversationRow, activities: Activity[]): Co
     channelKey: row.channel_key ?? undefined,
     chatId: row.chat_id ?? undefined,
     customerId: row.customer_id,
-    dealId: row.deal_id ?? undefined,
     contractSent: row.contract_sent,
     createdAt: row.created_at ?? undefined,
     activities,
@@ -106,8 +106,8 @@ export function toConversationSummary(row: ConversationSummaryRow): Conversation
     channelKey: row.channel_key ?? undefined,
     chatId: row.chat_id ?? undefined,
     customerId: row.customer_id,
-    dealId: row.deal_id ?? undefined,
     contractSent: row.contract_sent,
+    createdAt: row.created_at ?? undefined,
     updatedAt: row.updated_at,
   });
   return summary.success ? summary.data : undefined;
@@ -119,11 +119,12 @@ export function toConversationInboxItem(input: {
   deal: Deal;
   deals: Deal[];
   preview: string;
+  updatedAt: string;
 }): ConversationInboxItem | undefined {
   const linked = input.deals.length > 0 ? input.deals : [input.deal];
   const item = conversationInboxItemSchema.safeParse({
     id: input.summary.id,
-    updatedAt: input.summary.updatedAt,
+    updatedAt: input.updatedAt,
     preview: input.preview,
     contactName: input.customer.fullName,
     contactPhone: input.customer.phone,
@@ -133,6 +134,25 @@ export function toConversationInboxItem(input: {
     dealStatuses: linked.map((deal) => ({ id: deal.id, status: deal.status })),
     dealSource: input.deal.source,
     contractSent: input.summary.contractSent,
+  });
+  return item.success ? item.data : undefined;
+}
+
+export function toConversationDealListItem(input: {
+  deal: Deal;
+  invoiceId?: string;
+  selections?: QuoteSelections;
+  conversationId?: string;
+}): ConversationDealListItem | undefined {
+  const summary = input.selections ? priceSummary(input.selections) : undefined;
+  const item = conversationDealListItemSchema.safeParse({
+    id: input.deal.id,
+    title: productTitle(summary?.specs ?? []) || input.invoiceId || "",
+    priceLabel: summary?.totalLabel ?? "",
+    stage: input.deal.status,
+    dateLabel: formatDealMenuDate(input.deal.createdAt ?? ""),
+    createdAt: input.deal.createdAt ?? "",
+    conversationId: input.conversationId,
   });
   return item.success ? item.data : undefined;
 }

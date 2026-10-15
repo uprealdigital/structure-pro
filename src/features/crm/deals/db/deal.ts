@@ -42,6 +42,15 @@ export async function readDeals(): Promise<Deal[]> {
     .filter((deal): deal is Deal => deal != null);
 }
 
+export async function readDealsByIds(ids: string[]): Promise<Deal[]> {
+  if (ids.length === 0) return [];
+  const { data, error } = await crm().from("deals").select(dealColumns).in("id", ids);
+  throwIfError(error);
+  return ((data ?? []) as DealRow[])
+    .map(toDeal)
+    .filter((deal): deal is Deal => deal != null);
+}
+
 export async function readDeal(id: string): Promise<Deal | undefined> {
   const { data, error } = await crm()
     .from("deals")

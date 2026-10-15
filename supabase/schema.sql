@@ -11,6 +11,9 @@
 -- If crm.deals.status still allows only open and invoice_sent, run migrate-crm-deal-status.sql.
 -- If crm.deals has no previous_status, run migrate-crm-deal-previous-status.sql.
 -- If crm.quotes has no active_revision_id, run migrate-crm-quote-revisions.sql.
+-- If crm.conversations has one row per deal, run migrate-crm-conversation-per-customer.sql.
+-- If crm.customers has no active_deal_id, run migrate-crm-conversation-active-deal.sql.
+-- If any customer has no conversation, run migrate-crm-conversation-for-every-customer.sql.
 
 create schema if not exists cpq;
 create schema if not exists crm;
@@ -64,6 +67,7 @@ create table if not exists crm.customers (
   phone text not null,
   email text not null,
   opted_out boolean not null default false,
+  active_deal_id uuid references crm.deals (id) on delete set null,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   unique (phone)
@@ -88,8 +92,7 @@ create table if not exists crm.conversations (
   lookup_key text not null unique,
   channel_key text,
   chat_id text,
-  customer_id uuid not null references crm.customers (id) on delete cascade,
-  deal_id uuid references crm.deals (id) on delete cascade,
+  customer_id uuid not null unique references crm.customers (id) on delete cascade,
   contract_sent boolean not null default false,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
@@ -97,9 +100,43 @@ create table if not exists crm.conversations (
 
 create index if not exists conversations_chat_id_idx on crm.conversations (chat_id);
 create index if not exists conversations_channel_key_idx on crm.conversations (channel_key);
-create unique index if not exists conversations_deal_id_key
-  on crm.conversations (deal_id)
-  where deal_id is not null;
+
+create or replace function crm.open_customer_conversation()
+returns trigger
+language plpgsql
+as $$
+begin
+  insert into crm.conversations (
+    lookup_key,
+    customer_id,
+    contract_sent,
+    created_at,
+    updated_at
+  )
+  values (
+    case
+      when exists (
+        select 1
+        from crm.conversations
+        where lookup_key = new.phone
+      ) then new.id::text
+      else new.phone
+    end,
+    new.id,
+    false,
+    coalesce(new.created_at, now()),
+    coalesce(new.updated_at, now())
+  );
+  return new;
+end;
+$$;
+
+drop trigger if exists customers_create_conversation on crm.customers;
+
+create trigger customers_create_conversation
+  after insert on crm.customers
+  for each row
+  execute function crm.open_customer_conversation();
 
 create table if not exists crm.calls (
   id uuid primary key default gen_random_uuid(),

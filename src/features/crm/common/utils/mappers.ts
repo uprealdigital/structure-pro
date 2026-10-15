@@ -6,6 +6,7 @@ export type CustomerRow = {
   phone: string;
   email: string;
   opted_out: boolean;
+  active_deal_id?: string | null;
   created_at?: string | null;
 };
 
@@ -23,6 +24,7 @@ export function toCustomer(row: CustomerRow): Customer | undefined {
     phone: row.phone,
     email: row.email,
     optedOut: row.opted_out,
+    activeDealId: row.active_deal_id ?? undefined,
     createdAt: row.created_at ?? undefined,
   });
   return customer.success ? customer.data : undefined;

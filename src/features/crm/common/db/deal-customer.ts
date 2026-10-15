@@ -74,6 +74,18 @@ export async function readDealCustomersForCustomer(customerId: string): Promise<
   return linksFrom((data ?? []) as DealCustomerRow[]);
 }
 
+export async function readDealCustomersForDeals(dealIds: string[]): Promise<DealCustomer[]> {
+  if (dealIds.length === 0) return [];
+  const { data, error } = await crm()
+    .from("deal_customers")
+    .select(dealCustomerColumns)
+    .in("deal_id", dealIds)
+    .order("created_at", { ascending: true });
+
+  throwIfError(error);
+  return linksFrom((data ?? []) as DealCustomerRow[]);
+}
+
 export async function readDealCustomersForDeal(dealId: string): Promise<DealCustomer[]> {
   const { data, error } = await crm()
     .from("deal_customers")

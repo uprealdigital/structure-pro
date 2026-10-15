@@ -48,14 +48,14 @@ export async function POST(request: Request) {
   }
 
   try {
-    const id = await createConversation({
+    const saved = await createConversation({
       lookupKey,
       chatId,
       customerId,
       contractSent,
       activities,
     });
-    return Response.json({ id });
+    return Response.json({ id: saved.id });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Could not save conversation";
     return Response.json({ error: message }, { status: 500 });

@@ -1,7 +1,13 @@
 import { z } from "zod";
 import { quoteSelectionsSchema } from "@/src/features/cpq/types";
 import { customerSchema } from "@/src/features/crm/common/types";
-import { dealSchema, dealSourceSchema, dealStageSchema, dealStatusSchema } from "@/src/features/crm/deals/types";
+import {
+  dealIdSchema,
+  dealSchema,
+  dealSourceSchema,
+  dealStageSchema,
+  dealStatusSchema,
+} from "@/src/features/crm/deals/types";
 
 export const activityChannelSchema = z.enum([
   "call",
@@ -82,7 +88,6 @@ export const conversationSchema = z.object({
   channelKey: z.string().optional(),
   chatId: z.string().optional(),
   customerId: z.string(),
-  dealId: z.string().optional(),
   contractSent: z.boolean(),
   createdAt: z.string().optional(),
   activities: z.array(activitySchema),
@@ -97,7 +102,6 @@ export const conversationWriteSchema = z.object({
   channelKey: z.string().optional(),
   chatId: z.string().optional(),
   customerId: z.string(),
-  dealId: z.string().optional(),
   contractSent: z.boolean(),
   activities: z.array(activityInsertSchema),
 });
@@ -106,14 +110,19 @@ export const conversationPatchSchema = z.object({
   contractSent: z.boolean().optional(),
 });
 
+export const activeDealRequestSchema = z.object({
+  customerId: z.string().trim().min(1),
+  dealId: dealIdSchema,
+});
+
 export const conversationSummarySchema = z.object({
   id: z.string(),
   lookupKey: z.string(),
   channelKey: z.string().optional(),
   chatId: z.string().optional(),
   customerId: z.string(),
-  dealId: z.string().optional(),
   contractSent: z.boolean(),
+  createdAt: z.string().optional(),
   updatedAt: z.string(),
 });
 
@@ -186,12 +195,38 @@ export const conversationDealOptionSchema = z.object({
 
 export type ConversationDealOption = z.infer<typeof conversationDealOptionSchema>;
 
+export const conversationDealListItemSchema = z.object({
+  id: z.string(),
+  title: z.string(),
+  priceLabel: z.string(),
+  stage: dealStageSchema,
+  dateLabel: z.string(),
+  createdAt: z.string(),
+  conversationId: z.string().optional(),
+});
+
+export type ConversationDealListItem = z.infer<typeof conversationDealListItemSchema>;
+
+export const customerDealsRequestSchema = z.object({
+  customerId: z.string().trim().min(1),
+});
+
+export const conversationParticipantSchema = z.object({
+  dealId: z.string(),
+  isPrimary: z.boolean(),
+  conversationId: z.string().optional(),
+  customer: customerSchema,
+});
+
+export type ConversationParticipant = z.infer<typeof conversationParticipantSchema>;
+
 export const conversationWorkspaceSchema = z.object({
   id: z.string(),
   contractSent: z.boolean(),
   customer: customerSchema,
   deal: dealSchema,
   deals: z.array(conversationDealOptionSchema),
+  participants: z.array(conversationParticipantSchema),
   createdAt: z.string(),
   activities: z.array(activitySchema),
   quote: conversationQuoteSchema.nullable(),

@@ -1,6 +1,6 @@
 import { assertInternal } from "@/src/common/utils/internal-call";
 import { createDealCustomer, readDealCustomer, readDealCustomersForDeal } from "@/src/features/crm/common/db/deal-customer";
-import { createCustomer, readCustomerByPhone } from "@/src/features/crm/common/db/customer";
+import { createCustomer, ensureCustomerThread, readCustomerByPhone } from "@/src/features/crm/common/db/customer";
 
 export const runtime = "nodejs";
 
@@ -38,6 +38,7 @@ export async function POST(request: Request) {
   try {
     const existing = await readCustomerByPhone(phone);
     const customer = existing ?? (await createCustomer({ fullName, phone, email, optedOut }));
+    if (existing) await ensureCustomerThread(customer);
     const linked = await readDealCustomer(customer.id, dealId);
     if (!linked) {
       const onDeal = await readDealCustomersForDeal(dealId);

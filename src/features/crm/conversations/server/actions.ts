@@ -2,17 +2,27 @@
 
 import { revalidatePath } from "next/cache";
 import { createActivities, deleteLatestActivity, readActivities } from "@/src/features/crm/conversations/db/activity";
-import { createConversation, deleteConversation, updateConversation } from "@/src/features/crm/conversations/db/conversation";
-import { getConversation, getConversationWorkspace } from "@/src/features/crm/conversations/server/queries";
+import { createConversation, deleteConversation, readConversationById, updateConversation } from "@/src/features/crm/conversations/db/conversation";
 import {
+  getConversation,
+  getConversationWorkspace,
+  getCustomerDeals,
+  getCustomerInboxItem,
+} from "@/src/features/crm/conversations/server/queries";
+import {
+  activeDealRequestSchema,
   activityInsertSchema,
   composerChannelSchema,
   conversationIdSchema,
+  customerDealsRequestSchema,
   type Activity,
   type ActivityInsert,
+  type ConversationDealListItem,
+  type ConversationInboxItem,
   type ConversationWorkspace,
 } from "@/src/features/crm/conversations/types";
-import { updateCustomer } from "@/src/features/crm/common/db/customer";
+import { readCustomer, updateCustomer } from "@/src/features/crm/common/db/customer";
+import { readDealCustomersForCustomer } from "@/src/features/crm/common/db/deal-customer";
 import { readDeal, updateDeal } from "@/src/features/crm/deals/db/deal";
 import { dealIdSchema, type DealStatus } from "@/src/features/crm/deals/types";
 import { readQuoteRevision, updateQuoteRevision } from "@/src/features/crm/quotes/db/quote-revision";
@@ -22,11 +32,40 @@ export async function openConversation(input: {
   channelKey?: string;
   chatId?: string;
   customerId: string;
-  dealId?: string;
   contractSent: boolean;
   activities: ActivityInsert[];
-}): Promise<string> {
+}): Promise<{ id: string; created: boolean }> {
   return createConversation(input);
+}
+
+export async function ensureCustomerConversation(input: {
+  customerId: string;
+  dealId: string;
+}): Promise<{ success: true; data: { item: ConversationInboxItem } } | { error: string }> {
+  const parsed = activeDealRequestSchema.safeParse(input);
+  if (!parsed.success) return { error: "Customer was not found" };
+
+  try {
+    const customer = await readCustomer(parsed.data.customerId);
+    if (!customer) return { error: "Customer was not found" };
+    const links = await readDealCustomersForCustomer(customer.id);
+    if (!links.some((link) => link.dealId === parsed.data.dealId)) {
+      return { error: "Deal was not found" };
+    }
+
+    await createConversation({
+      lookupKey: customer.phone.trim() || customer.id,
+      customerId: customer.id,
+      contractSent: false,
+      activities: [],
+    });
+    const item = await getCustomerInboxItem(customer.id, parsed.data.dealId);
+    if (!item) return { error: "Conversation was not opened" };
+    return { success: true, data: { item } };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Conversation was not opened";
+    return { error: message };
+  }
 }
 
 export async function removeConversation(key: string): Promise<void> {
@@ -169,14 +208,53 @@ export async function sendConversationQuote(input: {
   }
 }
 
+export async function setCustomerActiveDeal(input: {
+  customerId: string;
+  dealId: string;
+}): Promise<{ success: true } | { error: string }> {
+  const parsed = activeDealRequestSchema.safeParse(input);
+  if (!parsed.success) return { error: "A customer and deal are required" };
+
+  try {
+    const links = await readDealCustomersForCustomer(parsed.data.customerId);
+    if (!links.some((link) => link.dealId === parsed.data.dealId)) {
+      return { error: "Deal was not found" };
+    }
+    await updateCustomer(parsed.data.customerId, { activeDealId: parsed.data.dealId });
+    revalidatePath("/crm/conversations");
+    return { success: true };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Could not update the active deal";
+    return { error: message };
+  }
+}
+
+export async function loadCustomerDeals(
+  customerId: string,
+): Promise<{ success: true; data: ConversationDealListItem[] } | { error: string }> {
+  const parsed = customerDealsRequestSchema.safeParse({ customerId });
+  if (!parsed.success) return { error: "A customer is required" };
+
+  try {
+    const deals = await getCustomerDeals(parsed.data.customerId);
+    return { success: true, data: deals };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Could not load deals";
+    return { error: message };
+  }
+}
+
 export async function loadConversationWorkspace(
   id: string,
+  dealId?: string,
 ): Promise<{ success: true; data: ConversationWorkspace | null } | { error: string }> {
   const parsed = conversationIdSchema.safeParse(id);
   if (!parsed.success) return { error: "A conversation is required" };
+  const deal = typeof dealId === "string" ? dealIdSchema.safeParse(dealId) : undefined;
+  if (deal && !deal.success) return { error: "A deal is required" };
 
   try {
-    const workspace = await getConversationWorkspace(parsed.data);
+    const workspace = await getConversationWorkspace(parsed.data, deal?.success ? deal.data : undefined);
     return { success: true, data: workspace ?? null };
   } catch (error) {
     const message = error instanceof Error ? error.message : "Could not load conversation";

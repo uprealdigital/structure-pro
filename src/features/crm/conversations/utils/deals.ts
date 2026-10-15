@@ -1,14 +1,14 @@
-import type { ConversationDealOption } from "@/src/features/crm/conversations/types";
+import type { ConversationDealListItem } from "@/src/features/crm/conversations/types";
 import { dealAdvancement } from "@/src/features/crm/deals/utils/status";
 
-function byNewest(left: ConversationDealOption, right: ConversationDealOption): number {
-  return (right.deal.createdAt ?? "").localeCompare(left.deal.createdAt ?? "");
+function byNewest(left: ConversationDealListItem, right: ConversationDealListItem): number {
+  return right.createdAt.localeCompare(left.createdAt);
 }
 
 export function orderedDealMenu(
-  deals: ConversationDealOption[],
+  deals: ConversationDealListItem[],
   includeLost: boolean,
-): ConversationDealOption[] {
+): ConversationDealListItem[] {
   const active = deals
     .filter((deal) => deal.stage !== "deal_lost")
     .sort(

@@ -36,6 +36,17 @@ export async function createQuote(input: {
   return data.id;
 }
 
+function quoteRecord(row: {
+  id?: unknown;
+  invoice_id?: unknown;
+  selections?: unknown;
+}): QuoteRecord | undefined {
+  if (typeof row.id !== "string" || typeof row.invoice_id !== "string") return undefined;
+  const selections = quoteSelectionsSchema.safeParse(row.selections);
+  if (!selections.success) return undefined;
+  return { id: row.id, invoiceId: row.invoice_id, selections: selections.data };
+}
+
 export async function readQuote(id: string): Promise<QuoteRecord | undefined> {
   const { data, error } = await crm()
     .from("quotes")
@@ -44,17 +55,17 @@ export async function readQuote(id: string): Promise<QuoteRecord | undefined> {
     .maybeSingle();
 
   throwIfError(error);
-  if (!data || typeof data.id !== "string" || typeof data.invoice_id !== "string") {
-    return undefined;
-  }
-  const selections = quoteSelectionsSchema.safeParse(data.selections);
-  if (!selections.success) return undefined;
+  if (!data) return undefined;
+  return quoteRecord(data);
+}
 
-  return {
-    id: data.id,
-    invoiceId: data.invoice_id,
-    selections: selections.data,
-  };
+export async function readQuotesByIds(ids: string[]): Promise<QuoteRecord[]> {
+  if (ids.length === 0) return [];
+  const { data, error } = await crm().from("quotes").select("id, invoice_id, selections").in("id", ids);
+  throwIfError(error);
+  return (data ?? [])
+    .map((row) => quoteRecord(row))
+    .filter((quote): quote is QuoteRecord => quote != null);
 }
 
 export async function readQuotes(): Promise<ListedQuote[]> {

@@ -6,6 +6,7 @@ export const customerSchema = z.object({
   phone: z.string(),
   email: z.string(),
   optedOut: z.boolean(),
+  activeDealId: z.string().optional(),
   createdAt: z.string().optional(),
 });
 
@@ -38,4 +39,5 @@ export const customerPatchSchema = z.object({
   email: z.string().optional(),
   phone: z.string().optional(),
   optedOut: z.boolean().optional(),
+  activeDealId: z.string().optional(),
 });

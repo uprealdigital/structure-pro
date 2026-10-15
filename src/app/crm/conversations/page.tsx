@@ -13,7 +13,7 @@ export const metadata = {
   title: `${conversationCopy.conversations} · ${copy.brand} ${copy.product}`,
 };
 
-function selectedConversationId(value: string | string[] | undefined): string | undefined {
+function selectedParam(value: string | string[] | undefined): string | undefined {
   const id = Array.isArray(value) ? value[0] : value;
   const trimmed = id?.trim();
   return trimmed ? trimmed : undefined;
@@ -22,10 +22,11 @@ function selectedConversationId(value: string | string[] | undefined): string | 
 export default async function ConversationsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ conversation?: string | string[] }>;
+  searchParams: Promise<{ conversation?: string | string[]; deal?: string | string[] }>;
 }) {
   const params = await searchParams;
-  const requestedId = selectedConversationId(params.conversation);
+  const requestedId = selectedParam(params.conversation);
+  const requestedDealId = selectedParam(params.deal);
   let inbox: ConversationInboxItem[] = [];
   let workspace: ConversationWorkspace | undefined;
   let selectedId = requestedId;
@@ -33,8 +34,8 @@ export default async function ConversationsPage({
 
   try {
     inbox = await getConversationInbox();
-  selectedId = requestedId ?? inbox.find((item) => item.dealStatus !== "deal_lost")?.id;
-    if (selectedId) workspace = await getConversationWorkspace(selectedId);
+    selectedId = requestedId ?? inbox.find((item) => item.dealStatus !== "deal_lost")?.id;
+    if (selectedId) workspace = await getConversationWorkspace(selectedId, requestedDealId);
   } catch {
     loadError = true;
   }

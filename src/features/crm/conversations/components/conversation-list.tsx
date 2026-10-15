@@ -1,10 +1,10 @@
 "use client";
 
-import { Check, Filter, Search, X } from "lucide-react";
+import { Check, ChevronUp, Filter, Search, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { copy } from "@/src/features/crm/conversations/locales/en";
 import type { ConversationInboxItem } from "@/src/features/crm/conversations/types";
-import { formatConversationTime } from "@/src/features/crm/conversations/utils/formatting";
+import { formatConversationListTime } from "@/src/features/crm/conversations/utils/formatting";
 import { contactInitials } from "@/src/features/crm/common/utils/formatting";
 import { dealStatusOption, dealStatusOptions } from "@/src/features/crm/deals/utils/status";
 import type { DealStatus } from "@/src/features/crm/deals/types";
@@ -17,13 +17,6 @@ const inboxStatusClass: Record<DealStatus, string> = {
   deal_won: "border-gray-200 bg-gray-50 text-emerald-700",
   deal_lost: "border-red-200 bg-red-50 text-red-600",
 };
-
-function inboxStatuses(item: ConversationInboxItem): DealStatus[] {
-  const present = new Set(
-    item.dealStatuses.length > 0 ? item.dealStatuses.map((deal) => deal.status) : [item.dealStatus],
-  );
-  return dealStatusOptions.map((option) => option.id).filter((status) => present.has(status));
-}
 
 const selectedStatusClass: Record<DealStatus, string> = {
   lead: "border-gray-300 bg-gray-100 text-gray-800 shadow-xs",
@@ -42,6 +35,7 @@ export function ConversationList({
   includedStatuses,
   onToggleStatus,
   onClearFilters,
+  onResetFilters,
   dealStatusCount,
   activeFilterCount,
   selectedId,
@@ -54,20 +48,49 @@ export function ConversationList({
   includedStatuses: DealStatus[];
   onToggleStatus: (status: DealStatus) => void;
   onClearFilters: () => void;
+  onResetFilters: () => void;
   dealStatusCount: number;
   activeFilterCount: number;
   selectedId?: string;
   onSelect: (id: string) => void;
 }) {
   const [filtersOpen, setFiltersOpen] = useState(false);
+  const [showBackToTop, setShowBackToTop] = useState(false);
   const filters = useRef<HTMLDivElement>(null);
+  const list = useRef<HTMLUListElement>(null);
+  const hideUntilTop = useRef(false);
   const searching = query.trim().length > 0;
+  const itemIds = items.map((item) => item.id).join("\n");
 
   useEffect(() => {
-    if (!selectedId) return;
-    const selected = document.querySelector<HTMLElement>(`[data-conversation-id="${CSS.escape(selectedId)}"]`);
-    selected?.scrollIntoView({ block: "nearest" });
-  }, [selectedId]);
+    const scroller = list.current;
+    if (!selectedId || !scroller) return;
+    const selected = scroller.querySelector<HTMLElement>(
+      `[data-conversation-id="${CSS.escape(selectedId)}"]`,
+    );
+    if (!selected) return;
+    const scrollerBox = scroller.getBoundingClientRect();
+    const rowBox = selected.getBoundingClientRect();
+    if (rowBox.top < scrollerBox.top) scroller.scrollTop += rowBox.top - scrollerBox.top;
+    else if (rowBox.bottom > scrollerBox.bottom) scroller.scrollTop += rowBox.bottom - scrollerBox.bottom;
+    if (!hideUntilTop.current) setShowBackToTop(scroller.scrollTop > 8);
+  }, [selectedId, itemIds]);
+
+  function onListScroll() {
+    const top = list.current?.scrollTop ?? 0;
+    if (hideUntilTop.current) {
+      if (top <= 8) hideUntilTop.current = false;
+      setShowBackToTop(false);
+      return;
+    }
+    setShowBackToTop(top > 8);
+  }
+
+  function backToTop() {
+    hideUntilTop.current = true;
+    setShowBackToTop(false);
+    list.current?.scrollTo({ top: 0, behavior: "smooth" });
+  }
 
   useEffect(() => {
     function close(event: MouseEvent) {
@@ -157,14 +180,21 @@ export function ConversationList({
                     );
                   })}
                 </div>
-                <div className="flex items-center justify-end border-t border-gray-100 pt-3">
+                <div className="flex items-center justify-between border-t border-gray-100 pt-3">
                   <button
                     type="button"
                     onClick={onClearFilters}
+                    className="cursor-pointer text-xs font-medium text-gray-500 transition-colors hover:text-gray-950"
+                  >
+                    {copy.clear}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={onResetFilters}
                     className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-2.5 py-1 text-xs font-medium text-gray-600 shadow-xs transition-colors hover:bg-gray-100 hover:text-gray-950"
                   >
                     <X className="h-3 w-3 shrink-0 text-gray-500" strokeWidth={2} aria-hidden="true" />
-                    {copy.clearFilters}
+                    {copy.resetFilters}
                   </button>
                 </div>
               </div>
@@ -183,7 +213,23 @@ export function ConversationList({
           <p className="text-xs text-gray-500">{searching ? copy.emptySearch : copy.emptyFilter}</p>
         </div>
       ) : (
-        <ul className="min-h-0 flex-1 divide-y divide-gray-100 overflow-y-auto" aria-label={copy.conversationList}>
+        <div className="relative min-h-0 flex-1">
+          {showBackToTop ? (
+            <button
+              type="button"
+              onClick={backToTop}
+              aria-label={copy.backToTop}
+              className="absolute top-2 left-1/2 z-20 flex h-7 w-7 -translate-x-1/2 cursor-pointer items-center justify-center rounded-full border border-gray-200 bg-white text-gray-700 shadow-sm transition-colors hover:bg-gray-50"
+            >
+              <ChevronUp className="h-4 w-4" strokeWidth={2} aria-hidden="true" />
+            </button>
+          ) : null}
+          <ul
+            ref={list}
+            onScroll={onListScroll}
+            className="h-full divide-y divide-gray-100 overflow-y-auto"
+            aria-label={copy.conversationList}
+          >
           {items.map((item) => {
             const selected = item.id === selectedId;
             return (
@@ -206,14 +252,16 @@ export function ConversationList({
                       >
                         {contactInitials(item.contactName)}
                       </span>
-                      <span className="text-xs font-bold text-gray-950">{item.contactName}</span>
+                      <span className="min-w-0 truncate text-xs font-bold text-gray-950">{item.contactName}</span>
                     </span>
-                    <time
-                      dateTime={item.updatedAt}
-                      className={`shrink-0 text-[10px] font-medium ${selected ? "text-gray-500" : "text-gray-400"}`}
-                    >
-                      {formatConversationTime(item.updatedAt)}
-                    </time>
+                    {item.updatedAt ? (
+                      <time
+                        dateTime={item.updatedAt}
+                        className={`shrink-0 text-right text-[10px] leading-tight font-medium whitespace-nowrap ${selected ? "text-gray-500" : "text-gray-400"}`}
+                      >
+                        {formatConversationListTime(item.updatedAt)}
+                      </time>
+                    ) : null}
                   </span>
                   <span className="mt-1.5 flex items-end justify-between gap-2.5 pl-10.5">
                     <span
@@ -223,22 +271,20 @@ export function ConversationList({
                     >
                       {item.preview || copy.noMessages}
                     </span>
-                    <span className="flex shrink-0 flex-wrap justify-end gap-1">
-                      {inboxStatuses(item).map((status) => (
-                        <span
-                          key={status}
-                          className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium whitespace-nowrap ${inboxStatusClass[status]}`}
-                        >
-                          {dealStatusOption(status)?.label}
-                        </span>
-                      ))}
+                    <span className="flex shrink-0 justify-end">
+                      <span
+                        className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium whitespace-nowrap ${inboxStatusClass[item.dealStatus]}`}
+                      >
+                        {dealStatusOption(item.dealStatus)?.label}
+                      </span>
                     </span>
                   </span>
                 </button>
               </li>
             );
           })}
-        </ul>
+          </ul>
+        </div>
       )}
     </section>
   );

@@ -19,6 +19,21 @@ export function formatCallDuration(seconds: number | undefined): string {
   return `${minutes}m ${rest}s`;
 }
 
+const messageChannels = new Set<Activity["channel"]>(["sms", "facebook", "email", "telegram"]);
+
+export function lastMessageAt(activities: Activity[]): string {
+  let latest = "";
+  let latestMs = Number.NEGATIVE_INFINITY;
+  for (const activity of activities) {
+    if (!messageChannels.has(activity.channel) || !activity.createdAt) continue;
+    const ms = new Date(activity.createdAt).getTime();
+    if (Number.isNaN(ms) || ms < latestMs) continue;
+    latest = activity.createdAt;
+    latestMs = ms;
+  }
+  return latest;
+}
+
 export function activityPreview(activity: Activity | undefined): string {
   if (!activity) return "";
   if (activity.channel === "call") {
@@ -100,32 +115,6 @@ export function dealSummarySentence(input: {
   return "Quote conversation.";
 }
 
-export function formatConversationTime(iso: string, now = new Date()): string {
-  const date = new Date(iso);
-  if (Number.isNaN(date.getTime())) return "";
-
-  const elapsed = now.getTime() - date.getTime();
-  const minutes = Math.round(elapsed / 60000);
-  if (minutes < 1) return "Just now";
-  if (minutes < 60) return `${minutes}m ago`;
-
-  const startOfToday = new Date(now);
-  startOfToday.setHours(0, 0, 0, 0);
-  if (date >= startOfToday) {
-    const hours = Math.max(1, Math.round(elapsed / 3600000));
-    return `${hours}h ago`;
-  }
-
-  const startOfYesterday = new Date(startOfToday);
-  startOfYesterday.setDate(startOfYesterday.getDate() - 1);
-  if (date >= startOfYesterday) return "Yesterday";
-
-  return new Intl.DateTimeFormat("en-US", {
-    month: "short",
-    day: "numeric",
-  }).format(date);
-}
-
 export function formatDealMenuDate(iso: string): string {
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) return "";
@@ -133,6 +122,38 @@ export function formatDealMenuDate(iso: string): string {
     month: "short",
     day: "numeric",
     year: "numeric",
+  }).format(date);
+}
+
+function startOfDay(date: Date): Date {
+  const next = new Date(date);
+  next.setHours(0, 0, 0, 0);
+  return next;
+}
+
+export function formatConversationListTime(iso: string, now = new Date()): string {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return "";
+
+  const time = new Intl.DateTimeFormat("en-US", {
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(date);
+  const startToday = startOfDay(now);
+  const startDate = startOfDay(date);
+  const dayMs = 24 * 60 * 60 * 1000;
+  const daysAgo = Math.round((startToday.getTime() - startDate.getTime()) / dayMs);
+
+  if (daysAgo === 0) return time;
+  if (daysAgo === 1) return `${copy.yesterday}, ${time}`;
+  if (daysAgo >= 2 && daysAgo <= 6) {
+    return new Intl.DateTimeFormat("en-US", { weekday: "short" }).format(date);
+  }
+
+  return new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+    ...(date.getFullYear() === now.getFullYear() ? {} : { year: "numeric" }),
   }).format(date);
 }
 

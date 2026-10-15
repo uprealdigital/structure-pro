@@ -20,7 +20,7 @@ function crm() {
 }
 
 const conversationColumns =
-  "id, lookup_key, channel_key, chat_id, customer_id, deal_id, contract_sent";
+  "id, lookup_key, channel_key, chat_id, customer_id, contract_sent";
 
 async function findRow(
   column: "lookup_key" | "channel_key" | "chat_id",
@@ -30,7 +30,7 @@ async function findRow(
     .from("conversations")
     .select(conversationColumns)
     .eq(column, key)
-    .order("updated_at", { ascending: false })
+    .order("created_at", { ascending: true })
     .limit(1);
   throwIfError(error);
   return (data?.[0] as ConversationRow | undefined) ?? undefined;
@@ -41,25 +41,28 @@ export async function createConversation(input: {
   channelKey?: string;
   chatId?: string;
   customerId: string;
-  dealId?: string;
   contractSent: boolean;
   activities: ActivityInsert[];
-}): Promise<string> {
+}): Promise<{ id: string; created: boolean }> {
   const conversation = conversationWriteSchema.parse(input);
+  const existing = await readConversationSummaryByCustomer(conversation.customerId);
+  if (existing) {
+    if (conversation.activities.length > 0) {
+      await createActivities(existing.id, conversation.activities);
+    }
+    return { id: existing.id, created: false };
+  }
+
   const { data, error } = await crm()
     .from("conversations")
-    .upsert(
-      {
-        lookup_key: conversation.lookupKey,
-        channel_key: conversation.channelKey ?? null,
-        chat_id: conversation.chatId ?? null,
-        customer_id: conversation.customerId,
-        deal_id: conversation.dealId ?? null,
-        contract_sent: conversation.contractSent,
-        updated_at: new Date().toISOString(),
-      },
-      { onConflict: "lookup_key" },
-    )
+    .insert({
+      lookup_key: conversation.lookupKey,
+      channel_key: conversation.channelKey ?? null,
+      chat_id: conversation.chatId ?? null,
+      customer_id: conversation.customerId,
+      contract_sent: conversation.contractSent,
+      updated_at: new Date().toISOString(),
+    })
     .select("id")
     .single();
 
@@ -69,7 +72,7 @@ export async function createConversation(input: {
   if (conversation.activities.length > 0) {
     await createActivities(data.id, conversation.activities);
   }
-  return data.id;
+  return { id: data.id, created: true };
 }
 
 export async function readConversation(key: string): Promise<Conversation | undefined> {
@@ -98,14 +101,28 @@ export async function readConversationSummaryByCustomer(
 ): Promise<ConversationSummary | undefined> {
   const { data, error } = await crm()
     .from("conversations")
-    .select(`${conversationColumns}, updated_at`)
+    .select(`${conversationColumns}, created_at, updated_at`)
     .eq("customer_id", customerId)
-    .order("updated_at", { ascending: false })
+    .order("created_at", { ascending: true })
     .limit(1);
   throwIfError(error);
   const row = data?.[0] as ConversationSummaryRow | undefined;
   if (!row) return undefined;
   return toConversationSummary(row);
+}
+
+export async function readConversationSummariesForCustomer(
+  customerId: string,
+): Promise<ConversationSummary[]> {
+  const { data, error } = await crm()
+    .from("conversations")
+    .select(`${conversationColumns}, created_at, updated_at`)
+    .eq("customer_id", customerId)
+    .order("updated_at", { ascending: false });
+  throwIfError(error);
+  return ((data ?? []) as ConversationSummaryRow[])
+    .map(toConversationSummary)
+    .filter((summary): summary is ConversationSummary => summary != null);
 }
 
 export async function readConversationsForCustomer(customerId: string): Promise<Conversation[]> {
@@ -125,7 +142,7 @@ export async function readConversationsForCustomer(customerId: string): Promise<
 export async function readConversations(): Promise<ConversationSummary[]> {
   const { data, error } = await crm()
     .from("conversations")
-    .select(`${conversationColumns}, updated_at`)
+    .select(`${conversationColumns}, created_at, updated_at`)
     .order("updated_at", { ascending: false });
   throwIfError(error);
   return ((data ?? []) as ConversationSummaryRow[])

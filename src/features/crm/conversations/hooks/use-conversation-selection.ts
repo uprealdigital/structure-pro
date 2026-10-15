@@ -32,7 +32,7 @@ export function useConversationSelection({
     setSelectedId(initialSelectedId);
     setWorkspace(serverWorkspace.current);
     setStatus(initialSelectedId && !serverWorkspace.current ? "missing" : "ready");
-  }, [initialSelectedId, initialWorkspace?.id]);
+  }, [initialSelectedId, initialWorkspace?.id, initialWorkspace?.deal.id]);
 
   function replaceUrl(id?: string) {
     window.history.replaceState(window.history.state, "", conversationPath(id));
@@ -46,7 +46,7 @@ export function useConversationSelection({
     replaceUrl(id);
   }
 
-  async function selectConversation(id: string) {
+  async function selectConversation(id: string, dealId?: string) {
     if (id === selectedId && (status === "ready" || status === "pending")) return;
 
     const ticket = request.current + 1;
@@ -55,7 +55,7 @@ export function useConversationSelection({
     setStatus("pending");
     replaceUrl(id);
 
-    const result = await loadConversationWorkspace(id);
+    const result = await loadConversationWorkspace(id, dealId);
     if (ticket !== request.current) return;
     if ("error" in result) {
       setWorkspace(undefined);

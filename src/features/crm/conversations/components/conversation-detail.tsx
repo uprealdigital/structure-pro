@@ -1,10 +1,11 @@
 "use client";
 
-import { ArrowUpRight, CircleX, EllipsisVertical, Paperclip, Pencil, Phone, Plus, RotateCcw, X } from "lucide-react";
-import { useEffect, useRef, useState, type FormEvent } from "react";
+import { ArrowUpRight, Paperclip, Pencil, Phone, Plus, X } from "lucide-react";
+import { useEffect, useLayoutEffect, useRef, useState, type FormEvent } from "react";
 import { BuildingConfigurator } from "@/src/features/cpq/components/building-configurator";
 import { activityChannelLabel, ConversationThread } from "@/src/features/crm/conversations/components/conversation-thread";
-import { DealMenu } from "@/src/features/crm/conversations/components/deal-menu";
+import { CustomerMenu } from "@/src/features/crm/conversations/components/customer-menu";
+import { DealHeading } from "@/src/features/crm/conversations/components/deal-menu";
 import { DealSummary } from "@/src/features/crm/conversations/components/deal-summary";
 import { QuotePanel, QuoteRevisionMenu } from "@/src/features/crm/conversations/components/quote-panel";
 import { ReviewSendModal } from "@/src/features/crm/conversations/components/review-send-modal";
@@ -13,6 +14,7 @@ import { copy } from "@/src/features/crm/conversations/locales/en";
 import { sendConversationQuote, sendManualActivity } from "@/src/features/crm/conversations/server/actions";
 import type {
   ComposerChannel,
+  ConversationParticipant,
   ConversationQuote,
   ConversationQuoteRevision,
   ConversationWorkspace,
@@ -27,7 +29,7 @@ import { activateQuoteRevision, saveQuoteSelections } from "@/src/features/crm/q
 import type { QuoteSelections } from "@/src/features/cpq/types";
 import { DealStatusBadge } from "@/src/features/crm/deals/components/deal-status-badge";
 import type { DealStatus } from "@/src/features/crm/deals/types";
-import { contactInitials } from "@/src/features/crm/common/utils/formatting";
+import { participantsForDeal } from "@/src/features/crm/conversations/utils/participants";
 
 function revisionStatusLabel(revision: ConversationQuoteRevision): string {
   return revisionVersionLabel(revision.status, revision.revisionNumber);
@@ -46,68 +48,6 @@ function viewedRevision(
   );
 }
 
-function DealActionsMenu({
-  lost,
-  pending,
-  onMarkLost,
-  onReopen,
-}: {
-  lost: boolean;
-  pending: boolean;
-  onMarkLost: () => void;
-  onReopen: () => void;
-}) {
-  const [open, setOpen] = useState(false);
-  const menu = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    function close(event: MouseEvent) {
-      if (!menu.current?.contains(event.target as Node)) setOpen(false);
-    }
-    document.addEventListener("mousedown", close);
-    return () => document.removeEventListener("mousedown", close);
-  }, []);
-
-  return (
-    <div ref={menu} className="relative">
-      <button
-        type="button"
-        aria-expanded={open}
-        aria-haspopup="menu"
-        aria-label={copy.moreDealActions}
-        onClick={() => setOpen((value) => !value)}
-        className="flex h-7 w-7 cursor-pointer items-center justify-center rounded-full bg-gray-50/90 text-gray-600 shadow-xs transition-colors hover:bg-gray-100 hover:text-gray-900"
-      >
-        <EllipsisVertical className="h-4 w-4" aria-hidden="true" />
-      </button>
-      {open ? (
-        <div role="menu" className="absolute top-full left-0 z-50 mt-1.5 w-44 rounded-xl border border-gray-200 bg-white p-1 shadow-xl">
-          <button
-            type="button"
-            role="menuitem"
-            disabled={pending}
-            onClick={() => {
-              setOpen(false);
-              if (lost) onReopen();
-              else onMarkLost();
-            }}
-            className={`flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-xs font-medium disabled:opacity-50 ${
-              lost ? "text-gray-700 hover:bg-gray-50" : "text-red-600 hover:bg-red-50"
-            }`}
-          >
-            {lost ? (
-              <RotateCcw className="h-3.5 w-3.5 shrink-0 text-gray-600" aria-hidden="true" />
-            ) : (
-              <CircleX className="h-3.5 w-3.5 shrink-0 text-red-600" aria-hidden="true" />
-            )}
-            <span>{lost ? copy.reopenDeal : copy.markAsLost}</span>
-          </button>
-        </div>
-      ) : null}
-    </div>
-  );
-}
-
 function DetailsToggle({
   open,
   onClick,
@@ -116,30 +56,26 @@ function DetailsToggle({
   onClick: () => void;
 }) {
   return (
-    <div className="pointer-events-none absolute -bottom-3 left-0 right-0 z-20 flex justify-center">
-      <button
-        type="button"
-        title={open ? copy.hideDetails : copy.seeDetails}
-        aria-label={open ? copy.hideDetails : copy.seeDetails}
-        aria-expanded={open}
-        onClick={onClick}
-        className="pointer-events-auto inline-flex cursor-pointer items-center gap-1 rounded-full border border-gray-200 bg-white px-3 py-1 text-[11px] leading-none font-medium text-gray-500 shadow-xs transition-all group hover:bg-gray-50 hover:text-gray-900 focus:outline-none"
-      >
+    <button
+      type="button"
+      title={open ? copy.hideDetails : copy.seeDetails}
+      aria-label={open ? copy.hideDetails : copy.seeDetails}
+      aria-expanded={open}
+      onClick={onClick}
+      className="pointer-events-auto inline-flex cursor-pointer items-center gap-1.5 rounded-full bg-transparent px-3 py-1 text-xs leading-none font-medium text-gray-500 transition-colors hover:bg-gray-100/70 hover:text-gray-900 focus:outline-none"
+    >
+        <span>{open ? copy.hideDetails : copy.seeDetails}</span>
         <svg
-          className={`h-3 w-3 shrink-0 text-gray-500 transition-transform duration-200 group-hover:text-gray-900 ${
-            open ? "rotate-180" : ""
-          }`}
+          className={`h-3 w-3 shrink-0 text-gray-500 transition-transform duration-200 ${open ? "rotate-180" : ""}`}
           fill="none"
           stroke="currentColor"
           strokeWidth="2"
           viewBox="0 0 24 24"
           aria-hidden="true"
         >
-          <path d="M5 15l7-7 7 7" strokeLinecap="round" strokeLinejoin="round" />
+          <path d="M19 9l-7 7-7-7" strokeLinecap="round" strokeLinejoin="round" />
         </svg>
-        <span>{open ? copy.hideDetails : copy.seeDetails}</span>
-      </button>
-    </div>
+    </button>
   );
 }
 
@@ -148,7 +84,8 @@ export function ConversationDetail({
   onBack,
   onMarkLost,
   onReopen,
-  onSelectConversation,
+  onActivateDeal,
+  onSelectCustomer,
 }: {
   workspace: ConversationWorkspace;
   onBack: () => void;
@@ -156,7 +93,8 @@ export function ConversationDetail({
   onReopen: (
     dealId: string,
   ) => Promise<{ success: true; data: { status: DealStatus } } | { error: string }>;
-  onSelectConversation: (conversationId: string) => void;
+  onActivateDeal: (dealId: string, status: DealStatus) => void;
+  onSelectCustomer: (participant: ConversationParticipant, dealId: string) => void;
 }) {
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [focusedDealId, setFocusedDealId] = useState(workspace.deal.id);
@@ -184,19 +122,56 @@ export function ConversationDetail({
     };
   });
   const focusedOption = deals.find((deal) => deal.id === focusedDealId) ?? deals[0];
+  const participants = participantsForDeal(workspace.participants, focusedOption?.id ?? workspace.deal.id, {
+    dealId: focusedOption?.id ?? workspace.deal.id,
+    isPrimary: true,
+    conversationId: workspace.id,
+    customer: workspace.customer,
+  });
   const focused = focusedOption
     ? { ...workspace, deal: focusedOption.deal, quote: focusedOption.quote }
     : workspace;
   const [draft, setDraft] = useState("");
   const [channel, setChannel] = useState<ComposerChannel>("sms");
   const [channelOpen, setChannelOpen] = useState(false);
-  const threadId = focusedOption?.conversationId ?? "";
-  const threadActivities = focusedOption?.activities ?? [];
+  const threadId = workspace.id;
+  const threadActivities = workspace.activities;
   const { activities, setActivities } = useConversationActivities(threadId, threadActivities);
   const [sending, setSending] = useState(false);
   const [sendError, setSendError] = useState("");
   const [reviewOpen, setReviewOpen] = useState(false);
   const [editing, setEditing] = useState(false);
+  const headerRef = useRef<HTMLElement>(null);
+  const statusRef = useRef<HTMLDivElement>(null);
+  const toggleRef = useRef<HTMLDivElement>(null);
+  const [detailsTop, setDetailsTop] = useState<number | null>(null);
+  const [separatorWidth, setSeparatorWidth] = useState(0);
+
+  useLayoutEffect(() => {
+    const header = headerRef.current;
+    const status = statusRef.current;
+    if (!header || !status) return;
+    const place = () => {
+      const headerBox = header.getBoundingClientRect();
+      const statusBox = status.getBoundingClientRect();
+      setDetailsTop(statusBox.bottom - headerBox.top);
+    };
+    place();
+    const observer = new ResizeObserver(place);
+    observer.observe(header);
+    observer.observe(status);
+    return () => observer.disconnect();
+  }, [editing, focusedDealId, detailsOpen]);
+
+  useLayoutEffect(() => {
+    const toggle = toggleRef.current;
+    if (!toggle || !detailsOpen) return;
+    const measure = () => setSeparatorWidth(toggle.getBoundingClientRect().width * 2);
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(toggle);
+    return () => observer.disconnect();
+  }, [detailsOpen, editing, detailsTop]);
   const [updatingStatus, setUpdatingStatus] = useState(false);
   const [statusError, setStatusError] = useState("");
   const [revisionError, setRevisionError] = useState("");
@@ -233,13 +208,13 @@ export function ConversationDetail({
     setDetailsOpen((open) => !open);
   }
 
-  function selectDeal(id: string) {
-    setFocusedDealId(id);
+  function selectDeal(dealId: string) {
+    const option = deals.find((deal) => deal.id === dealId);
+    setFocusedDealId(dealId);
     setSelectedRevisionId(null);
     setRevisionError("");
     setEditing(false);
-    const conversationId = deals.find((deal) => deal.id === id)?.conversationId;
-    if (conversationId) onSelectConversation(conversationId);
+    if (option) onActivateDeal(option.id, option.stage);
   }
 
   async function selectRevision(revisionId: string) {
@@ -347,7 +322,10 @@ export function ConversationDetail({
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col bg-[#f9f9fb]">
       <div className="relative z-40 shrink-0">
-        <header className="relative z-20 flex flex-row items-center justify-between gap-4 overflow-visible border-b border-gray-200 bg-white px-5 py-3 shadow-xs">
+        <header
+          ref={headerRef}
+          className={`relative z-20 flex flex-row items-center justify-between gap-4 overflow-visible bg-white px-5 py-3 ${detailsOpen ? "" : "border-b border-gray-200 shadow-xs"}`}
+        >
           <div className="flex shrink-0 flex-col items-start justify-start gap-2 p-1">
             <div className="mb-1 lg:hidden">
               <button type="button" onClick={onBack} className="text-xs font-medium text-gray-900">
@@ -355,33 +333,35 @@ export function ConversationDetail({
               </button>
             </div>
             <div className="flex items-center gap-2.5">
-              <div className="flex h-8 w-8 items-center justify-center rounded-full border border-gray-200 bg-gray-100 font-serif text-xs font-bold text-gray-700 shadow-xs">
-                {contactInitials(workspace.customer.fullName)}
-              </div>
-              <div className="flex items-center gap-2">
-                <h2 className="font-serif text-base font-bold tracking-tight text-gray-950">
-                  {workspace.customer.fullName}
-                </h2>
-                <a
-                  href={`tel:${workspace.customer.phone}`}
-                  aria-label={copy.callNow}
-                  title={`${copy.callNow} ${workspace.customer.fullName}`}
-                  className="ml-0.5 flex h-7 w-7 items-center justify-center rounded-full bg-gray-100 text-gray-900 transition-colors hover:bg-gray-200"
-                >
-                  <Phone className="h-3.5 w-3.5" strokeWidth={1.8} aria-hidden="true" />
-                </a>
-              </div>
-            </div>
-            <div className="relative z-40 flex items-center gap-1.5">
-              <DealMenu deals={deals} selectedId={focused.deal.id} onSelect={selectDeal} />
-              <DealActionsMenu
-                lost={focused.deal.status === "deal_lost"}
-                pending={updatingStatus}
-                onMarkLost={() => void markLost()}
-                onReopen={() => void reopen()}
+              <CustomerMenu
+                participants={participants}
+                customer={workspace.customer}
+                conversationId={workspace.id}
+                onSelect={(participant) => onSelectCustomer(participant, focused.deal.id)}
               />
+              <a
+                href={`tel:${workspace.customer.phone}`}
+                aria-label={copy.callNow}
+                title={`${copy.callNow} ${workspace.customer.fullName}`}
+                className="ml-0.5 flex h-7 w-7 items-center justify-center rounded-full border border-gray-200 bg-transparent text-gray-700 transition-colors hover:bg-gray-50"
+              >
+                <Phone className="h-3.5 w-3.5" strokeWidth={1.8} aria-hidden="true" />
+              </a>
             </div>
-            <DealStatusBadge status={focused.deal.status} />
+            <DealHeading
+              title={focusedOption?.title || copy.quote}
+              deals={deals}
+              selectedId={focused.deal.id}
+              selectedStage={focused.deal.status}
+              lost={focused.deal.status === "deal_lost"}
+              pending={updatingStatus}
+              onSelectDeal={selectDeal}
+              onMarkLost={() => void markLost()}
+              onReopen={() => void reopen()}
+            />
+            <div ref={statusRef}>
+              <DealStatusBadge status={focused.deal.status} />
+            </div>
             {statusError ? <p className="text-[11px] text-red-600">{statusError}</p> : null}
           </div>
 
@@ -434,11 +414,26 @@ export function ConversationDetail({
               </div>
             ) : null}
           </div>
-          {editing ? null : <DetailsToggle open={detailsOpen} onClick={toggleDetails} />}
+          {editing || detailsTop == null ? null : (
+            <div
+              ref={toggleRef}
+              className="pointer-events-none absolute left-1/2 z-20 -translate-x-1/2 -translate-y-1/2"
+              style={{ top: detailsTop }}
+            >
+              <DetailsToggle open={detailsOpen} onClick={toggleDetails} />
+            </div>
+          )}
+          {detailsOpen && separatorWidth > 0 ? (
+            <div
+              aria-hidden="true"
+              className="absolute bottom-0 left-1/2 z-10 h-px -translate-x-1/2 bg-gray-200"
+              style={{ width: separatorWidth }}
+            />
+          ) : null}
         </header>
 
         {detailsOpen ? (
-          <div className="relative z-10 shrink-0 overflow-visible border-b border-gray-200 bg-white shadow-sm">
+          <div className="relative z-10 -mt-px shrink-0 overflow-visible border-b border-gray-200 bg-white shadow-sm">
             <div className="grid grid-cols-1 gap-6 bg-white px-6 py-4 lg:grid-cols-2">
               <DealSummary workspace={focused} />
               <QuotePanel revision={viewed} />

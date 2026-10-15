@@ -5,6 +5,7 @@ import { getQuoteForPage } from "@/src/features/cpq/server/queries";
 import { readCustomers } from "@/src/features/crm/common/db/customer";
 import { readDealCustomers } from "@/src/features/crm/common/db/deal-customer";
 import { readConversations } from "@/src/features/crm/conversations/db/conversation";
+import { canonicalConversationByCustomer } from "@/src/features/crm/conversations/utils/conversations";
 import { readDeal, readDeals } from "@/src/features/crm/deals/db/deal";
 import type { DealBoardItem } from "@/src/features/crm/deals/types";
 import { dealDetailLine, dealProductName } from "@/src/features/crm/deals/utils/formatting";
@@ -27,11 +28,7 @@ export const getDealBoard = cache(async (): Promise<DealBoardItem[]> => {
     readDealCustomers(),
   ]);
   const customerById = new Map(customers.map((customer) => [customer.id, customer]));
-  const conversationByDeal = new Map(
-    conversations.flatMap((conversation) =>
-      conversation.dealId ? [[conversation.dealId, conversation] as const] : [],
-    ),
-  );
+  const conversationByCustomer = canonicalConversationByCustomer(conversations);
   const customersByDeal = new Map<string, { customer: (typeof customers)[number]; isPrimary: boolean }[]>();
   for (const link of links) {
     const customer = customerById.get(link.customerId);
@@ -47,7 +44,7 @@ export const getDealBoard = cache(async (): Promise<DealBoardItem[]> => {
       (left, right) => Number(right.isPrimary) - Number(left.isPrimary),
     );
     if (related.length === 0) continue;
-    const conversation = conversationByDeal.get(deal.id);
+    const conversation = conversationByCustomer.get(related[0]?.customer.id ?? "");
     const quote = await getQuoteForPage(deal.quoteId);
     const specs = quote?.summary.specs ?? [];
     const item = toDealBoardItem({

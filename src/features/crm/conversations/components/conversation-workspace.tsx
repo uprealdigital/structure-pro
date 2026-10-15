@@ -1,31 +1,44 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { ConversationDetail } from "@/src/features/crm/conversations/components/conversation-detail";
 import { ConversationDetailSkeleton } from "@/src/features/crm/conversations/components/conversation-skeleton";
 import { ConversationList } from "@/src/features/crm/conversations/components/conversation-list";
 import { useConversationFilters } from "@/src/features/crm/conversations/hooks/use-conversation-filters";
 import { useConversationSelection } from "@/src/features/crm/conversations/hooks/use-conversation-selection";
 import { copy } from "@/src/features/crm/conversations/locales/en";
-import { markDealLost, reopenDeal } from "@/src/features/crm/conversations/server/actions";
-import type { ConversationInboxItem, ConversationWorkspace } from "@/src/features/crm/conversations/types";
+import {
+  ensureCustomerConversation,
+  markDealLost,
+  reopenDeal,
+  setCustomerActiveDeal,
+} from "@/src/features/crm/conversations/server/actions";
+import type {
+  ConversationInboxItem,
+  ConversationParticipant,
+  ConversationWorkspace,
+} from "@/src/features/crm/conversations/types";
 import type { DealStatus } from "@/src/features/crm/deals/types";
 
-function patchedInbox(
+function shownInbox(
   items: ConversationInboxItem[],
   statusByDeal: Record<string, DealStatus>,
+  activeDealByConversation: Record<string, string>,
 ): ConversationInboxItem[] {
   return items.map((item) => {
-    let changed = false;
     const dealStatuses = item.dealStatuses.map((deal) => {
       const nextStatus = statusByDeal[deal.id];
       if (!nextStatus || nextStatus === deal.status) return deal;
-      changed = true;
       return { ...deal, status: nextStatus };
     });
-    if (!changed) return item;
-    const primary = dealStatuses.find((deal) => deal.id === item.dealId);
-    return { ...item, dealStatus: primary?.status ?? item.dealStatus, dealStatuses };
+    const dealId = activeDealByConversation[item.id] ?? item.dealId;
+    const active = dealStatuses.find((deal) => deal.id === dealId);
+    return {
+      ...item,
+      dealId,
+      dealStatus: active?.status ?? item.dealStatus,
+      dealStatuses,
+    };
   });
 }
 
@@ -46,7 +59,16 @@ export function ConversationWorkspaceView({
   });
   const filters = useConversationFilters();
   const [statusByDeal, setStatusByDeal] = useState<Record<string, DealStatus>>({});
-  const displayed = patchedInbox(inbox, statusByDeal);
+  const [activeDealByConversation, setActiveDealByConversation] = useState<Record<string, string>>({});
+  const [opened, setOpened] = useState<ConversationInboxItem[]>([]);
+  const mergedInbox = useMemo(() => {
+    const byId = new Map(inbox.map((item) => [item.id, item]));
+    for (const item of opened) {
+      if (!byId.has(item.id)) byId.set(item.id, item);
+    }
+    return [...byId.values()].sort((left, right) => right.updatedAt.localeCompare(left.updatedAt));
+  }, [inbox, opened]);
+  const displayed = shownInbox(mergedInbox, statusByDeal, activeDealByConversation);
   const visible = filters.visibleItems(displayed);
   const showDetail = Boolean(selection.selectedId);
   const showLoadError = loadError || (showDetail && selection.status === "error");
@@ -59,14 +81,44 @@ export function ConversationWorkspaceView({
     setStatusByDeal(nextPatches);
     selection.patchDealStatus(dealId, nextStatus);
 
-    const stillVisible = filters.visibleItems(patchedInbox(inbox, nextPatches)).some(
+    const stillVisible = filters.visibleItems(shownInbox(mergedInbox, nextPatches, activeDealByConversation)).some(
       (item) => item.id === currentId,
     );
     if (!stillVisible && currentId && index >= 0) {
       const next = before[index + 1] ?? before[index - 1];
-      if (next && next.id !== currentId) void selection.selectConversation(next.id);
+      if (next && next.id !== currentId) selectConversation(next.id);
       else selection.clearConversation();
     }
+  }
+
+  function activateDeal(dealId: string) {
+    const conversationId = selection.selectedId;
+    const customerId = selection.workspace?.customer.id;
+    if (!conversationId || !customerId) return;
+    setActiveDealByConversation((current) => ({ ...current, [conversationId]: dealId }));
+    void setCustomerActiveDeal({ customerId, dealId });
+  }
+
+  function selectConversation(id: string) {
+    void selection.selectConversation(id, activeDealByConversation[id]);
+  }
+
+  async function selectCustomer(participant: ConversationParticipant, dealId: string) {
+    let conversationId = participant.conversationId;
+    if (!conversationId) {
+      const result = await ensureCustomerConversation({
+        customerId: participant.customer.id,
+        dealId,
+      });
+      if ("error" in result) return;
+      conversationId = result.data.item.id;
+      const item = result.data.item;
+      setOpened((current) => (current.some((row) => row.id === item.id) ? current : [item, ...current]));
+    }
+    if (!conversationId) return;
+    const openedId = conversationId;
+    setActiveDealByConversation((current) => ({ ...current, [openedId]: dealId }));
+    void selection.selectConversation(openedId, dealId);
   }
 
   async function onMarkLost(dealId: string): Promise<{ success: true } | { error: string }> {
@@ -95,10 +147,11 @@ export function ConversationWorkspaceView({
         includedStatuses={filters.included}
         onToggleStatus={filters.toggleStatus}
         onClearFilters={filters.clearFilters}
+        onResetFilters={filters.resetFilters}
         dealStatusCount={filters.dealStatusCount}
         activeFilterCount={filters.activeCount}
         selectedId={selection.selectedId}
-        onSelect={selection.selectConversation}
+        onSelect={selectConversation}
       />
       <section
         className={`${showDetail ? "flex" : "hidden lg:flex"} min-h-0 min-w-0 flex-1 flex-col`}
@@ -109,12 +162,13 @@ export function ConversationWorkspaceView({
           </div>
         ) : selection.workspace && selection.status !== "pending" ? (
           <ConversationDetail
-            key={selection.workspace.id}
+            key={`${selection.workspace.id}:${selection.workspace.deal.id}`}
             workspace={selection.workspace}
             onBack={selection.clearConversation}
             onMarkLost={onMarkLost}
             onReopen={onReopen}
-            onSelectConversation={selection.highlightConversation}
+            onActivateDeal={activateDeal}
+            onSelectCustomer={selectCustomer}
           />
         ) : showDetail && selection.status === "pending" ? (
           <ConversationDetailSkeleton />

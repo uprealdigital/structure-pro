@@ -1,0 +1,23 @@
+---
+description: Write SQL files for Daniel to run; never connect to Supabase
+alwaysApply: true
+---
+
+# Supabase changes
+
+Do not connect to, query, or change the live Supabase database. That includes the Supabase CLI (`db push`, `db execute`, `migration up`), `psql`, scripts that use the service role or connection string from `.env.local`, the Management API, and the Data API.
+
+`supabase/schema.sql` and the `supabase/migrate-*.sql` files are the source of truth. Read those when you need the current schema.
+
+When a schema or data change is required, write SQL Daniel runs himself in the Supabase SQL editor:
+
+- One-time changes go in a new `supabase/migrate-<name>.sql`.
+- Keep `supabase/schema.sql` in sync so a fresh install matches.
+- Start the migration with `-- Run once in the Supabase SQL editor.`
+- Tell Daniel which file to run.
+
+```sql
+-- Run once in the Supabase SQL editor.
+
+alter table crm.deals add column if not exists notes text;
+```

@@ -8,6 +8,11 @@ import type { DealBoardItem, DealSource, DealStatus } from "@/src/features/crm/d
 import { dealStatusOption, dealStatusOptions, type DealStatusOption } from "@/src/features/crm/deals/utils/status";
 import { contactInitials } from "@/src/features/crm/common/utils/formatting";
 
+function dealConversationHref(deal: { id: string; conversationId?: string }): string | undefined {
+  if (!deal.conversationId) return undefined;
+  return `/crm/conversations?conversation=${encodeURIComponent(deal.conversationId)}&deal=${encodeURIComponent(deal.id)}`;
+}
+
 function stageLabel(stage: DealStatus): string {
   return dealStatusOption(stage)?.label ?? stage;
 }
@@ -75,11 +80,12 @@ function DealCard({ deal }: { deal: DealBoardItem }) {
 
   const className = `group block rounded-md border p-3.5 shadow-xs transition-all ${cardClass}`;
 
-  if (!deal.conversationId) return <article className={className}>{body}</article>;
+  const href = dealConversationHref(deal);
+  if (!href) return <article className={className}>{body}</article>;
 
   return (
     <Link
-      href={`/crm/conversations?conversation=${encodeURIComponent(deal.conversationId)}`}
+      href={href}
       scroll={false}
       aria-label={`${copy.openDeal}: ${deal.contactName}`}
       className={`${className} cursor-pointer`}
@@ -262,9 +268,7 @@ export function DealsBoard({ deals, loadError }: { deals: DealBoardItem[]; loadE
                   <tbody className="divide-y divide-gray-100">
                     {visible.map((deal) => {
                       const stage = dealStatusOption(deal.stage);
-                      const href = deal.conversationId
-                        ? `/crm/conversations?conversation=${encodeURIComponent(deal.conversationId)}`
-                        : undefined;
+                      const href = dealConversationHref(deal);
                       return (
                         <tr key={deal.id} className="group relative transition-colors hover:bg-gray-50/80">
                           <td className="py-3.5 pr-4 pl-6">
