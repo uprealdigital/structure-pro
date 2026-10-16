@@ -1,17 +1,31 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import { activityEventSchema, type ActivityEvent } from "@/src/features/crm/conversations/types";
+import {
+  activityEventSchema,
+  activityReadEventSchema,
+  type ActivityEvent,
+  type ActivityReadEvent,
+} from "@/src/features/crm/conversations/types";
 
 const reconnectDelayMs = 1000;
 
-export function useActivityStream(onEvent: (event: ActivityEvent) => void, initialSince?: string) {
+export function useActivityStream(
+  onEvent: (event: ActivityEvent) => void,
+  onRead: (event: ActivityReadEvent) => void,
+  initialSince?: string,
+) {
   const onEventRef = useRef(onEvent);
+  const onReadRef = useRef(onRead);
   const sinceRef = useRef(initialSince);
 
   useEffect(() => {
     onEventRef.current = onEvent;
   }, [onEvent]);
+
+  useEffect(() => {
+    onReadRef.current = onRead;
+  }, [onRead]);
 
   useEffect(() => {
     const seen = new Set<string>();
@@ -43,6 +57,17 @@ export function useActivityStream(onEvent: (event: ActivityEvent) => void, initi
         if (createdAt && (!sinceRef.current || createdAt > sinceRef.current)) sinceRef.current = createdAt;
         onEventRef.current(event);
       };
+      source.addEventListener("read", (message) => {
+        let payload: unknown;
+        try {
+          payload = JSON.parse((message as MessageEvent).data);
+        } catch {
+          return;
+        }
+        const parsed = activityReadEventSchema.safeParse(payload);
+        if (!parsed.success) return;
+        onReadRef.current(parsed.data);
+      });
       source.onerror = () => {
         source?.close();
         source = undefined;

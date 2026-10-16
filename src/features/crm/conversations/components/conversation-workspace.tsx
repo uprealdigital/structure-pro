@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useRef, useState } from "react";
-import { ConversationDetail } from "@/src/features/crm/conversations/components/conversation-detail";
+import { ConversationDetail, type ThreadReadNotice } from "@/src/features/crm/conversations/components/conversation-detail";
 import { ConversationDetailSkeleton } from "@/src/features/crm/conversations/components/conversation-skeleton";
 import { ConversationList } from "@/src/features/crm/conversations/components/conversation-list";
 import { useActivityStream } from "@/src/features/crm/conversations/hooks/use-activity-stream";
@@ -20,6 +20,7 @@ import {
 import type {
   Activity,
   ActivityEvent,
+  ActivityReadEvent,
   ConversationInboxItem,
   ConversationParticipant,
   ConversationWorkspace,
@@ -87,17 +88,35 @@ export function ConversationWorkspaceView({
   const [opened, setOpened] = useState<ConversationInboxItem[]>([]);
   const [arrived, setArrived] = useState<ConversationInboxItem[]>([]);
   const [patches, setPatches] = useState<Record<string, InboxPatch>>({});
-  const [unreadById, setUnreadById] = useState<Record<string, boolean>>({});
+  const [unreadCountById, setUnreadCountById] = useState<Record<string, number>>({});
+  const serverUnreadCount = useRef(new Map<string, number>());
   const [liveActivities, setLiveActivities] = useState<Record<string, Activity[]>>({});
+  const [readNotice, setReadNotice] = useState<ThreadReadNotice | null>(null);
+  const readToken = useRef(0);
   const knownIds = useRef(new Set<string>());
   const requestedIds = useRef(new Set<string>());
-  for (const item of inbox) knownIds.current.add(item.id);
-  for (const item of opened) knownIds.current.add(item.id);
-  for (const item of arrived) knownIds.current.add(item.id);
+  for (const item of inbox) {
+    knownIds.current.add(item.id);
+    serverUnreadCount.current.set(item.id, item.unreadCount);
+  }
+  for (const item of opened) {
+    knownIds.current.add(item.id);
+    serverUnreadCount.current.set(item.id, item.unreadCount);
+  }
+  for (const item of arrived) {
+    knownIds.current.add(item.id);
+    serverUnreadCount.current.set(item.id, item.unreadCount);
+  }
 
-  useActivityStream((event) => {
-    applyActivity(event);
-  }, newestActivityAt(inbox, workspace));
+  useActivityStream(
+    (event) => {
+      applyActivity(event);
+    },
+    (event) => {
+      applyRead(event);
+    },
+    newestActivityAt(inbox, workspace),
+  );
 
   function applyActivity(event: ActivityEvent) {
     const { conversationId, activity } = event;
@@ -119,8 +138,11 @@ export function ConversationWorkspaceView({
         },
       };
     });
-    if (!activity.read) {
-      setUnreadById((current) => ({ ...current, [conversationId]: true }));
+    if (!activity.read && knownIds.current.has(conversationId)) {
+      setUnreadCountById((current) => {
+        const base = current[conversationId] ?? serverUnreadCount.current.get(conversationId) ?? 0;
+        return { ...current, [conversationId]: base + 1 };
+      });
     }
     if (knownIds.current.has(conversationId) || requestedIds.current.has(conversationId)) return;
     requestedIds.current.add(conversationId);
@@ -130,6 +152,30 @@ export function ConversationWorkspaceView({
       knownIds.current.add(item.id);
       setArrived((current) => (current.some((row) => row.id === item.id) ? current : [...current, item]));
     });
+  }
+
+  function applyRead(event: ActivityReadEvent) {
+    setUnreadCountById((current) => ({ ...current, [event.conversationId]: event.unreadCount }));
+    setLiveActivities((current) => {
+      const list = current[event.conversationId];
+      if (!list) return current;
+      return {
+        ...current,
+        [event.conversationId]: list.map((activity) =>
+          activity.position === event.position
+            ? { ...activity, read: event.readAt != null, readAt: event.readAt }
+            : activity,
+        ),
+      };
+    });
+    setReadNotice({
+      token: readToken.current + 1,
+      kind: "activity",
+      conversationId: event.conversationId,
+      position: event.position,
+      readAt: event.readAt,
+    });
+    readToken.current += 1;
   }
 
   const mergedInbox = useMemo(() => {
@@ -153,23 +199,31 @@ export function ConversationWorkspaceView({
   }, [inbox, opened, arrived, patches]);
   const displayed = shownInbox(mergedInbox, statusByDeal, activeDealByConversation);
   const visible = filters.visibleItems(displayed).map((item) => {
-    const unread = unreadById[item.id];
-    return unread === undefined ? item : { ...item, unread };
+    const count = unreadCountById[item.id];
+    if (count === undefined) return item;
+    return { ...item, unreadCount: count, unread: count > 0 };
   });
   const showDetail = Boolean(selection.selectedId);
   const showLoadError = loadError || (showDetail && selection.status === "error");
 
   async function markRead(ids: string[], read: boolean) {
     if (ids.length === 0) return;
-    const snapshot = new Map(ids.map((id) => [id, unreadById[id]]));
-    setUnreadById((current) => {
+    const snapshot = new Map(ids.map((id) => [id, unreadCountById[id]]));
+    setUnreadCountById((current) => {
       const next = { ...current };
-      for (const id of ids) next[id] = !read;
+      for (const id of ids) {
+        if (read) {
+          next[id] = 0;
+          continue;
+        }
+        const base = current[id] ?? serverUnreadCount.current.get(id) ?? 0;
+        next[id] = base === 0 ? 1 : base;
+      }
       return next;
     });
     const result = await markConversationsRead({ conversationIds: ids, read });
     if ("error" in result) {
-      setUnreadById((current) => {
+      setUnreadCountById((current) => {
         const next = { ...current };
         for (const [id, value] of snapshot) {
           if (value === undefined) delete next[id];
@@ -179,14 +233,26 @@ export function ConversationWorkspaceView({
       });
       return;
     }
-    if (!read) {
-      const updated = new Set(result.data.conversationIds);
-      setUnreadById((current) => {
-        const next = { ...current };
-        for (const id of ids) next[id] = updated.has(id);
-        return next;
-      });
-    }
+    const returned = new Map(result.data.counts.map((row) => [row.conversationId, row.unreadCount]));
+    setUnreadCountById((current) => {
+      const next = { ...current };
+      for (const [id, unreadCount] of returned) next[id] = unreadCount;
+      if (!read) {
+        for (const id of ids) {
+          if (!returned.has(id)) next[id] = 0;
+        }
+      }
+      return next;
+    });
+    const conversationIds = read ? ids : [...returned.keys()];
+    if (conversationIds.length === 0) return;
+    readToken.current += 1;
+    setReadNotice({
+      token: readToken.current,
+      kind: "conversations",
+      conversationIds,
+      read,
+    });
   }
 
   function applyDealStatus(dealId: string, nextStatus: DealStatus) {
@@ -296,6 +362,10 @@ export function ConversationWorkspaceView({
             onReopen={onReopen}
             onActivateDeal={activateDeal}
             onSelectCustomer={selectCustomer}
+            onActivitiesSeen={(id, unreadCount) => {
+              setUnreadCountById((current) => ({ ...current, [id]: unreadCount }));
+            }}
+            readNotice={readNotice}
           />
         ) : showDetail && selection.status === "pending" ? (
           <ConversationDetailSkeleton />

@@ -2,7 +2,14 @@
 
 import { revalidatePath } from "next/cache";
 import { demoChatId, sendTelegramMessage } from "@/src/common/lib/telegram/telegram.service";
-import { createActivities, deleteLatestActivity, readActivities, updateActivitiesRead } from "@/src/features/crm/conversations/db/activity";
+import {
+  conversationUnreadCount,
+  createActivities,
+  deleteLatestActivity,
+  markActivitiesReadAt,
+  readActivities,
+  updateActivitiesRead,
+} from "@/src/features/crm/conversations/db/activity";
 import { createConversation, deleteConversation, readConversationById, updateConversation } from "@/src/features/crm/conversations/db/conversation";
 import {
   getConversation,
@@ -17,6 +24,7 @@ import {
   composerChannelSchema,
   conversationIdSchema,
   conversationReadUpdateSchema,
+  visibleActivityReadSchema,
   customerDealsRequestSchema,
   type Activity,
   type ActivityInsert,
@@ -108,8 +116,16 @@ export async function sendManualActivity(input: {
       const conversation = await readConversationById(conversationId.data);
       await sendTelegramMessage(conversation?.chatId?.trim() || demoChatId(), text);
     }
+    const sentAt = new Date().toISOString();
     await createActivities(conversationId.data, [
-      { role: "model", channel: channel.data, text, generatedBy: "manual" },
+      {
+        role: "model",
+        channel: channel.data,
+        text,
+        generatedBy: "manual",
+        createdAt: sentAt,
+        readAt: sentAt,
+      },
     ]);
     const activity = (await readActivities(conversationId.data)).at(-1);
     if (!activity) return { error: "The message was not saved" };
@@ -272,17 +288,42 @@ export async function loadCustomerDeals(
   }
 }
 
+export async function markVisibleActivitiesRead(input: {
+  conversationId: string;
+  positions: number[];
+}): Promise<
+  { success: true; data: { readAt: string; positions: number[]; unread: boolean; unreadCount: number } } | { error: string }
+> {
+  const parsed = visibleActivityReadSchema.safeParse(input);
+  if (!parsed.success) return { error: "A message is required" };
+
+  try {
+    const updated = await markActivitiesReadAt(parsed.data.conversationId, parsed.data.positions);
+    const unreadCount = await conversationUnreadCount(parsed.data.conversationId);
+    revalidatePath("/crm/conversations");
+    return {
+      success: true,
+      data: { readAt: updated.readAt, positions: updated.positions, unread: unreadCount > 0, unreadCount },
+    };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Could not update messages";
+    return { error: message };
+  }
+}
+
 export async function markConversationsRead(input: {
   conversationIds: string[];
   read: boolean;
-}): Promise<{ success: true; data: { conversationIds: string[] } } | { error: string }> {
+}): Promise<
+  { success: true; data: { counts: Array<{ conversationId: string; unreadCount: number }> } } | { error: string }
+> {
   const parsed = conversationReadUpdateSchema.safeParse(input);
   if (!parsed.success) return { error: "A conversation is required" };
 
   try {
-    const conversationIds = await updateActivitiesRead(parsed.data);
+    const counts = await updateActivitiesRead(parsed.data);
     revalidatePath("/crm/conversations");
-    return { success: true, data: { conversationIds } };
+    return { success: true, data: { counts } };
   } catch (error) {
     const message = error instanceof Error ? error.message : "Could not update messages";
     return { error: message };

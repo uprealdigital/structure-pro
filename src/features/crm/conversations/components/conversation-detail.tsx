@@ -11,6 +11,7 @@ import { QuotePanel, QuoteRevisionMenu } from "@/src/features/crm/conversations/
 import { Toast } from "@/src/common/components/toast";
 import { ReviewSendModal } from "@/src/features/crm/conversations/components/review-send-modal";
 import { useConversationActivities } from "@/src/features/crm/conversations/hooks/use-conversation-activities";
+import { useVisibleActivityReads } from "@/src/features/crm/conversations/hooks/use-visible-activity-reads";
 import { copy } from "@/src/features/crm/conversations/locales/en";
 import { sendConversationQuote, sendManualActivity } from "@/src/features/crm/conversations/server/actions";
 import type {
@@ -62,6 +63,21 @@ function ChannelIcon({ channel, className }: { channel: ComposerChannel; classNa
     </svg>
   );
 }
+
+export type ThreadReadNotice =
+  | {
+      token: number;
+      kind: "activity";
+      conversationId: string;
+      position: number;
+      readAt: string | null;
+    }
+  | {
+      token: number;
+      kind: "conversations";
+      conversationIds: string[];
+      read: boolean;
+    };
 
 function revisionStatusLabel(revision: ConversationQuoteRevision): string {
   return revisionVersionLabel(revision.status, revision.revisionNumber);
@@ -120,6 +136,8 @@ export function ConversationDetail({
   onRename,
   onActivateDeal,
   onSelectCustomer,
+  onActivitiesSeen,
+  readNotice = null,
 }: {
   workspace: ConversationWorkspace;
   incoming?: Activity[];
@@ -131,6 +149,8 @@ export function ConversationDetail({
   ) => Promise<{ success: true; data: { status: DealStatus } } | { error: string }>;
   onActivateDeal: (dealId: string, status: DealStatus) => void;
   onSelectCustomer: (participant: ConversationParticipant, dealId: string) => void;
+  onActivitiesSeen: (conversationId: string, unreadCount: number) => void;
+  readNotice?: ThreadReadNotice | null;
 }) {
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [focusedDealId, setFocusedDealId] = useState(workspace.deal.id);
@@ -188,6 +208,8 @@ export function ConversationDetail({
   const threadId = workspace.id;
   const threadActivities = workspace.activities;
   const { activities, setActivities } = useConversationActivities(threadId, threadActivities, incoming);
+  const activitiesRef = useRef(activities);
+  activitiesRef.current = activities;
   const [sending, setSending] = useState(false);
   const [sendError, setSendError] = useState("");
   const [reviewOpen, setReviewOpen] = useState(false);
@@ -230,6 +252,52 @@ export function ConversationDetail({
   const channelMenu = useRef<HTMLDivElement>(null);
   const thread = useRef<HTMLDivElement>(null);
   const stickToBottom = useRef(true);
+  const appliedReadToken = useRef(0);
+  const suppressUntilHidden = useVisibleActivityReads({
+    rootRef: thread,
+    conversationId: workspace.id,
+    activitiesRef,
+    onRead: ({ positions, readAt, unreadCount }) => {
+      setActivities((current) =>
+        current.map((activity) =>
+          positions.includes(activity.position) ? { ...activity, read: true, readAt } : activity,
+        ),
+      );
+      onActivitiesSeen(workspace.id, unreadCount);
+    },
+  });
+
+  useEffect(() => {
+    if (!readNotice || readNotice.token === appliedReadToken.current) return;
+    appliedReadToken.current = readNotice.token;
+    if (readNotice.kind === "activity") {
+      if (readNotice.conversationId !== workspace.id) return;
+      if (readNotice.readAt == null) suppressUntilHidden(readNotice.position);
+      setActivities((current) =>
+        current.map((activity) =>
+          activity.position === readNotice.position
+            ? { ...activity, read: readNotice.readAt != null, readAt: readNotice.readAt }
+            : activity,
+        ),
+      );
+      return;
+    }
+    if (!readNotice.conversationIds.includes(workspace.id)) return;
+    setActivities((current) => {
+      if (readNotice.kind !== "conversations") return current;
+      if (readNotice.read) {
+        const readAt = new Date().toISOString();
+        return current.map((activity) => (activity.read ? activity : { ...activity, read: true, readAt }));
+      }
+      let last = -1;
+      for (const activity of current) if (activity.position > last) last = activity.position;
+      if (last < 0) return current;
+      suppressUntilHidden(last);
+      return current.map((activity) =>
+        activity.position === last ? { ...activity, read: false, readAt: null } : activity,
+      );
+    });
+  }, [readNotice, suppressUntilHidden, workspace.id]);
   const specs = focused.quote?.specs ?? [];
   const viewed = viewedRevision(focused.quote, selectedRevisionId);
   const title = productTitle(viewed?.specs ?? specs);

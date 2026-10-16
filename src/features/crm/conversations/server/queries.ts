@@ -11,7 +11,12 @@ import {
 } from "@/src/features/crm/common/db/deal-customer";
 import type { DealCustomer } from "@/src/features/crm/common/types";
 import { getCustomer } from "@/src/features/crm/common/server/queries";
-import { readActivities, readActivitiesSince } from "@/src/features/crm/conversations/db/activity";
+import {
+  conversationUnreadCount,
+  countUnreadActivities,
+  readActivities,
+  readActivitiesSince,
+} from "@/src/features/crm/conversations/db/activity";
 import {
   readConversation,
   readConversationById,
@@ -20,16 +25,18 @@ import {
   readConversations,
 } from "@/src/features/crm/conversations/db/conversation";
 import {
+  activityReadEventSchema,
   conversationDealOptionSchema,
   conversationSummarySchema,
   conversationWorkspaceSchema,
   type ActivityEvent,
+  type ActivityReadEvent,
   type Conversation,
   type ConversationDealOption,
   type ConversationInboxItem,
   type ConversationWorkspace,
 } from "@/src/features/crm/conversations/types";
-import { activityPreview, formatDealMenuDate, hasUnreadActivity, lastMessageAt, productTitle } from "@/src/features/crm/conversations/utils/formatting";
+import { activityPreview, formatDealMenuDate, lastMessageAt, productTitle, unreadActivityCount } from "@/src/features/crm/conversations/utils/formatting";
 import { canonicalConversationByCustomer } from "@/src/features/crm/conversations/utils/conversations";
 import { orderedDealParticipants } from "@/src/features/crm/conversations/utils/participants";
 import {
@@ -157,6 +164,10 @@ async function dealOption(
   return option.success ? option.data : undefined;
 }
 
+export async function getUnreadActivityCount(): Promise<number> {
+  return countUnreadActivities();
+}
+
 export const getConversationInbox = cache(async (): Promise<ConversationInboxItem[]> => {
   const [summaries, customers, links, deals] = await Promise.all([
     readConversations(),
@@ -187,7 +198,8 @@ export const getConversationInbox = cache(async (): Promise<ConversationInboxIte
       deals: linked,
       preview: activityPreview(activities.at(-1)),
       updatedAt: lastMessageAt(activities),
-      unread: hasUnreadActivity(activities),
+      unread: unreadActivityCount(activities) > 0,
+      unreadCount: unreadActivityCount(activities),
     });
     if (item) items.push(item);
   }
@@ -217,7 +229,8 @@ export async function getCustomerInboxItem(
     deals: linked,
     preview: activityPreview(activities.at(-1)),
     updatedAt: lastMessageAt(activities),
-    unread: hasUnreadActivity(activities),
+    unread: unreadActivityCount(activities) > 0,
+    unreadCount: unreadActivityCount(activities),
   });
 }
 
@@ -257,7 +270,8 @@ export async function getConversationInboxItem(
     deals: linked,
     preview: activityPreview(conversation.activities.at(-1)),
     updatedAt,
-    unread: hasUnreadActivity(conversation.activities),
+    unread: unreadActivityCount(conversation.activities) > 0,
+    unreadCount: unreadActivityCount(conversation.activities),
   });
 }
 
@@ -274,6 +288,7 @@ export function openActivityStream(since: string | undefined, signal: AbortSigna
       let closed = false;
       let live = false;
       const buffered: ActivityEvent[] = [];
+      const bufferedReads: ActivityReadEvent[] = [];
       const heartbeat = setInterval(() => {
         write(": heartbeat\n\n");
       }, 15_000);
@@ -291,6 +306,32 @@ export function openActivityStream(since: string | undefined, signal: AbortSigna
         write(`data: ${JSON.stringify(event)}\n\n`);
       }
 
+      function writeRead(event: ActivityReadEvent) {
+        write(`event: read\ndata: ${JSON.stringify(event)}\n\n`);
+      }
+
+      function publishRead(row: { conversation_id?: unknown; position?: unknown; read_at?: unknown }) {
+        const conversationId = row.conversation_id;
+        const position = typeof row.position === "number" ? row.position : Number(row.position);
+        if (typeof conversationId !== "string" || !Number.isInteger(position) || position < 0) return;
+        void conversationUnreadCount(conversationId)
+          .then((unreadCount) => {
+            const event = activityReadEventSchema.safeParse({
+              conversationId,
+              position,
+              readAt: typeof row.read_at === "string" && row.read_at ? row.read_at : null,
+              unread: unreadCount > 0,
+              unreadCount,
+            });
+            if (!event.success || closed) return;
+            if (live) writeRead(event.data);
+            else bufferedReads.push(event.data);
+          })
+          .catch(() => {
+            // A missed read event is corrected the next time the count loads.
+          });
+      }
+
       write(": connected\n\n");
 
       let supabase: ReturnType<typeof getSupabase>;
@@ -304,6 +345,9 @@ export function openActivityStream(since: string | undefined, signal: AbortSigna
             if (!event) return;
             if (live) writeEvent(event);
             else buffered.push(event);
+          })
+          .on("postgres_changes", { event: "UPDATE", schema: "crm", table: "activities" }, (payload) => {
+            publishRead(payload.new);
           });
       } catch {
         clearInterval(heartbeat);
@@ -341,6 +385,7 @@ export function openActivityStream(since: string | undefined, signal: AbortSigna
         if (closed) return;
         live = true;
         const pending = buffered.splice(0);
+        for (const event of bufferedReads.splice(0)) writeRead(event);
         const seen = new Set<string>();
         for (const event of [...caught, ...pending]) {
           const key = `${event.conversationId}:${event.activity.position}`;

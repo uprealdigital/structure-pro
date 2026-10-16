@@ -26,8 +26,12 @@ export function messageActivityAt(activity: Activity): string | undefined {
   return activity.createdAt;
 }
 
+export function unreadActivityCount(activities: Activity[]): number {
+  return activities.reduce((count, activity) => count + (activity.read ? 0 : 1), 0);
+}
+
 export function hasUnreadActivity(activities: Activity[]): boolean {
-  return activities.some((activity) => !activity.read);
+  return unreadActivityCount(activities) > 0;
 }
 
 export function lastMessageAt(activities: Activity[]): string {

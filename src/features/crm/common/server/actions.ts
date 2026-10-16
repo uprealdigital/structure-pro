@@ -1,12 +1,13 @@
 "use server";
 
-import { getConversationInbox } from "@/src/features/crm/conversations/server/queries";
+import { getConversationInbox, getUnreadActivityCount } from "@/src/features/crm/conversations/server/queries";
 import { getCustomerCount } from "@/src/features/crm/customers/server/queries";
 import { getDealCount } from "@/src/features/crm/deals/server/queries";
 import { getQuoteCount } from "@/src/features/crm/quotes/server/queries";
 
 export type NavCounts = {
   conversationCount: number;
+  unreadActivityCount: number;
   dealCount: number;
   customerCount: number;
   quoteCount: number;
@@ -14,8 +15,9 @@ export type NavCounts = {
 
 export async function loadNavCounts(): Promise<{ success: true; data: NavCounts } | { error: string }> {
   try {
-    const [inbox, deals, customers, quotes] = await Promise.allSettled([
+    const [inbox, unread, deals, customers, quotes] = await Promise.allSettled([
       getConversationInbox(),
+      getUnreadActivityCount(),
       getDealCount(),
       getCustomerCount(),
       getQuoteCount(),
@@ -25,6 +27,7 @@ export async function loadNavCounts(): Promise<{ success: true; data: NavCounts 
       success: true,
       data: {
         conversationCount: inbox.status === "fulfilled" ? inbox.value.length : 0,
+        unreadActivityCount: unread.status === "fulfilled" ? unread.value : 0,
         dealCount: deals.status === "fulfilled" ? deals.value : 0,
         customerCount: customers.status === "fulfilled" ? customers.value : 0,
         quoteCount: quotes.status === "fulfilled" ? quotes.value : 0,

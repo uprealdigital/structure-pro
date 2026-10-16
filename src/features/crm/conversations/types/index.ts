@@ -62,6 +62,7 @@ export const activitySchema = z.object({
   channel: activityChannelSchema,
   generatedBy: generatedBySchema,
   read: z.boolean(),
+  readAt: z.string().nullable(),
   createdAt: z.string().optional(),
   call: callSchema.optional(),
 });
@@ -75,6 +76,16 @@ export const activityEventSchema = z.object({
 
 export type ActivityEvent = z.infer<typeof activityEventSchema>;
 
+export const activityReadEventSchema = z.object({
+  conversationId: z.string().trim().min(1),
+  position: z.number().int().nonnegative(),
+  readAt: z.string().nullable(),
+  unread: z.boolean(),
+  unreadCount: z.number().int().nonnegative(),
+});
+
+export type ActivityReadEvent = z.infer<typeof activityReadEventSchema>;
+
 export const activityInsertSchema = z
   .object({
     role: z.enum(["user", "model"]),
@@ -82,6 +93,7 @@ export const activityInsertSchema = z
     channel: activityChannelSchema,
     generatedBy: generatedBySchema.default("manual"),
     createdAt: z.string().optional(),
+    readAt: z.string().optional(),
     call: callDraftSchema.optional(),
   })
   .refine((activity) => activity.channel !== "call" || Boolean(activity.call?.direction), {
@@ -105,6 +117,11 @@ export const conversationSchema = z.object({
 export type Conversation = z.infer<typeof conversationSchema>;
 
 export const conversationIdSchema = z.string().trim().min(1);
+
+export const visibleActivityReadSchema = z.object({
+  conversationId: conversationIdSchema,
+  positions: z.array(z.number().int().nonnegative()).min(1).max(100),
+});
 
 export const conversationReadUpdateSchema = z.object({
   conversationIds: z.array(conversationIdSchema).min(1),
@@ -162,6 +179,7 @@ export const conversationInboxItemSchema = z.object({
   dealSource: dealSourceSchema,
   contractSent: z.boolean(),
   unread: z.boolean(),
+  unreadCount: z.number().int().nonnegative(),
 });
 
 export type ConversationInboxItem = z.infer<typeof conversationInboxItemSchema>;

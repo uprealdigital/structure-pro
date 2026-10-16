@@ -4,6 +4,7 @@ import { createCall, readCalls } from "@/src/features/crm/conversations/db/call"
 import {
   activityInsertSchema,
   conversationReadUpdateSchema,
+  visibleActivityReadSchema,
   type Activity,
   type ActivityEvent,
   type ActivityInsert,
@@ -15,7 +16,7 @@ function crm() {
   return db("crm");
 }
 
-const activityColumns = "position, channel, role, body, generated_by, is_read, call_id, created_at";
+const activityColumns = "position, channel, role, body, generated_by, read_at, call_id, created_at";
 
 export async function createActivities(
   conversationId: string,
@@ -45,16 +46,21 @@ export async function createActivities(
   }
 
   const inserted = await crm().from("activities").insert(
-    rows.map((activity, offset) => ({
-      conversation_id: conversationId,
-      position: start + offset,
-      channel: activity.channel,
-      role: activity.role,
-      body: activity.text,
-      generated_by: activity.generatedBy,
-      is_read: activity.role !== "user",
-      call_id: callIds[offset],
-    })),
+    rows.map((activity, offset) => {
+      const readAt = activity.readAt ?? null;
+      return {
+        conversation_id: conversationId,
+        position: start + offset,
+        channel: activity.channel,
+        role: activity.role,
+        body: activity.text,
+        generated_by: activity.generatedBy,
+        ...(activity.createdAt ? { created_at: activity.createdAt } : {}),
+        read_at: readAt,
+        is_read: readAt != null,
+        call_id: callIds[offset],
+      };
+    }),
   );
   throwIfError(inserted.error);
   const touched = await crm()
@@ -98,19 +104,82 @@ export async function readActivitiesSince(since: string): Promise<ActivityEvent[
   });
 }
 
-export async function updateActivitiesRead(input: ConversationReadUpdate): Promise<string[]> {
-  const parsed = conversationReadUpdateSchema.parse(input);
+export async function countUnreadActivities(): Promise<number> {
+  const { count, error } = await crm()
+    .from("activities")
+    .select("position", { count: "exact", head: true })
+    .is("read_at", null);
+  throwIfError(error);
+  return count ?? 0;
+}
+
+export async function conversationUnreadCount(conversationId: string): Promise<number> {
+  const { count, error } = await crm()
+    .from("activities")
+    .select("position", { count: "exact", head: true })
+    .eq("conversation_id", conversationId)
+    .is("read_at", null);
+  throwIfError(error);
+  return count ?? 0;
+}
+
+export async function markActivitiesReadAt(
+  conversationId: string,
+  positions: number[],
+): Promise<{ readAt: string; positions: number[] }> {
+  const parsed = visibleActivityReadSchema.parse({ conversationId, positions });
+  const readAt = new Date().toISOString();
   const { data, error } = await crm()
     .from("activities")
-    .update({ is_read: parsed.read })
-    .in("conversation_id", parsed.conversationIds)
-    .select("conversation_id");
+    .update({ read_at: readAt, is_read: true })
+    .eq("conversation_id", parsed.conversationId)
+    .in("position", parsed.positions)
+    .is("read_at", null)
+    .select("position");
   throwIfError(error);
-  const ids = new Set<string>();
-  for (const row of data ?? []) {
-    if (typeof row.conversation_id === "string") ids.add(row.conversation_id);
+  const updated = (data ?? [])
+    .map((row) => row.position)
+    .filter((position): position is number => typeof position === "number");
+  return { readAt, positions: updated };
+}
+
+export async function updateActivitiesRead(
+  input: ConversationReadUpdate,
+): Promise<Array<{ conversationId: string; unreadCount: number }>> {
+  const parsed = conversationReadUpdateSchema.parse(input);
+  if (parsed.read) {
+    const { error } = await crm()
+      .from("activities")
+      .update({ read_at: new Date().toISOString(), is_read: true })
+      .in("conversation_id", parsed.conversationIds)
+      .is("read_at", null);
+    throwIfError(error);
+    return parsed.conversationIds.map((conversationId) => ({ conversationId, unreadCount: 0 }));
   }
-  return [...ids];
+
+  const counts: Array<{ conversationId: string; unreadCount: number }> = [];
+  for (const conversationId of parsed.conversationIds) {
+    const existing = await crm()
+      .from("activities")
+      .select("position")
+      .eq("conversation_id", conversationId)
+      .order("position", { ascending: false })
+      .limit(1);
+    throwIfError(existing.error);
+    const position = existing.data?.[0]?.position;
+    if (typeof position !== "number") continue;
+    const updated = await crm()
+      .from("activities")
+      .update({ read_at: null, is_read: false })
+      .eq("conversation_id", conversationId)
+      .eq("position", position)
+      .select("conversation_id");
+    throwIfError(updated.error);
+    if ((updated.data ?? []).length > 0) {
+      counts.push({ conversationId, unreadCount: await conversationUnreadCount(conversationId) });
+    }
+  }
+  return counts;
 }
 
 export async function deleteActivities(conversationId: string): Promise<void> {

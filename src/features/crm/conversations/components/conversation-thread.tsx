@@ -124,7 +124,7 @@ export function ConversationThread({
         const { activity, fromCustomer, showDay, day, stamp } = row;
 
         return (
-          <li key={row.key} className="flex flex-col gap-4">
+          <li key={row.key} data-activity-position={activity.position} className="flex flex-col gap-4">
             {showDay ? (
               <div className="my-2 flex items-center justify-center">
                 <span className="rounded-full bg-gray-200/60 px-3 py-1 text-[11px] font-medium text-gray-400">

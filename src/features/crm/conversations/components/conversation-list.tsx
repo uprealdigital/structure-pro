@@ -2,6 +2,7 @@
 
 import { Check, ChevronUp, Filter, Mail, MailOpen, RotateCcw, Search, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { copy } from "@/src/features/crm/conversations/locales/en";
 import type { ConversationInboxItem } from "@/src/features/crm/conversations/types";
 import { formatConversationListTime } from "@/src/features/crm/conversations/utils/formatting";
@@ -192,12 +193,15 @@ export function ConversationList({
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [checkedIds, setCheckedIds] = useState<string[]>([]);
   const [showBackToTop, setShowBackToTop] = useState(false);
+  const [contextMenu, setContextMenu] = useState<{ id: string; x: number; y: number } | null>(null);
   const filters = useRef<HTMLDivElement>(null);
+  const contextMenuNode = useRef<HTMLDivElement>(null);
   const list = useRef<HTMLUListElement>(null);
   const hideUntilTop = useRef(false);
   const anchorId = useRef<string | null>(null);
   const shiftRangeIds = useRef<string[]>([]);
   const searching = query.trim().length > 0;
+  const contextItem = contextMenu ? items.find((item) => item.id === contextMenu.id) : undefined;
   const itemIds = items.map((item) => item.id).join("\n");
   const selecting = checkedIds.length > 0;
 
@@ -272,6 +276,28 @@ export function ConversationList({
     setShowBackToTop(false);
     list.current?.scrollTo({ top: 0, behavior: "smooth" });
   }
+
+  useEffect(() => {
+    if (!contextMenu) return;
+    function close(event: MouseEvent) {
+      if (contextMenuNode.current?.contains(event.target as Node)) return;
+      setContextMenu(null);
+    }
+    function onKey(event: KeyboardEvent) {
+      if (event.key === "Escape") setContextMenu(null);
+    }
+    function onScroll() {
+      setContextMenu(null);
+    }
+    document.addEventListener("mousedown", close);
+    document.addEventListener("keydown", onKey);
+    window.addEventListener("scroll", onScroll, true);
+    return () => {
+      document.removeEventListener("mousedown", close);
+      document.removeEventListener("keydown", onKey);
+      window.removeEventListener("scroll", onScroll, true);
+    };
+  }, [contextMenu]);
 
   useEffect(() => {
     function close(event: MouseEvent) {
@@ -453,6 +479,16 @@ export function ConversationList({
                     }
                     onSelect(item.id);
                   }}
+                  onContextMenu={(event) => {
+                    event.preventDefault();
+                    const width = 168;
+                    const height = 40;
+                    setContextMenu({
+                      id: item.id,
+                      x: Math.max(8, Math.min(event.clientX, window.innerWidth - width - 8)),
+                      y: Math.max(8, Math.min(event.clientY, window.innerHeight - height - 8)),
+                    });
+                  }}
                   onKeyDown={(event) => {
                     if (event.target !== event.currentTarget) return;
                     if (event.key !== "Enter" && event.key !== " ") return;
@@ -492,12 +528,22 @@ export function ConversationList({
                   </span>
                   <span className="min-w-0 flex-1">
                     <span className="mb-1.5 flex h-4 items-center justify-between gap-2">
-                      <span
-                        className={`min-w-0 truncate text-xs leading-4 ${
-                          unread ? "font-semibold text-gray-950" : "font-normal text-gray-800"
-                        }`}
-                      >
-                        {item.contactName}
+                      <span className="flex min-w-0 flex-1 items-center gap-1.5">
+                        <span
+                          className={`min-w-0 truncate text-xs leading-4 ${
+                            unread ? "font-semibold text-gray-950" : "font-normal text-gray-800"
+                          }`}
+                        >
+                          {item.contactName}
+                        </span>
+                        {item.unreadCount > 0 ? (
+                          <span
+                            className="inline-flex h-4 min-w-4 shrink-0 items-center justify-center rounded-full bg-gray-200 px-1 text-[10px] font-semibold leading-none text-black"
+                            aria-label={copy.unreadCount(item.unreadCount)}
+                          >
+                            {item.unreadCount}
+                          </span>
+                        ) : null}
                       </span>
                       <span className="flex h-4 shrink-0 items-center gap-1.5">
                         <button
@@ -546,6 +592,34 @@ export function ConversationList({
             );
           })}
           </ul>
+          {contextMenu && contextItem
+            ? createPortal(
+                <div
+                  ref={contextMenuNode}
+                  role="menu"
+                  className="fixed z-[100] min-w-40 rounded-lg border border-gray-200 bg-white p-1 shadow-lg"
+                  style={{ left: contextMenu.x, top: contextMenu.y }}
+                >
+                  <button
+                    type="button"
+                    role="menuitem"
+                    className="flex w-full cursor-pointer items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-xs font-medium whitespace-nowrap text-gray-800 hover:bg-gray-100"
+                    onClick={() => {
+                      onMarkRead([contextItem.id], contextItem.unread);
+                      setContextMenu(null);
+                    }}
+                  >
+                    {contextItem.unread ? (
+                      <MailOpen className="h-3.5 w-3.5 shrink-0 text-gray-600" strokeWidth={1.8} aria-hidden="true" />
+                    ) : (
+                      <Mail className="h-3.5 w-3.5 shrink-0 text-gray-600" strokeWidth={1.8} aria-hidden="true" />
+                    )}
+                    {contextItem.unread ? copy.markAsRead : copy.markAsUnread}
+                  </button>
+                </div>,
+                document.body,
+              )
+            : null}
         </div>
       )}
     </section>

@@ -11,6 +11,7 @@ export const copy = {
   markUnread: "Unread",
   markAsRead: "Mark as read",
   markAsUnread: "Mark as unread",
+  unreadCount: (count: number) => (count === 1 ? "1 unread message" : `${count} unread messages`),
   clearSelection: "Clear selection",
   selectConversationItem: (name: string) => `Select ${name}`,
   emptyFilter: "No conversations match these filters.",

@@ -56,7 +56,7 @@ export type ActivityRow = {
   role: string;
   body: string;
   generated_by?: string | null;
-  is_read?: boolean | null;
+  read_at?: string | null;
   call_id?: string | null;
   created_at?: string | null;
 };
@@ -92,13 +92,15 @@ export function toCall(row: CallRow): Call | undefined {
 
 export function toActivity(row: ActivityRow, call?: Call): Activity | undefined {
   const position = typeof row.position === "number" ? row.position : Number(row.position);
+  const readAt = typeof row.read_at === "string" && row.read_at ? row.read_at : null;
   const activity = activitySchema.safeParse({
     position,
     role: row.role,
     text: row.body,
     channel: row.channel,
     generatedBy: row.generated_by ?? "manual",
-    read: row.is_read === true || (row.is_read == null && row.role !== "user"),
+    readAt,
+    read: readAt != null,
     createdAt: row.created_at ?? undefined,
     call,
   });
@@ -137,6 +139,7 @@ export function toConversationInboxItem(input: {
   preview: string;
   updatedAt: string;
   unread: boolean;
+  unreadCount: number;
 }): ConversationInboxItem | undefined {
   const linked = input.deals.length > 0 ? input.deals : [input.deal];
   const item = conversationInboxItemSchema.safeParse({
@@ -152,6 +155,7 @@ export function toConversationInboxItem(input: {
     dealSource: input.deal.source,
     contractSent: input.summary.contractSent,
     unread: input.unread,
+    unreadCount: input.unreadCount,
   });
   return item.success ? item.data : undefined;
 }

@@ -114,7 +114,7 @@ export function CrmNav() {
           <NavItem
             href="/crm/conversations"
             current={conversationsActive}
-            count={counts?.conversationCount}
+            count={counts && counts.unreadActivityCount > 0 ? counts.unreadActivityCount : undefined}
             icon={<MessageSquare className={iconClass} strokeWidth={2} />}
             label={copy.conversations}
           />
