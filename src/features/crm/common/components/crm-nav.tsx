@@ -24,6 +24,7 @@ function NavItem({
   icon,
   label,
   count,
+  countStyle = "plain",
   current = false,
   danger = false,
 }: {
@@ -31,6 +32,7 @@ function NavItem({
   icon: ReactNode;
   label: string;
   count?: number;
+  countStyle?: "pill" | "plain";
   current?: boolean;
   danger?: boolean;
 }) {
@@ -48,9 +50,11 @@ function NavItem({
       <span className="min-w-0 flex-1 truncate">{label}</span>
       {count != null ? (
         <span
-          className={`ml-auto rounded-full px-2 py-0.5 font-mono text-[10px] ${
-            current ? "bg-white/20 text-white" : "text-gray-400"
-          }`}
+          className={
+            countStyle === "pill"
+              ? "ml-auto rounded-full bg-white/20 px-2 py-0.5 font-mono text-[10px] text-white"
+              : "ml-auto font-mono text-[10px] text-gray-400"
+          }
         >
           {count}
         </span>
@@ -114,6 +118,7 @@ export function CrmNav() {
           <NavItem
             href="/crm/conversations"
             current={conversationsActive}
+            countStyle="pill"
             count={counts && counts.unreadActivityCount > 0 ? counts.unreadActivityCount : undefined}
             icon={<MessageSquare className={iconClass} strokeWidth={2} />}
             label={copy.conversations}

@@ -153,6 +153,7 @@ export function ConversationDetail({
   readNotice?: ThreadReadNotice | null;
 }) {
   const [detailsOpen, setDetailsOpen] = useState(false);
+  const [detailsSettled, setDetailsSettled] = useState(false);
   const [focusedDealId, setFocusedDealId] = useState(workspace.deal.id);
   const [selectedRevisionId, setSelectedRevisionId] = useState<string | null>(null);
   const [quotePatches, setQuotePatches] = useState<Record<string, ConversationQuote>>({});
@@ -217,9 +218,7 @@ export function ConversationDetail({
   const composerRef = useRef<HTMLTextAreaElement>(null);
   const headerRef = useRef<HTMLElement>(null);
   const statusRef = useRef<HTMLDivElement>(null);
-  const toggleRef = useRef<HTMLDivElement>(null);
   const [detailsTop, setDetailsTop] = useState<number | null>(null);
-  const [separatorWidth, setSeparatorWidth] = useState(0);
 
   useLayoutEffect(() => {
     const header = headerRef.current;
@@ -237,15 +236,6 @@ export function ConversationDetail({
     return () => observer.disconnect();
   }, [editing, focusedDealId, detailsOpen]);
 
-  useLayoutEffect(() => {
-    const toggle = toggleRef.current;
-    if (!toggle || !detailsOpen) return;
-    const measure = () => setSeparatorWidth(toggle.getBoundingClientRect().width * 2);
-    measure();
-    const observer = new ResizeObserver(measure);
-    observer.observe(toggle);
-    return () => observer.disconnect();
-  }, [detailsOpen, editing, detailsTop]);
   const [updatingStatus, setUpdatingStatus] = useState(false);
   const [statusError, setStatusError] = useState("");
   const [revisionError, setRevisionError] = useState("");
@@ -336,7 +326,10 @@ export function ConversationDetail({
   }, [editing]);
 
   function toggleDetails() {
-    setDetailsOpen((open) => !open);
+    const next = !detailsOpen;
+    setDetailsOpen(next);
+    const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    setDetailsSettled(next && reduceMotion);
   }
 
   function selectDeal(dealId: string) {
@@ -486,10 +479,10 @@ export function ConversationDetail({
 
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col bg-[#f9f9fb]">
-      <div className="relative z-40 shrink-0">
+      <div className="relative z-40 shrink-0 border-b border-gray-200 bg-white shadow-xs">
         <header
           ref={headerRef}
-          className={`relative z-20 flex flex-row items-center justify-between gap-4 overflow-visible bg-white px-5 py-3 ${detailsOpen ? "" : "border-b border-gray-200 shadow-xs"}`}
+          className="relative z-20 flex flex-row items-center justify-between gap-4 overflow-visible bg-white px-5 py-3"
         >
           <div className="flex shrink-0 flex-col items-start justify-start gap-2 p-1">
             <div className="mb-1 lg:hidden">
@@ -593,30 +586,28 @@ export function ConversationDetail({
           ) : null}
           {editing || detailsTop == null ? null : (
             <div
-              ref={toggleRef}
               className="pointer-events-none absolute left-1/2 z-20 -translate-x-1/2 -translate-y-1/2"
               style={{ top: detailsTop }}
             >
               <DetailsToggle open={detailsOpen} onClick={toggleDetails} />
             </div>
           )}
-          {detailsOpen && separatorWidth > 0 ? (
-            <div
-              aria-hidden="true"
-              className="absolute bottom-0 left-1/2 z-10 h-px -translate-x-1/2 bg-gray-200"
-              style={{ width: separatorWidth }}
-            />
-          ) : null}
         </header>
 
-        {detailsOpen ? (
-          <div className="relative z-10 -mt-px shrink-0 overflow-visible border-b border-gray-200 bg-white shadow-sm">
+        <div
+          className={`grid transition-[grid-template-rows] duration-300 ease-out motion-reduce:transition-none ${detailsOpen ? "grid-rows-[1fr]" : "grid-rows-[0fr]"}`}
+          onTransitionEnd={(event) => {
+            if (event.target !== event.currentTarget || event.propertyName !== "grid-template-rows") return;
+            if (detailsOpen) setDetailsSettled(true);
+          }}
+        >
+          <div className={`min-h-0 ${detailsOpen && detailsSettled ? "overflow-visible" : "overflow-hidden"}`}>
             <div className="grid grid-cols-1 gap-6 bg-white px-6 py-4 lg:grid-cols-2">
               <DealSummary workspace={focused} />
               <QuotePanel revision={viewed} />
             </div>
           </div>
-        ) : null}
+        </div>
       </div>
 
       <div className="relative flex min-h-0 flex-1 flex-col">
