@@ -1,14 +1,21 @@
 import { db } from "@/src/common/lib/supabase/supabase.service";
 import { throwIfError } from "@/src/common/utils/error-handling";
 import { createCall, readCalls } from "@/src/features/crm/conversations/db/call";
-import { activityInsertSchema, type Activity, type ActivityEvent, type ActivityInsert } from "@/src/features/crm/conversations/types";
+import {
+  activityInsertSchema,
+  conversationReadUpdateSchema,
+  type Activity,
+  type ActivityEvent,
+  type ActivityInsert,
+  type ConversationReadUpdate,
+} from "@/src/features/crm/conversations/types";
 import { toActivity, toActivityEvent, type ActivityRow } from "@/src/features/crm/conversations/utils/mappers";
 
 function crm() {
   return db("crm");
 }
 
-const activityColumns = "position, channel, role, body, generated_by, call_id, created_at";
+const activityColumns = "position, channel, role, body, generated_by, is_read, call_id, created_at";
 
 export async function createActivities(
   conversationId: string,
@@ -45,6 +52,7 @@ export async function createActivities(
       role: activity.role,
       body: activity.text,
       generated_by: activity.generatedBy,
+      is_read: activity.role !== "user",
       call_id: callIds[offset],
     })),
   );
@@ -88,6 +96,21 @@ export async function readActivitiesSince(since: string): Promise<ActivityEvent[
     const event = toActivityEvent(row, row.call_id ? callById.get(row.call_id) : undefined);
     return event ? [event] : [];
   });
+}
+
+export async function updateActivitiesRead(input: ConversationReadUpdate): Promise<string[]> {
+  const parsed = conversationReadUpdateSchema.parse(input);
+  const { data, error } = await crm()
+    .from("activities")
+    .update({ is_read: parsed.read })
+    .in("conversation_id", parsed.conversationIds)
+    .select("conversation_id");
+  throwIfError(error);
+  const ids = new Set<string>();
+  for (const row of data ?? []) {
+    if (typeof row.conversation_id === "string") ids.add(row.conversation_id);
+  }
+  return [...ids];
 }
 
 export async function deleteActivities(conversationId: string): Promise<void> {

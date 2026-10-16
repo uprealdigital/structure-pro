@@ -29,7 +29,7 @@ import {
   type ConversationInboxItem,
   type ConversationWorkspace,
 } from "@/src/features/crm/conversations/types";
-import { activityPreview, formatDealMenuDate, lastMessageAt, productTitle } from "@/src/features/crm/conversations/utils/formatting";
+import { activityPreview, formatDealMenuDate, hasUnreadActivity, lastMessageAt, productTitle } from "@/src/features/crm/conversations/utils/formatting";
 import { canonicalConversationByCustomer } from "@/src/features/crm/conversations/utils/conversations";
 import { orderedDealParticipants } from "@/src/features/crm/conversations/utils/participants";
 import {
@@ -187,6 +187,7 @@ export const getConversationInbox = cache(async (): Promise<ConversationInboxIte
       deals: linked,
       preview: activityPreview(activities.at(-1)),
       updatedAt: lastMessageAt(activities),
+      unread: hasUnreadActivity(activities),
     });
     if (item) items.push(item);
   }
@@ -216,6 +217,7 @@ export async function getCustomerInboxItem(
     deals: linked,
     preview: activityPreview(activities.at(-1)),
     updatedAt: lastMessageAt(activities),
+    unread: hasUnreadActivity(activities),
   });
 }
 
@@ -255,6 +257,7 @@ export async function getConversationInboxItem(
     deals: linked,
     preview: activityPreview(conversation.activities.at(-1)),
     updatedAt,
+    unread: hasUnreadActivity(conversation.activities),
   });
 }
 

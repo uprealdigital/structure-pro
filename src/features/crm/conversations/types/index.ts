@@ -61,6 +61,7 @@ export const activitySchema = z.object({
   text: z.string(),
   channel: activityChannelSchema,
   generatedBy: generatedBySchema,
+  read: z.boolean(),
   createdAt: z.string().optional(),
   call: callSchema.optional(),
 });
@@ -104,6 +105,13 @@ export const conversationSchema = z.object({
 export type Conversation = z.infer<typeof conversationSchema>;
 
 export const conversationIdSchema = z.string().trim().min(1);
+
+export const conversationReadUpdateSchema = z.object({
+  conversationIds: z.array(conversationIdSchema).min(1),
+  read: z.boolean(),
+});
+
+export type ConversationReadUpdate = z.infer<typeof conversationReadUpdateSchema>;
 
 export const conversationWriteSchema = z.object({
   lookupKey: z.string(),
@@ -153,6 +161,7 @@ export const conversationInboxItemSchema = z.object({
   ),
   dealSource: dealSourceSchema,
   contractSent: z.boolean(),
+  unread: z.boolean(),
 });
 
 export type ConversationInboxItem = z.infer<typeof conversationInboxItemSchema>;

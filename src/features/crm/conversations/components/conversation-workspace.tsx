@@ -11,6 +11,7 @@ import { copy } from "@/src/features/crm/conversations/locales/en";
 import {
   ensureCustomerConversation,
   loadConversationInboxItem,
+  markConversationsRead,
   markDealLost,
   renameDeal,
   reopenDeal,
@@ -86,6 +87,7 @@ export function ConversationWorkspaceView({
   const [opened, setOpened] = useState<ConversationInboxItem[]>([]);
   const [arrived, setArrived] = useState<ConversationInboxItem[]>([]);
   const [patches, setPatches] = useState<Record<string, InboxPatch>>({});
+  const [unreadById, setUnreadById] = useState<Record<string, boolean>>({});
   const [liveActivities, setLiveActivities] = useState<Record<string, Activity[]>>({});
   const knownIds = useRef(new Set<string>());
   const requestedIds = useRef(new Set<string>());
@@ -117,6 +119,9 @@ export function ConversationWorkspaceView({
         },
       };
     });
+    if (!activity.read) {
+      setUnreadById((current) => ({ ...current, [conversationId]: true }));
+    }
     if (knownIds.current.has(conversationId) || requestedIds.current.has(conversationId)) return;
     requestedIds.current.add(conversationId);
     void loadConversationInboxItem(conversationId).then((result) => {
@@ -147,9 +152,42 @@ export function ConversationWorkspaceView({
     return [...byId.values()].sort((left, right) => right.updatedAt.localeCompare(left.updatedAt));
   }, [inbox, opened, arrived, patches]);
   const displayed = shownInbox(mergedInbox, statusByDeal, activeDealByConversation);
-  const visible = filters.visibleItems(displayed);
+  const visible = filters.visibleItems(displayed).map((item) => {
+    const unread = unreadById[item.id];
+    return unread === undefined ? item : { ...item, unread };
+  });
   const showDetail = Boolean(selection.selectedId);
   const showLoadError = loadError || (showDetail && selection.status === "error");
+
+  async function markRead(ids: string[], read: boolean) {
+    if (ids.length === 0) return;
+    const snapshot = new Map(ids.map((id) => [id, unreadById[id]]));
+    setUnreadById((current) => {
+      const next = { ...current };
+      for (const id of ids) next[id] = !read;
+      return next;
+    });
+    const result = await markConversationsRead({ conversationIds: ids, read });
+    if ("error" in result) {
+      setUnreadById((current) => {
+        const next = { ...current };
+        for (const [id, value] of snapshot) {
+          if (value === undefined) delete next[id];
+          else next[id] = value;
+        }
+        return next;
+      });
+      return;
+    }
+    if (!read) {
+      const updated = new Set(result.data.conversationIds);
+      setUnreadById((current) => {
+        const next = { ...current };
+        for (const id of ids) next[id] = updated.has(id);
+        return next;
+      });
+    }
+  }
 
   function applyDealStatus(dealId: string, nextStatus: DealStatus) {
     const currentId = selection.selectedId;
@@ -236,6 +274,9 @@ export function ConversationWorkspaceView({
         activeFilterCount={filters.activeCount}
         selectedId={selection.selectedId}
         onSelect={selectConversation}
+        onMarkRead={(ids, read) => {
+          void markRead(ids, read);
+        }}
       />
       <section
         className={`${showDetail ? "flex" : "hidden lg:flex"} min-h-0 min-w-0 flex-1 flex-col`}

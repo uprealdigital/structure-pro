@@ -15,6 +15,7 @@
 -- If crm.customers has no active_deal_id, run migrate-crm-conversation-active-deal.sql.
 -- If any customer has no conversation, run migrate-crm-conversation-for-every-customer.sql.
 -- If crm.deals has no name, run migrate-crm-deal-name.sql.
+-- If crm.activities has no is_read, run migrate-crm-activity-read.sql.
 
 create schema if not exists cpq;
 create schema if not exists crm;
@@ -168,6 +169,7 @@ create table if not exists crm.activities (
   role text not null check (role in ('user', 'model')),
   body text not null,
   generated_by text not null default 'manual' check (generated_by in ('ai', 'manual')),
+  is_read boolean not null default false,
   call_id uuid references crm.calls (id) on delete set null,
   created_at timestamptz not null default now(),
   unique (conversation_id, position)

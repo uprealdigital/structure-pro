@@ -1,6 +1,6 @@
 "use client";
 
-import { Check, ChevronUp, Filter, RotateCcw, Search, X } from "lucide-react";
+import { Check, ChevronUp, Filter, Mail, MailOpen, RotateCcw, Search, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { copy } from "@/src/features/crm/conversations/locales/en";
 import type { ConversationInboxItem } from "@/src/features/crm/conversations/types";
@@ -18,6 +18,106 @@ const selectedStatusClass: Record<DealStatus, string> = {
   deal_won: "border-gray-200 bg-gray-50 text-emerald-700 shadow-xs",
   deal_lost: "border-red-200 bg-red-50 text-red-600 shadow-xs",
 };
+
+function SelectionCheck({
+  checked,
+  label,
+  onChange,
+}: {
+  checked: boolean;
+  label: string;
+  onChange: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      role="checkbox"
+      aria-checked={checked}
+      aria-label={label}
+      onClick={(event) => {
+        event.stopPropagation();
+        onChange();
+      }}
+      className={`flex h-4 w-4 shrink-0 cursor-pointer items-center justify-center rounded border ${
+        checked ? "border-black bg-black text-white" : "border-gray-300 bg-white hover:border-gray-400"
+      }`}
+    >
+      {checked ? <Check className="h-3 w-3" strokeWidth={3} aria-hidden="true" /> : null}
+    </button>
+  );
+}
+
+function SelectionMark({
+  allSelected,
+  onSelectAll,
+  onClear,
+}: {
+  allSelected: boolean;
+  onSelectAll: () => void;
+  onClear: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      role="checkbox"
+      aria-checked={allSelected ? "true" : "mixed"}
+      aria-label={allSelected ? copy.clearSelection : copy.selectAll}
+      onClick={allSelected ? onClear : onSelectAll}
+      className={`flex h-4 w-4 shrink-0 cursor-pointer items-center justify-center rounded border border-black ${
+        allSelected ? "bg-black text-white" : "bg-white"
+      }`}
+    >
+      {allSelected ? (
+        <Check className="h-3 w-3" strokeWidth={3} aria-hidden="true" />
+      ) : (
+        <span className="h-1.5 w-1.5 bg-black" aria-hidden="true" />
+      )}
+    </button>
+  );
+}
+
+function SelectionToolbar({
+  count,
+  allSelected,
+  onClear,
+  onRead,
+  onUnread,
+  onSelectAll,
+}: {
+  count: number;
+  allSelected: boolean;
+  onClear: () => void;
+  onRead: () => void;
+  onUnread: () => void;
+  onSelectAll: () => void;
+}) {
+  return (
+    <div className="flex items-center gap-2 py-0.5 pl-1.5">
+      <SelectionMark allSelected={allSelected} onSelectAll={onSelectAll} onClear={onClear} />
+      <span className="text-xs font-semibold whitespace-nowrap text-gray-900">
+        {copy.selectedCount(count)}
+      </span>
+      <div className="ml-auto flex items-center gap-1.5">
+      <button
+        type="button"
+        onClick={onRead}
+        className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-medium whitespace-nowrap text-gray-700 transition-colors hover:bg-gray-50"
+      >
+        <Mail className="h-3.5 w-3.5 shrink-0 text-gray-600" strokeWidth={1.8} aria-hidden="true" />
+        {copy.markRead}
+      </button>
+      <button
+        type="button"
+        onClick={onUnread}
+        className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-medium whitespace-nowrap text-gray-700 transition-colors hover:bg-gray-50"
+      >
+        <MailOpen className="h-3.5 w-3.5 shrink-0 text-gray-600" strokeWidth={1.8} aria-hidden="true" />
+        {copy.markUnread}
+      </button>
+      </div>
+    </div>
+  );
+}
 
 function SectionSelection({
   onSelectAll,
@@ -62,6 +162,7 @@ export function ConversationList({
   activeFilterCount,
   selectedId,
   onSelect,
+  onMarkRead,
 }: {
   items: ConversationInboxItem[];
   inboxEmpty: boolean;
@@ -77,14 +178,25 @@ export function ConversationList({
   activeFilterCount: number;
   selectedId?: string;
   onSelect: (id: string) => void;
+  onMarkRead: (ids: string[], read: boolean) => void;
 }) {
   const [filtersOpen, setFiltersOpen] = useState(false);
+  const [checkedIds, setCheckedIds] = useState<string[]>([]);
   const [showBackToTop, setShowBackToTop] = useState(false);
   const filters = useRef<HTMLDivElement>(null);
   const list = useRef<HTMLUListElement>(null);
   const hideUntilTop = useRef(false);
   const searching = query.trim().length > 0;
   const itemIds = items.map((item) => item.id).join("\n");
+  const selecting = checkedIds.length > 0;
+
+  useEffect(() => {
+    const allowed = new Set(itemIds.split("\n").filter(Boolean));
+    setCheckedIds((current) => {
+      const next = current.filter((id) => allowed.has(id));
+      return next.length === current.length ? current : next;
+    });
+  }, [itemIds]);
 
   useEffect(() => {
     const scroller = list.current;
@@ -108,6 +220,13 @@ export function ConversationList({
       return;
     }
     setShowBackToTop(top > 8);
+  }
+
+  function toggleChecked(id: string) {
+    setFiltersOpen(false);
+    setCheckedIds((current) =>
+      current.includes(id) ? current.filter((item) => item !== id) : [...current, id],
+    );
   }
 
   function backToTop() {
@@ -136,6 +255,16 @@ export function ConversationList({
       className={`${selectedId ? "hidden lg:flex" : "flex"} z-10 min-h-0 w-full shrink-0 flex-col self-stretch overflow-hidden border-r border-gray-200 bg-white lg:w-96`}
     >
       <div className="relative z-30 border-b border-gray-200 px-4 pt-4 pb-3">
+        {selecting ? (
+          <SelectionToolbar
+            count={checkedIds.length}
+            allSelected={items.length > 0 && checkedIds.length === items.length}
+            onClear={() => setCheckedIds([])}
+            onRead={() => onMarkRead(checkedIds, true)}
+            onUnread={() => onMarkRead(checkedIds, false)}
+            onSelectAll={() => setCheckedIds(items.map((item) => item.id))}
+          />
+        ) : (
         <div className="flex items-center gap-2">
           <label className="relative min-w-0 flex-1">
             <span className="sr-only">{copy.searchPlaceholder}</span>
@@ -232,6 +361,7 @@ export function ConversationList({
             ) : null}
           </div>
         </div>
+        )}
       </div>
 
       {inboxEmpty ? (
@@ -262,51 +392,105 @@ export function ConversationList({
             aria-label={copy.conversationList}
           >
           {items.map((item) => {
-            const selected = item.id === selectedId;
+            const open = item.id === selectedId;
+            const checked = checkedIds.includes(item.id);
+            const unread = item.unread;
             return (
-              <li key={item.id}>
-                <button
-                  type="button"
+              <li key={item.id} className={open ? "outline outline-1 -outline-offset-1 outline-black" : undefined}>
+                <div
+                  role="button"
+                  tabIndex={0}
                   data-conversation-id={item.id}
                   onClick={() => onSelect(item.id)}
-                  aria-current={selected ? "true" : undefined}
-                  className={`block w-full cursor-pointer p-3.5 text-left transition-colors ${
-                    selected ? "border-l-4 border-black bg-gray-50/90" : "hover:bg-gray-50/60"
+                  onKeyDown={(event) => {
+                    if (event.target !== event.currentTarget) return;
+                    if (event.key !== "Enter" && event.key !== " ") return;
+                    event.preventDefault();
+                    onSelect(item.id);
+                  }}
+                  aria-current={open ? "true" : undefined}
+                  className={`group flex w-full cursor-pointer items-center gap-3 border-l-4 p-3.5 text-left transition-colors ${
+                    open
+                      ? `${unread ? "border-l-black" : "border-l-transparent"} bg-gray-200`
+                      : unread
+                        ? checked
+                          ? "border-l-black bg-gray-100"
+                          : "border-l-black bg-gray-50 hover:bg-gray-100"
+                        : checked
+                          ? "border-l-transparent bg-gray-50"
+                          : "border-l-transparent hover:bg-gray-50/60"
                   }`}
                 >
-                  <span className="mb-1 flex items-start justify-between">
-                    <span className="flex items-center space-x-2.5">
-                      <span
-                        className={`flex h-8 w-8 items-center justify-center rounded-full font-serif text-xs font-bold ${
-                          selected ? "bg-[#121314] text-white" : "bg-gray-200 text-gray-800"
-                        }`}
-                      >
-                        {contactInitials(item.contactName)}
-                      </span>
-                      <span className="min-w-0 truncate text-xs font-bold text-gray-950">{item.contactName}</span>
-                    </span>
-                    {item.updatedAt ? (
-                      <time
-                        dateTime={item.updatedAt}
-                        className={`shrink-0 text-right text-[10px] leading-tight font-medium whitespace-nowrap ${selected ? "text-gray-500" : "text-gray-400"}`}
-                      >
-                        {formatConversationListTime(item.updatedAt)}
-                      </time>
-                    ) : null}
-                  </span>
-                  <span className="mt-1.5 flex items-end justify-between gap-2.5 pl-10.5">
+                  <span className="relative flex h-8 w-8 shrink-0 items-center justify-center">
                     <span
-                      className={`min-w-0 flex-1 truncate pr-1 text-xs ${
-                        selected ? "font-medium text-gray-700" : "text-gray-500"
+                      className={`${selecting ? "hidden" : "flex group-hover:hidden group-focus-visible:hidden"} h-8 w-8 items-center justify-center rounded-full font-serif text-xs font-bold ${
+                        unread ? "bg-[#121314] text-white" : "bg-gray-200 text-gray-800"
                       }`}
                     >
-                      {item.preview || copy.noMessages}
+                      {contactInitials(item.contactName)}
                     </span>
-                    <span className="flex shrink-0 justify-end">
-                      <DealStatusBadge status={item.dealStatus} />
+                    <span
+                      className={`${selecting ? "flex" : "hidden group-hover:flex group-focus-visible:flex"} absolute inset-0 items-center justify-center`}
+                    >
+                      <SelectionCheck
+                        checked={checked}
+                        label={copy.selectConversationItem(item.contactName)}
+                        onChange={() => toggleChecked(item.id)}
+                      />
                     </span>
                   </span>
-                </button>
+                  <span className="min-w-0 flex-1">
+                    <span className="mb-1.5 flex h-4 items-center justify-between gap-2">
+                      <span
+                        className={`min-w-0 truncate text-xs leading-4 ${
+                          unread ? "font-semibold text-gray-950" : "font-normal text-gray-800"
+                        }`}
+                      >
+                        {item.contactName}
+                      </span>
+                      <span className="flex h-4 shrink-0 items-center gap-1.5">
+                        <button
+                          type="button"
+                          title={unread ? copy.markAsRead : copy.markAsUnread}
+                          aria-label={unread ? copy.markAsRead : copy.markAsUnread}
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            onMarkRead([item.id], unread);
+                          }}
+                          className="invisible inline-flex h-4 w-4 shrink-0 cursor-pointer items-center justify-center rounded text-gray-400 pointer-events-none group-hover:pointer-events-auto group-hover:visible group-focus-visible:pointer-events-auto group-focus-visible:visible hover:text-gray-700"
+                        >
+                          {unread ? (
+                            <MailOpen className="h-3.5 w-3.5" strokeWidth={1.6} aria-hidden="true" />
+                          ) : (
+                            <Mail className="h-3.5 w-3.5" strokeWidth={1.6} aria-hidden="true" />
+                          )}
+                        </button>
+                        {item.updatedAt ? (
+                          <time
+                            dateTime={item.updatedAt}
+                            className={`text-[10px] leading-none whitespace-nowrap ${
+                              unread ? "font-semibold text-gray-900" : "font-medium text-gray-400"
+                            }`}
+                          >
+                            {formatConversationListTime(item.updatedAt)}
+                          </time>
+                        ) : null}
+                      </span>
+                    </span>
+                    <span className="flex items-end justify-between gap-2.5">
+                      <span
+                        className={`min-w-0 flex-1 truncate pr-1 text-xs ${
+                          unread ? "text-gray-900" : "text-gray-500"
+                        }`}
+                      >
+                        {item.preview || copy.noMessages}
+                      </span>
+                      <span className="flex shrink-0 justify-end">
+                        <DealStatusBadge status={item.dealStatus} />
+                      </span>
+                    </span>
+                  </span>
+                </div>
               </li>
             );
           })}

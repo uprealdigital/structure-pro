@@ -26,6 +26,10 @@ export function messageActivityAt(activity: Activity): string | undefined {
   return activity.createdAt;
 }
 
+export function hasUnreadActivity(activities: Activity[]): boolean {
+  return activities.some((activity) => !activity.read);
+}
+
 export function lastMessageAt(activities: Activity[]): string {
   let latest = "";
   let latestMs = Number.NEGATIVE_INFINITY;

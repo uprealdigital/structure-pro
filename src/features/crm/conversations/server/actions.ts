@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { demoChatId, sendTelegramMessage } from "@/src/common/lib/telegram/telegram.service";
-import { createActivities, deleteLatestActivity, readActivities } from "@/src/features/crm/conversations/db/activity";
+import { createActivities, deleteLatestActivity, readActivities, updateActivitiesRead } from "@/src/features/crm/conversations/db/activity";
 import { createConversation, deleteConversation, readConversationById, updateConversation } from "@/src/features/crm/conversations/db/conversation";
 import {
   getConversation,
@@ -16,6 +16,7 @@ import {
   activityInsertSchema,
   composerChannelSchema,
   conversationIdSchema,
+  conversationReadUpdateSchema,
   customerDealsRequestSchema,
   type Activity,
   type ActivityInsert,
@@ -267,6 +268,23 @@ export async function loadCustomerDeals(
     return { success: true, data: deals };
   } catch (error) {
     const message = error instanceof Error ? error.message : "Could not load deals";
+    return { error: message };
+  }
+}
+
+export async function markConversationsRead(input: {
+  conversationIds: string[];
+  read: boolean;
+}): Promise<{ success: true; data: { conversationIds: string[] } } | { error: string }> {
+  const parsed = conversationReadUpdateSchema.safeParse(input);
+  if (!parsed.success) return { error: "A conversation is required" };
+
+  try {
+    const conversationIds = await updateActivitiesRead(parsed.data);
+    revalidatePath("/crm/conversations");
+    return { success: true, data: { conversationIds } };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Could not update messages";
     return { error: message };
   }
 }

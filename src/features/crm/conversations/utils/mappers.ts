@@ -56,6 +56,7 @@ export type ActivityRow = {
   role: string;
   body: string;
   generated_by?: string | null;
+  is_read?: boolean | null;
   call_id?: string | null;
   created_at?: string | null;
 };
@@ -97,6 +98,7 @@ export function toActivity(row: ActivityRow, call?: Call): Activity | undefined 
     text: row.body,
     channel: row.channel,
     generatedBy: row.generated_by ?? "manual",
+    read: row.is_read === true || (row.is_read == null && row.role !== "user"),
     createdAt: row.created_at ?? undefined,
     call,
   });
@@ -134,6 +136,7 @@ export function toConversationInboxItem(input: {
   deals: Deal[];
   preview: string;
   updatedAt: string;
+  unread: boolean;
 }): ConversationInboxItem | undefined {
   const linked = input.deals.length > 0 ? input.deals : [input.deal];
   const item = conversationInboxItemSchema.safeParse({
@@ -148,6 +151,7 @@ export function toConversationInboxItem(input: {
     dealStatuses: linked.map((deal) => ({ id: deal.id, status: deal.status })),
     dealSource: input.deal.source,
     contractSent: input.summary.contractSent,
+    unread: input.unread,
   });
   return item.success ? item.data : undefined;
 }
