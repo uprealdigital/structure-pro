@@ -17,11 +17,11 @@ export function Toast({
   onDismiss,
 }: {
   message: string;
-  actionLabel?: string;
+  actionLabel: string;
   dismissLabel: string;
   pending?: boolean;
   durationMs?: number;
-  onAction?: () => void;
+  onAction: () => void;
   onDismiss: () => void;
 }) {
   const [mounted, setMounted] = useState(false);
@@ -77,16 +77,14 @@ export function Toast({
         <span className="max-w-md truncate text-sm text-gray-900" title={message}>
           {message}
         </span>
-        {actionLabel && onAction ? (
-          <button
-            type="button"
-            onClick={onAction}
-            disabled={pending}
-            className="shrink-0 cursor-pointer text-sm font-medium text-gray-950 underline underline-offset-2 disabled:opacity-50"
-          >
-            {actionLabel}
-          </button>
-        ) : null}
+        <button
+          type="button"
+          onClick={onAction}
+          disabled={pending}
+          className="shrink-0 cursor-pointer text-sm font-medium text-gray-950 underline underline-offset-2 disabled:opacity-50"
+        >
+          {actionLabel}
+        </button>
         <button
           type="button"
           aria-label={dismissLabel}

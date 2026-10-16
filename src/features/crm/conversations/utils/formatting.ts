@@ -47,8 +47,26 @@ export function lastMessageAt(activities: Activity[]): string {
   return latest;
 }
 
+const quoteSystemPrefix = "quote:";
+
+export function systemEventBody(kind: "deal" | "quote", name: string): string {
+  return kind === "quote" ? `${quoteSystemPrefix}${name}` : name;
+}
+
+export function systemEventText(text: string): { label: string; name: string } {
+  if (text.startsWith(quoteSystemPrefix)) {
+    return { label: copy.activeQuoteSwitchedTo, name: text.slice(quoteSystemPrefix.length) };
+  }
+  return { label: copy.activeDealSwitchedTo, name: text };
+}
+
 export function activityPreview(activity: Activity | undefined): string {
   if (!activity) return "";
+  if (activity.channel === "system") {
+    const event = systemEventText(activity.text);
+    const name = messagePreview(event.name);
+    return name ? `${event.label} ${name}` : event.label;
+  }
   if (activity.channel === "call") {
     const label =
       activity.call?.direction === "outbound"

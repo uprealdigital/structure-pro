@@ -15,6 +15,7 @@ export const activityChannelSchema = z.enum([
   "facebook",
   "email",
   "telegram",
+  "system",
 ]);
 
 export type ActivityChannel = z.infer<typeof activityChannelSchema>;

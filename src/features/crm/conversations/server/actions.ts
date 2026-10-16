@@ -5,6 +5,7 @@ import { demoChatId, sendTelegramMessage } from "@/src/common/lib/telegram/teleg
 import {
   conversationUnreadCount,
   createActivities,
+  deleteActivityAt,
   deleteLatestActivity,
   markActivitiesReadAt,
   readActivities,
@@ -35,6 +36,7 @@ import {
 import { readCustomer, updateCustomer } from "@/src/features/crm/common/db/customer";
 import { readDealCustomersForCustomer } from "@/src/features/crm/common/db/deal-customer";
 import { readDeal, updateDeal } from "@/src/features/crm/deals/db/deal";
+import { systemEventBody } from "@/src/features/crm/conversations/utils/formatting";
 import { dealIdSchema, dealNameSchema, type DealStatus } from "@/src/features/crm/deals/types";
 import { readQuoteRevision, updateQuoteRevision } from "@/src/features/crm/quotes/db/quote-revision";
 
@@ -260,7 +262,11 @@ export async function setCustomerActiveDeal(input: {
   if (!parsed.success) return { error: "A customer and deal are required" };
 
   try {
-    const links = await readDealCustomersForCustomer(parsed.data.customerId);
+    const [customer, links] = await Promise.all([
+      readCustomer(parsed.data.customerId),
+      readDealCustomersForCustomer(parsed.data.customerId),
+    ]);
+    if (!customer) return { error: "Customer was not found" };
     if (!links.some((link) => link.dealId === parsed.data.dealId)) {
       return { error: "Deal was not found" };
     }
@@ -269,6 +275,59 @@ export async function setCustomerActiveDeal(input: {
     return { success: true };
   } catch (error) {
     const message = error instanceof Error ? error.message : "Could not update the active deal";
+    return { error: message };
+  }
+}
+
+export async function recordSystemActivity(input: {
+  conversationId: string;
+  kind: "deal" | "quote";
+  name: string;
+}): Promise<{ success: true; data: Activity } | { error: string }> {
+  const conversationId = conversationIdSchema.safeParse(input.conversationId);
+  const name = input.name.trim();
+  if (!conversationId.success || (input.kind !== "deal" && input.kind !== "quote") || !name) {
+    return { error: "A conversation and event are required" };
+  }
+
+  try {
+    const sentAt = new Date().toISOString();
+    const text = systemEventBody(input.kind, name);
+    await createActivities(conversationId.data, [
+      {
+        role: "model",
+        channel: "system",
+        text,
+        generatedBy: "manual",
+        createdAt: sentAt,
+        readAt: sentAt,
+      },
+    ]);
+    const activity = (await readActivities(conversationId.data))
+      .reverse()
+      .find((item) => item.channel === "system" && item.text === text);
+    if (!activity) return { error: "The event was not saved" };
+    return { success: true, data: activity };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Could not save the event";
+    return { error: message };
+  }
+}
+
+export async function deleteConversationActivity(input: {
+  conversationId: string;
+  position: number;
+}): Promise<{ success: true } | { error: string }> {
+  const conversationId = conversationIdSchema.safeParse(input.conversationId);
+  if (!conversationId.success || !Number.isInteger(input.position) || input.position < 0) {
+    return { error: "A conversation and activity are required" };
+  }
+
+  try {
+    await deleteActivityAt(conversationId.data, input.position);
+    return { success: true };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Could not remove the event";
     return { error: message };
   }
 }

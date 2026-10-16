@@ -1,7 +1,7 @@
-import { Phone } from "lucide-react";
+import { ArrowRightLeft, Phone } from "lucide-react";
 import { copy } from "@/src/features/crm/conversations/locales/en";
 import type { Activity, ActivityChannel } from "@/src/features/crm/conversations/types";
-import { formatCallDuration, formatMessageClock, formatMessageDay } from "@/src/features/crm/conversations/utils/formatting";
+import { formatCallDuration, formatMessageClock, formatMessageDay, systemEventText } from "@/src/features/crm/conversations/utils/formatting";
 import { contactInitials } from "@/src/features/crm/common/utils/formatting";
 
 function AiStar() {
@@ -24,6 +24,8 @@ export function activityChannelLabel(channel: ActivityChannel): string {
       return copy.channelEmail;
     case "telegram":
       return copy.channelTelegram;
+    case "system":
+      return copy.channelSystem;
   }
 }
 
@@ -35,6 +37,27 @@ function callDirectionLabel(activity: Activity): string {
   if (activity.call?.direction === "outbound") return copy.outboundCall;
   if (activity.call?.direction === "inbound") return copy.inboundCall;
   return copy.channelCall;
+}
+
+function SystemActivity({ activity }: { activity: Activity }) {
+  const clock = activity.createdAt ? formatMessageClock(activity.createdAt) : "";
+  const event = systemEventText(activity.text);
+
+  return (
+    <div className="my-2 flex flex-col items-center justify-center">
+      <div className="inline-flex items-center gap-1.5 rounded-full border border-gray-200/80 bg-transparent px-3 py-1 text-xs text-gray-600 shadow-xs transition-colors hover:bg-gray-50">
+        <ArrowRightLeft className="h-3.5 w-3.5 shrink-0 text-gray-500" strokeWidth={1.8} aria-hidden="true" />
+        <span>
+          {event.label} <strong className="font-medium text-gray-900">{event.name}</strong>
+        </span>
+      </div>
+      {clock ? (
+        <span className="mt-1 text-[10px] text-gray-400">
+          {clock} • {copy.systemEvent}
+        </span>
+      ) : null}
+    </div>
+  );
 }
 
 function CallActivity({ activity }: { activity: Activity }) {
@@ -132,7 +155,9 @@ export function ConversationThread({
                 </span>
               </div>
             ) : null}
-            {isCall(activity.channel) ? (
+            {activity.channel === "system" ? (
+              <SystemActivity activity={activity} />
+            ) : isCall(activity.channel) ? (
               <CallActivity activity={activity} />
             ) : fromCustomer ? (
               <div className="flex max-w-xl items-start">

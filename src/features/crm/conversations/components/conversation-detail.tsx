@@ -13,7 +13,7 @@ import { ReviewSendModal } from "@/src/features/crm/conversations/components/rev
 import { useConversationActivities } from "@/src/features/crm/conversations/hooks/use-conversation-activities";
 import { useVisibleActivityReads } from "@/src/features/crm/conversations/hooks/use-visible-activity-reads";
 import { copy } from "@/src/features/crm/conversations/locales/en";
-import { sendConversationQuote, sendManualActivity } from "@/src/features/crm/conversations/server/actions";
+import { sendConversationQuote, sendManualActivity, recordSystemActivity, deleteConversationActivity } from "@/src/features/crm/conversations/server/actions";
 import type {
   Activity,
   ComposerChannel,
@@ -79,6 +79,19 @@ export type ThreadReadNotice =
       read: boolean;
     };
 
+type NoticeRecord = {
+  id: number;
+  message: string;
+  pending: boolean;
+  undoStarted: boolean;
+  settled: boolean;
+  cancelled: boolean;
+  expired: boolean;
+  published: Activity | null;
+  undo: () => Promise<boolean>;
+  commit: () => Promise<Activity | null>;
+};
+
 function revisionStatusLabel(revision: ConversationQuoteRevision): string {
   return revisionVersionLabel(revision.status, revision.revisionNumber);
 }
@@ -135,6 +148,8 @@ export function ConversationDetail({
   onReopen,
   onRename,
   onActivateDeal,
+  onSystemActivity,
+  onRemoveActivity,
   onSelectCustomer,
   onActivitiesSeen,
   readNotice = null,
@@ -148,6 +163,8 @@ export function ConversationDetail({
     dealId: string,
   ) => Promise<{ success: true; data: { status: DealStatus } } | { error: string }>;
   onActivateDeal: (dealId: string, status: DealStatus) => void;
+  onSystemActivity: (conversationId: string, activity: Activity) => void;
+  onRemoveActivity: (conversationId: string, position: number) => void;
   onSelectCustomer: (participant: ConversationParticipant, dealId: string) => void;
   onActivitiesSeen: (conversationId: string, unreadCount: number) => void;
   readNotice?: ThreadReadNotice | null;
@@ -159,15 +176,11 @@ export function ConversationDetail({
   const [quotePatches, setQuotePatches] = useState<Record<string, ConversationQuote>>({});
   const [dealStatusPatches, setDealStatusPatches] = useState<Record<string, DealStatus>>({});
   const [dealNamePatches, setDealNamePatches] = useState<Record<string, string>>({});
-  const [renameNotice, setRenameNotice] = useState<{
-    id: number;
-    dealId: string;
-    name: string;
-    previousName: string;
-  } | null>(null);
-  const [undoingRename, setUndoingRename] = useState(false);
-  const renameNoticeRef = useRef(renameNotice);
-  renameNoticeRef.current = renameNotice;
+  const [notice, setNotice] = useState<{ id: number; message: string; pending: boolean } | null>(null);
+  const noticeRecord = useRef<NoticeRecord | null>(null);
+  const publishActivityRef = useRef<(activity: Activity) => void>(() => {});
+  const removeActivityRef = useRef(onRemoveActivity);
+  removeActivityRef.current = onRemoveActivity;
   const deals = workspace.deals.map((option) => {
     const status = dealStatusPatches[option.id];
     const renamed = dealNamePatches[option.id];
@@ -294,7 +307,22 @@ export function ConversationDetail({
   const channels: ComposerChannel[] = ["telegram", "sms", "facebook", "email"];
 
   useEffect(() => {
-    setRenameNotice(null);
+    const conversationId = workspace.id;
+    return () => {
+      const current = noticeRecord.current;
+      if (!current || current.settled || current.cancelled || current.undoStarted) return;
+      current.settled = true;
+      void current.commit().then((activity) => {
+        if (!activity || current.cancelled || current.undoStarted) {
+          if (activity) {
+            removeActivityRef.current(conversationId, activity.position);
+            void deleteConversationActivity({ conversationId, position: activity.position });
+          }
+          return;
+        }
+        publishActivityRef.current(activity);
+      });
+    };
   }, [workspace.id]);
 
   useEffect(() => {
@@ -332,13 +360,132 @@ export function ConversationDetail({
     setDetailsSettled(next && reduceMotion);
   }
 
-  function selectDeal(dealId: string) {
+  function publishActivity(activity: Activity) {
+    setActivities((current) =>
+      current.some((item) => item.position === activity.position) ? current : [...current, activity],
+    );
+    onSystemActivity(workspace.id, activity);
+  }
+  publishActivityRef.current = publishActivity;
+
+  async function retractActivity(activity: Activity) {
+    setActivities((current) => current.filter((item) => item.position !== activity.position));
+    onRemoveActivity(workspace.id, activity.position);
+    await deleteConversationActivity({ conversationId: workspace.id, position: activity.position });
+  }
+
+  async function recordNamedActivity(kind: "deal" | "quote", name: string): Promise<Activity | null> {
+    const result = await recordSystemActivity({ conversationId: workspace.id, kind, name });
+    if ("error" in result) return null;
+    return result.data;
+  }
+
+  async function finishNotice(current: NoticeRecord) {
+    const activity = await current.commit();
+    if (current.undoStarted || current.cancelled) {
+      if (activity) await retractActivity(activity);
+      return;
+    }
+    if (!activity) {
+      if (noticeRecord.current === current) {
+        noticeRecord.current = null;
+        setNotice(null);
+      }
+      return;
+    }
+    current.published = activity;
+    publishActivity(activity);
+    if (noticeRecord.current === current) {
+      noticeRecord.current = null;
+      setNotice(null);
+    }
+  }
+
+  function showNotice(message: string, undo: () => Promise<boolean>, commit: () => Promise<Activity | null>) {
+    const previous = noticeRecord.current;
+    if (previous && !previous.settled && !previous.cancelled && !previous.undoStarted) {
+      previous.settled = true;
+      void finishNotice(previous);
+    }
+    const next: NoticeRecord = {
+      id: Date.now(),
+      message,
+      pending: false,
+      undoStarted: false,
+      settled: false,
+      cancelled: false,
+      expired: false,
+      published: null,
+      undo,
+      commit,
+    };
+    noticeRecord.current = next;
+    setNotice({ id: next.id, message: next.message, pending: false });
+  }
+
+  function commitNotice() {
+    const current = noticeRecord.current;
+    if (!current || current.settled || current.cancelled) return;
+    if (current.undoStarted) {
+      current.expired = true;
+      return;
+    }
+    current.settled = true;
+    setNotice(null);
+    void finishNotice(current);
+  }
+
+  async function undoNotice() {
+    const current = noticeRecord.current;
+    if (!current || current.pending || current.undoStarted || current.cancelled) return;
+    current.undoStarted = true;
+    current.pending = true;
+    setNotice({ id: current.id, message: current.message, pending: true });
+    const undone = await current.undo();
+    if (!undone) {
+      current.undoStarted = false;
+      current.pending = false;
+      if (noticeRecord.current === current) {
+        setNotice({ id: current.id, message: current.message, pending: false });
+      }
+      if (current.expired && !current.settled) {
+        current.settled = true;
+        void finishNotice(current);
+      }
+      return;
+    }
+    current.cancelled = true;
+    current.settled = true;
+    if (current.published) await retractActivity(current.published);
+    if (noticeRecord.current === current) {
+      noticeRecord.current = null;
+      setNotice(null);
+    }
+  }
+
+  function focusDeal(dealId: string) {
     const option = deals.find((deal) => deal.id === dealId);
     setFocusedDealId(dealId);
     setSelectedRevisionId(null);
     setRevisionError("");
     setEditing(false);
     if (option) onActivateDeal(option.id, option.stage);
+    return option;
+  }
+
+  function selectDeal(dealId: string) {
+    const previous = deals.find((deal) => deal.id === focusedDealId);
+    const option = focusDeal(dealId);
+    if (!option || !previous || option.id === previous.id) return;
+    const previousId = previous.id;
+    showNotice(
+      copy.activeDealSwitchedToast(option.title),
+      async () => {
+        focusDeal(previousId);
+        return true;
+      },
+      () => recordNamedActivity("deal", option.title),
+    );
   }
 
   async function selectRevision(revisionId: string) {
@@ -349,22 +496,43 @@ export function ConversationDetail({
       setRevisionError("");
       return;
     }
+    const previousId = quote.activeRevisionId;
     const previousPatch = quotePatches[quote.id];
     const next = conversationQuoteWithActiveRevision(quote, revisionId);
-    if (!next) return;
+    const revision = next?.revisions.find((item) => item.id === revisionId);
+    if (!next || !revision) return;
     setRevisionError("");
     setQuotePatches((current) => ({ ...current, [next.id]: next }));
     setSelectedRevisionId(revisionId);
     const result = await activateQuoteRevision({ quoteId: quote.id, revisionId });
-    if (!("error" in result)) return;
-    setQuotePatches((current) => {
-      const restored = { ...current };
-      if (previousPatch) restored[quote.id] = previousPatch;
-      else delete restored[quote.id];
-      return restored;
-    });
-    setSelectedRevisionId(quote.activeRevisionId);
-    setRevisionError(copy.activateRevisionError);
+    if ("error" in result) {
+      setQuotePatches((current) => {
+        const restored = { ...current };
+        if (previousPatch) restored[quote.id] = previousPatch;
+        else delete restored[quote.id];
+        return restored;
+      });
+      setSelectedRevisionId(previousId);
+      setRevisionError(copy.activateRevisionError);
+      return;
+    }
+    const name = revisionVersionLabel(revision.status, revision.revisionNumber);
+    showNotice(
+      copy.activeQuoteSwitchedToast(name),
+      async () => {
+        const undone = await activateQuoteRevision({ quoteId: quote.id, revisionId: previousId });
+        if ("error" in undone) return false;
+        setQuotePatches((current) => {
+          const restored = { ...current };
+          if (previousPatch) restored[quote.id] = previousPatch;
+          else delete restored[quote.id];
+          return restored;
+        });
+        setSelectedRevisionId(previousId);
+        return true;
+      },
+      () => recordNamedActivity("quote", name),
+    );
   }
 
   function toggleEditing() {
@@ -434,19 +602,17 @@ export function ConversationDetail({
     const result = await onRename(dealId, name);
     if ("error" in result) return result;
     setDealNamePatches((current) => ({ ...current, [dealId]: result.data.name }));
-    setRenameNotice({ id: Date.now(), dealId, name: result.data.name, previousName });
+    showNotice(
+      copy.dealRenamedTo(result.data.name),
+      async () => {
+        const undone = await onRename(dealId, previousName);
+        if ("error" in undone) return false;
+        setDealNamePatches((current) => ({ ...current, [dealId]: undone.data.name }));
+        return true;
+      },
+      async () => null,
+    );
     return { success: true as const };
-  }
-
-  async function undoRename() {
-    const notice = renameNoticeRef.current;
-    if (!notice || undoingRename) return;
-    setUndoingRename(true);
-    const result = await onRename(notice.dealId, notice.previousName);
-    setUndoingRename(false);
-    if ("error" in result) return;
-    setDealNamePatches((current) => ({ ...current, [notice.dealId]: result.data.name }));
-    setRenameNotice((current) => (current?.id === notice.id ? null : current));
   }
 
   async function markLost() {
@@ -573,15 +739,15 @@ export function ConversationDetail({
               </div>
             ) : null}
           </div>
-          {renameNotice ? (
+          {notice ? (
             <Toast
-              key={renameNotice.id}
-              message={copy.dealRenamedTo(renameNotice.name)}
+              key={notice.id}
+              message={notice.message}
               actionLabel={copy.undo}
               dismissLabel={copy.dismiss}
-              pending={undoingRename}
-              onAction={() => void undoRename()}
-              onDismiss={() => setRenameNotice((current) => (current?.id === renameNotice.id ? null : current))}
+              pending={notice.pending}
+              onAction={() => void undoNotice()}
+              onDismiss={commitNotice}
             />
           ) : null}
           {editing || detailsTop == null ? null : (
@@ -631,7 +797,7 @@ export function ConversationDetail({
             <span>{copy.attachDesignPreview}</span>
           </button>
         </div>
-        <div className="relative flex items-end rounded-lg border border-gray-300 bg-white shadow-xs focus-within:border-black focus-within:ring-1 focus-within:ring-black">
+        <div className="relative flex items-end rounded-lg border border-gray-300 bg-white shadow-xs focus-within:border-gray-600">
           <button
             type="button"
             title={copy.attach}

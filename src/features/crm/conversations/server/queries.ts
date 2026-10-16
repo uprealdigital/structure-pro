@@ -125,6 +125,13 @@ async function revisionsForQuote(
   return { revisions: fallback ? [fallback] : [], activeRevisionId };
 }
 
+export async function getDealTitle(dealId: string): Promise<string | undefined> {
+  const deal = await readDeal(dealId);
+  if (!deal) return undefined;
+  const title = (await dealOption(deal))?.title.trim();
+  return title || undefined;
+}
+
 async function dealOption(
   deal: Deal,
   thread?: Conversation,
@@ -518,10 +525,12 @@ export async function getAgentSession(key: string) {
       specLines: quote.summary.specs.map((spec) => `- ${spec.label}: ${spec.value}`).join("\n"),
       total: quote.summary.total,
       brandName: quote.summary.brand.name,
-      messages: conversation.activities.map((activity) => ({
-        role: activity.role,
-        text: activity.text,
-      })),
+      messages: conversation.activities
+        .filter((activity) => activity.channel !== "system")
+        .map((activity) => ({
+          role: activity.role,
+          text: activity.text,
+        })),
       contractSent: conversation.contractSent,
     },
   };

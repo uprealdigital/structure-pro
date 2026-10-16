@@ -95,6 +95,7 @@ export function ConversationWorkspaceView({
   const readToken = useRef(0);
   const knownIds = useRef(new Set<string>());
   const requestedIds = useRef(new Set<string>());
+  const droppedActivities = useRef(new Set<string>());
   for (const item of inbox) {
     knownIds.current.add(item.id);
     serverUnreadCount.current.set(item.id, item.unreadCount);
@@ -120,6 +121,7 @@ export function ConversationWorkspaceView({
 
   function applyActivity(event: ActivityEvent) {
     const { conversationId, activity } = event;
+    if (droppedActivities.current.has(`${conversationId}:${activity.position}`)) return;
     setLiveActivities((current) => {
       const list = current[conversationId] ?? [];
       if (list.some((item) => item.position === activity.position)) return current;
@@ -151,6 +153,22 @@ export function ConversationWorkspaceView({
       const item = result.data;
       knownIds.current.add(item.id);
       setArrived((current) => (current.some((row) => row.id === item.id) ? current : [...current, item]));
+    });
+  }
+
+  function retractActivity(conversationId: string, position: number) {
+    droppedActivities.current.add(`${conversationId}:${position}`);
+    setLiveActivities((current) => {
+      const list = current[conversationId];
+      if (!list) return current;
+      return { ...current, [conversationId]: list.filter((activity) => activity.position !== position) };
+    });
+    setPatches((current) => {
+      const patch = current[conversationId];
+      if (!patch || patch.position !== position) return current;
+      const next = { ...current };
+      delete next[conversationId];
+      return next;
     });
   }
 
@@ -273,12 +291,14 @@ export function ConversationWorkspaceView({
     }
   }
 
-  function activateDeal(dealId: string) {
+  async function activateDeal(dealId: string) {
     const conversationId = selection.selectedId;
     const customerId = selection.workspace?.customer.id;
     if (!conversationId || !customerId) return;
+    const currentDealId = activeDealByConversation[conversationId] ?? selection.workspace?.deal.id;
+    if (currentDealId === dealId) return;
     setActiveDealByConversation((current) => ({ ...current, [conversationId]: dealId }));
-    void setCustomerActiveDeal({ customerId, dealId });
+    await setCustomerActiveDeal({ customerId, dealId });
   }
 
   function selectConversation(id: string) {
@@ -353,7 +373,7 @@ export function ConversationWorkspaceView({
           </div>
         ) : selection.workspace && selection.status !== "pending" ? (
           <ConversationDetail
-            key={`${selection.workspace.id}:${selection.workspace.deal.id}`}
+            key={selection.workspace.id}
             workspace={selection.workspace}
             incoming={liveActivities[selection.workspace.id] ?? []}
             onBack={selection.clearConversation}
@@ -361,6 +381,10 @@ export function ConversationWorkspaceView({
             onRename={onRename}
             onReopen={onReopen}
             onActivateDeal={activateDeal}
+            onSystemActivity={(conversationId, activity) => {
+              applyActivity({ conversationId, activity });
+            }}
+            onRemoveActivity={retractActivity}
             onSelectCustomer={selectCustomer}
             onActivitiesSeen={(id, unreadCount) => {
               setUnreadCountById((current) => ({ ...current, [id]: unreadCount }));
