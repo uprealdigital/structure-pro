@@ -16,12 +16,12 @@ function nameColumnMissing(error: { message: string } | null): boolean {
   return message.includes("name") && (message.includes("does not exist") || message.includes("schema cache"));
 }
 
-async function queryDeals<T>(
+async function queryDeals(
   run: (columns: string) => PromiseLike<{
-    data: T;
+    data: unknown;
     error: { message: string; code?: string; details?: string; hint?: string } | null;
   }>,
-): Promise<T> {
+): Promise<unknown> {
   const first = await run(dealColumns);
   if (!nameColumnMissing(first.error)) {
     throwIfError(first.error);
@@ -48,7 +48,7 @@ export async function createDeal(input: {
     .single();
 
   throwIfError(error);
-  const saved = data ? toDeal(data as DealRow) : undefined;
+  const saved = data ? toDeal(data as unknown as DealRow) : undefined;
   if (!saved) throw new Error("Deal was not saved");
   return saved;
 }

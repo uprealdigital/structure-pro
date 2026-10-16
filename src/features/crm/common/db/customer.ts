@@ -15,9 +15,9 @@ function missingActiveDeal(error: { message?: string } | null): boolean {
   return /active_deal_id/i.test(error?.message ?? "");
 }
 
-async function selectCustomer<T>(
-  run: (columns: string) => PromiseLike<{ data: T; error: { message: string } | null }>,
-): Promise<T> {
+async function selectCustomer(
+  run: (columns: string) => PromiseLike<{ data: unknown; error: { message: string } | null }>,
+): Promise<unknown> {
   const first = await run(customerColumns);
   if (!missingActiveDeal(first.error)) {
     throwIfError(first.error);
@@ -69,7 +69,7 @@ export async function createCustomer(input: {
     .single();
 
   throwIfError(error);
-  const saved = data ? toCustomer(data as CustomerRow) : undefined;
+  const saved = data ? toCustomer(data as unknown as CustomerRow) : undefined;
   if (!saved) throw new Error("Customer was not saved");
   await ensureCustomerThread(saved);
   return saved;
