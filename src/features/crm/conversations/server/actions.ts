@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { demoChatId, sendTelegramMessage } from "@/src/common/lib/telegram/telegram.service";
 import { createActivities, deleteLatestActivity, readActivities } from "@/src/features/crm/conversations/db/activity";
 import { createConversation, deleteConversation, readConversationById, updateConversation } from "@/src/features/crm/conversations/db/conversation";
 import {
@@ -102,6 +103,10 @@ export async function sendManualActivity(input: {
   }
 
   try {
+    if (channel.data === "telegram") {
+      const conversation = await readConversationById(conversationId.data);
+      await sendTelegramMessage(conversation?.chatId?.trim() || demoChatId(), text);
+    }
     await createActivities(conversationId.data, [
       { role: "model", channel: channel.data, text, generatedBy: "manual" },
     ]);

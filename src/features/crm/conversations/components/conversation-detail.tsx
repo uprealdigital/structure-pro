@@ -33,6 +33,14 @@ import { DealStatusBadge } from "@/src/features/crm/deals/components/deal-status
 import { dealNameMaxLength, type DealStatus } from "@/src/features/crm/deals/types";
 import { participantsForDeal } from "@/src/features/crm/conversations/utils/participants";
 
+function TelegramIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+      <path d="M21.94 4.32 18.7 19.72c-.24 1.08-.89 1.34-1.8.84l-4.97-3.66-2.4 2.31c-.26.27-.49.49-1 .49l.36-5.07 9.22-8.33c.4-.36-.09-.56-.62-.2L6.2 12.96l-4.9-1.53c-1.07-.33-1.09-1.07.22-1.58L20.4 3.1c.89-.33 1.66.2 1.54 1.22Z" />
+    </svg>
+  );
+}
+
 function revisionStatusLabel(revision: ConversationQuoteRevision): string {
   return revisionVersionLabel(revision.status, revision.revisionNumber);
 }
@@ -153,7 +161,7 @@ export function ConversationDetail({
     ? { ...workspace, deal: focusedOption.deal, quote: focusedOption.quote }
     : workspace;
   const [draft, setDraft] = useState("");
-  const [channel, setChannel] = useState<ComposerChannel>("sms");
+  const [channel, setChannel] = useState<ComposerChannel>("telegram");
   const [channelOpen, setChannelOpen] = useState(false);
   const threadId = workspace.id;
   const threadActivities = workspace.activities;
@@ -202,7 +210,7 @@ export function ConversationDetail({
   const specs = focused.quote?.specs ?? [];
   const viewed = viewedRevision(focused.quote, selectedRevisionId);
   const title = productTitle(viewed?.specs ?? specs);
-  const channels: ComposerChannel[] = ["sms", "facebook", "email"];
+  const channels: ComposerChannel[] = ["telegram", "sms", "facebook", "email"];
 
   useEffect(() => {
     setRenameNotice(null);
@@ -556,9 +564,13 @@ export function ConversationDetail({
                 onClick={() => setChannelOpen((open) => !open)}
                 className="inline-flex items-center gap-1.5 rounded-md bg-transparent px-2.5 py-1.5 text-xs font-semibold text-gray-800 transition-colors hover:bg-gray-100"
               >
-                <svg className="h-3.5 w-3.5 shrink-0 text-gray-900" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" aria-hidden="true">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
-                </svg>
+                {channel === "telegram" ? (
+                  <TelegramIcon className="h-3.5 w-3.5 shrink-0 text-gray-900" />
+                ) : (
+                  <svg className="h-3.5 w-3.5 shrink-0 text-gray-900" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" aria-hidden="true">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                  </svg>
+                )}
                 <span className="font-medium">{activityChannelLabel(channel)}</span>
                 <svg className="h-3 w-3 shrink-0 text-gray-500" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" aria-hidden="true">
                   <path strokeLinecap="round" strokeLinejoin="round" d="M5 15l7-7 7 7" />
@@ -568,7 +580,7 @@ export function ConversationDetail({
                 <ul
                   role="listbox"
                   aria-label={copy.messageSource}
-                  className="absolute right-0 bottom-full z-30 mb-2 w-36 overflow-hidden rounded-md border border-gray-200 bg-white py-1 shadow-md"
+                  className="absolute right-0 bottom-full z-30 mb-2 w-40 overflow-hidden rounded-md border border-gray-200 bg-white py-1 shadow-md"
                 >
                   {channels.map((option) => (
                     <li key={option}>
@@ -580,10 +592,11 @@ export function ConversationDetail({
                           setChannel(option);
                           setChannelOpen(false);
                         }}
-                        className={`block w-full px-3 py-1.5 text-left text-xs ${
+                        className={`flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs ${
                           option === channel ? "bg-gray-100 font-semibold text-gray-900" : "text-gray-700 hover:bg-gray-50"
                         }`}
                       >
+                        {option === "telegram" ? <TelegramIcon className="h-3.5 w-3.5 shrink-0" /> : null}
                         {activityChannelLabel(option)}
                       </button>
                     </li>

@@ -22,7 +22,7 @@ export type ActivityChannel = z.infer<typeof activityChannelSchema>;
 export const generatedBySchema = z.enum(["ai", "manual"]);
 export type GeneratedBy = z.infer<typeof generatedBySchema>;
 
-export const composerChannelSchema = z.enum(["sms", "facebook", "email"]);
+export const composerChannelSchema = z.enum(["telegram", "sms", "facebook", "email"]);
 export type ComposerChannel = z.infer<typeof composerChannelSchema>;
 
 export const callDirectionSchema = z.enum(["inbound", "outbound"]);
