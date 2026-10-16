@@ -27,18 +27,19 @@ function SectionSelection({
   onDeselectAll: () => void;
 }) {
   return (
-    <div className="inline-flex shrink-0 overflow-hidden rounded-md border border-gray-200 bg-white">
+    <div className="inline-flex shrink-0 items-center">
       <button
         type="button"
         onClick={onSelectAll}
-        className="cursor-pointer border-r border-gray-200 px-2 py-1 text-[10px] font-medium text-gray-600 transition-colors hover:bg-gray-50 hover:text-gray-950"
+        className="cursor-pointer px-2 py-1 text-[10px] font-medium text-gray-600 hover:underline"
       >
         {copy.selectAll}
       </button>
+      <span className="h-3 w-px bg-gray-300" aria-hidden="true" />
       <button
         type="button"
         onClick={onDeselectAll}
-        className="cursor-pointer px-2 py-1 text-[10px] font-medium text-gray-600 transition-colors hover:bg-gray-50 hover:text-gray-950"
+        className="cursor-pointer px-2 py-1 text-[10px] font-medium text-gray-600 hover:underline"
       >
         {copy.deselectAll}
       </button>

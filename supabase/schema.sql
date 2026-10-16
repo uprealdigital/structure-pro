@@ -233,4 +233,17 @@ grant select, insert, update, delete on table crm.activities to service_role;
 grant select, insert, update, delete on table ai.yard_previews to service_role;
 grant usage, select on all sequences in schema crm, ai to service_role;
 
+do $$
+begin
+  if not exists (
+    select 1
+    from pg_publication_tables
+    where pubname = 'supabase_realtime'
+      and schemaname = 'crm'
+      and tablename = 'activities'
+  ) then
+    alter publication supabase_realtime add table crm.activities;
+  end if;
+end $$;
+
 -- The app creates the private "yard-previews" storage bucket on the first save.

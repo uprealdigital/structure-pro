@@ -2,6 +2,7 @@ import type { QuoteSelections } from "@/src/features/cpq/types";
 import { priceSummary } from "@/src/features/cpq/utils/pricing";
 import type { Customer } from "@/src/features/crm/common/types";
 import {
+  activityEventSchema,
   activitySchema,
   callSchema,
   conversationDealListItemSchema,
@@ -11,6 +12,7 @@ import {
   conversationSchema,
   conversationSummarySchema,
   type Activity,
+  type ActivityEvent,
   type Call,
   type Conversation,
   type ConversationDealListItem,
@@ -88,7 +90,9 @@ export function toCall(row: CallRow): Call | undefined {
 }
 
 export function toActivity(row: ActivityRow, call?: Call): Activity | undefined {
+  const position = typeof row.position === "number" ? row.position : Number(row.position);
   const activity = activitySchema.safeParse({
+    position,
     role: row.role,
     text: row.body,
     channel: row.channel,
@@ -97,6 +101,16 @@ export function toActivity(row: ActivityRow, call?: Call): Activity | undefined 
     call,
   });
   return activity.success ? activity.data : undefined;
+}
+
+export function toActivityEvent(row: object, call?: Call): ActivityEvent | undefined {
+  const record = row as ActivityRow & { conversation_id?: unknown };
+  const conversationId = record.conversation_id;
+  if (typeof conversationId !== "string" || !conversationId) return undefined;
+  const activity = toActivity(record, call);
+  if (!activity) return undefined;
+  const event = activityEventSchema.safeParse({ conversationId, activity });
+  return event.success ? event.data : undefined;
 }
 
 export function toConversationSummary(row: ConversationSummaryRow): ConversationSummary | undefined {

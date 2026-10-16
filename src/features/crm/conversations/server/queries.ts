@@ -1,6 +1,7 @@
 import "server-only";
 
 import { cache } from "react";
+import { getSupabase } from "@/src/common/lib/supabase/supabase.service";
 import { getQuoteForPage } from "@/src/features/cpq/server/queries";
 import { readCustomer, readCustomers } from "@/src/features/crm/common/db/customer";
 import {
@@ -10,7 +11,7 @@ import {
 } from "@/src/features/crm/common/db/deal-customer";
 import type { DealCustomer } from "@/src/features/crm/common/types";
 import { getCustomer } from "@/src/features/crm/common/server/queries";
-import { readActivities } from "@/src/features/crm/conversations/db/activity";
+import { readActivities, readActivitiesSince } from "@/src/features/crm/conversations/db/activity";
 import {
   readConversation,
   readConversationById,
@@ -20,7 +21,9 @@ import {
 } from "@/src/features/crm/conversations/db/conversation";
 import {
   conversationDealOptionSchema,
+  conversationSummarySchema,
   conversationWorkspaceSchema,
+  type ActivityEvent,
   type Conversation,
   type ConversationDealOption,
   type ConversationInboxItem,
@@ -30,6 +33,7 @@ import { activityPreview, formatDealMenuDate, lastMessageAt, productTitle } from
 import { canonicalConversationByCustomer } from "@/src/features/crm/conversations/utils/conversations";
 import { orderedDealParticipants } from "@/src/features/crm/conversations/utils/participants";
 import {
+  toActivityEvent,
   toConversationDealListItem,
   toConversationInboxItem,
   toConversationQuote,
@@ -212,6 +216,143 @@ export async function getCustomerInboxItem(
     deals: linked,
     preview: activityPreview(activities.at(-1)),
     updatedAt: lastMessageAt(activities),
+  });
+}
+
+export async function getConversationInboxItem(
+  conversationId: string,
+): Promise<ConversationInboxItem | undefined> {
+  const conversation = await readConversationById(conversationId);
+  if (!conversation) return undefined;
+  const [customer, links, deals] = await Promise.all([
+    readCustomer(conversation.customerId),
+    readDealCustomers(),
+    readDeals(),
+  ]);
+  if (!customer) return undefined;
+  const linked = linkedDeals(links, deals, customer.id).sort(byNewest);
+  const active = customer.activeDealId
+    ? linked.find((item) => item.id === customer.activeDealId)
+    : undefined;
+  const deal = active ?? latestPrimaryDeal(links, deals, customer.id) ?? linked[0];
+  if (!deal) return undefined;
+  const updatedAt = lastMessageAt(conversation.activities) || conversation.createdAt || new Date(0).toISOString();
+  const summary = conversationSummarySchema.safeParse({
+    id: conversation.id,
+    lookupKey: conversation.lookupKey,
+    channelKey: conversation.channelKey,
+    chatId: conversation.chatId,
+    customerId: conversation.customerId,
+    contractSent: conversation.contractSent,
+    createdAt: conversation.createdAt,
+    updatedAt,
+  });
+  if (!summary.success) return undefined;
+  return toConversationInboxItem({
+    summary: summary.data,
+    customer,
+    deal,
+    deals: linked,
+    preview: activityPreview(conversation.activities.at(-1)),
+    updatedAt,
+  });
+}
+
+export function openActivityStream(since: string | undefined, signal: AbortSignal): ReadableStream<Uint8Array> {
+  const encoder = new TextEncoder();
+  const cursor = since && !Number.isNaN(Date.parse(since)) ? since : undefined;
+  let finish = () => {};
+
+  return new ReadableStream({
+    cancel() {
+      finish();
+    },
+    start(controller) {
+      let closed = false;
+      let live = false;
+      const buffered: ActivityEvent[] = [];
+      const heartbeat = setInterval(() => {
+        write(": heartbeat\n\n");
+      }, 15_000);
+
+      function write(chunk: string) {
+        if (closed) return;
+        try {
+          controller.enqueue(encoder.encode(chunk));
+        } catch {
+          finish();
+        }
+      }
+
+      function writeEvent(event: ActivityEvent) {
+        write(`data: ${JSON.stringify(event)}\n\n`);
+      }
+
+      write(": connected\n\n");
+
+      let supabase: ReturnType<typeof getSupabase>;
+      let channel: ReturnType<ReturnType<typeof getSupabase>["channel"]>;
+      try {
+        supabase = getSupabase();
+        channel = supabase
+          .channel(`crm-activities-${crypto.randomUUID()}`)
+          .on("postgres_changes", { event: "INSERT", schema: "crm", table: "activities" }, (payload) => {
+            const event = toActivityEvent(payload.new);
+            if (!event) return;
+            if (live) writeEvent(event);
+            else buffered.push(event);
+          });
+      } catch {
+        clearInterval(heartbeat);
+        try {
+          controller.close();
+        } catch {
+          // The stream is already closed.
+        }
+        return;
+      }
+
+      finish = () => {
+        if (closed) return;
+        closed = true;
+        clearInterval(heartbeat);
+        void supabase.removeChannel(channel);
+        try {
+          controller.close();
+        } catch {
+          // The stream is already closed.
+        }
+      };
+
+      async function release() {
+        if (closed) return;
+        let caught: ActivityEvent[] = [];
+        if (cursor) {
+          try {
+            caught = await readActivitiesSince(cursor);
+          } catch {
+            finish();
+            return;
+          }
+        }
+        if (closed) return;
+        live = true;
+        const pending = buffered.splice(0);
+        const seen = new Set<string>();
+        for (const event of [...caught, ...pending]) {
+          const key = `${event.conversationId}:${event.activity.position}`;
+          if (seen.has(key)) continue;
+          seen.add(key);
+          writeEvent(event);
+        }
+      }
+
+      signal.addEventListener("abort", finish, { once: true });
+      channel.subscribe((status) => {
+        if (status === "SUBSCRIBED") void release();
+        if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") finish();
+      });
+    },
   });
 }
 

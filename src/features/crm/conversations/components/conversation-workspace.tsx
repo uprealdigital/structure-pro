@@ -1,25 +1,47 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { ConversationDetail } from "@/src/features/crm/conversations/components/conversation-detail";
 import { ConversationDetailSkeleton } from "@/src/features/crm/conversations/components/conversation-skeleton";
 import { ConversationList } from "@/src/features/crm/conversations/components/conversation-list";
+import { useActivityStream } from "@/src/features/crm/conversations/hooks/use-activity-stream";
 import { useConversationFilters } from "@/src/features/crm/conversations/hooks/use-conversation-filters";
 import { useConversationSelection } from "@/src/features/crm/conversations/hooks/use-conversation-selection";
 import { copy } from "@/src/features/crm/conversations/locales/en";
 import {
   ensureCustomerConversation,
+  loadConversationInboxItem,
   markDealLost,
   renameDeal,
   reopenDeal,
   setCustomerActiveDeal,
 } from "@/src/features/crm/conversations/server/actions";
 import type {
+  Activity,
+  ActivityEvent,
   ConversationInboxItem,
   ConversationParticipant,
   ConversationWorkspace,
 } from "@/src/features/crm/conversations/types";
+import { activityPreview, messageActivityAt } from "@/src/features/crm/conversations/utils/formatting";
 import type { DealStatus } from "@/src/features/crm/deals/types";
+
+type InboxPatch = {
+  position: number;
+  preview: string;
+  updatedAt?: string;
+};
+
+function newestActivityAt(inbox: ConversationInboxItem[], workspace?: ConversationWorkspace): string | undefined {
+  let latest = "";
+  for (const item of inbox) {
+    if (item.updatedAt > latest) latest = item.updatedAt;
+  }
+  for (const activity of workspace?.activities ?? []) {
+    if (activity.createdAt && activity.createdAt > latest) latest = activity.createdAt;
+  }
+  return latest || undefined;
+}
 
 function shownInbox(
   items: ConversationInboxItem[],
@@ -62,13 +84,68 @@ export function ConversationWorkspaceView({
   const [statusByDeal, setStatusByDeal] = useState<Record<string, DealStatus>>({});
   const [activeDealByConversation, setActiveDealByConversation] = useState<Record<string, string>>({});
   const [opened, setOpened] = useState<ConversationInboxItem[]>([]);
+  const [arrived, setArrived] = useState<ConversationInboxItem[]>([]);
+  const [patches, setPatches] = useState<Record<string, InboxPatch>>({});
+  const [liveActivities, setLiveActivities] = useState<Record<string, Activity[]>>({});
+  const knownIds = useRef(new Set<string>());
+  const requestedIds = useRef(new Set<string>());
+  for (const item of inbox) knownIds.current.add(item.id);
+  for (const item of opened) knownIds.current.add(item.id);
+  for (const item of arrived) knownIds.current.add(item.id);
+
+  useActivityStream((event) => {
+    applyActivity(event);
+  }, newestActivityAt(inbox, workspace));
+
+  function applyActivity(event: ActivityEvent) {
+    const { conversationId, activity } = event;
+    setLiveActivities((current) => {
+      const list = current[conversationId] ?? [];
+      if (list.some((item) => item.position === activity.position)) return current;
+      return { ...current, [conversationId]: [...list, activity] };
+    });
+    setPatches((current) => {
+      const previous = current[conversationId];
+      if (previous && previous.position >= activity.position) return current;
+      const stamped = messageActivityAt(activity);
+      return {
+        ...current,
+        [conversationId]: {
+          position: activity.position,
+          preview: activityPreview(activity),
+          updatedAt: stamped ?? previous?.updatedAt,
+        },
+      };
+    });
+    if (knownIds.current.has(conversationId) || requestedIds.current.has(conversationId)) return;
+    requestedIds.current.add(conversationId);
+    void loadConversationInboxItem(conversationId).then((result) => {
+      if ("error" in result || !result.data) return;
+      const item = result.data;
+      knownIds.current.add(item.id);
+      setArrived((current) => (current.some((row) => row.id === item.id) ? current : [...current, item]));
+    });
+  }
+
   const mergedInbox = useMemo(() => {
     const byId = new Map(inbox.map((item) => [item.id, item]));
     for (const item of opened) {
       if (!byId.has(item.id)) byId.set(item.id, item);
     }
+    for (const item of arrived) {
+      if (!byId.has(item.id)) byId.set(item.id, item);
+    }
+    for (const [id, patch] of Object.entries(patches)) {
+      const existing = byId.get(id);
+      if (!existing) continue;
+      byId.set(id, {
+        ...existing,
+        preview: patch.preview,
+        updatedAt: patch.updatedAt ?? existing.updatedAt,
+      });
+    }
     return [...byId.values()].sort((left, right) => right.updatedAt.localeCompare(left.updatedAt));
-  }, [inbox, opened]);
+  }, [inbox, opened, arrived, patches]);
   const displayed = shownInbox(mergedInbox, statusByDeal, activeDealByConversation);
   const visible = filters.visibleItems(displayed);
   const showDetail = Boolean(selection.selectedId);
@@ -171,6 +248,7 @@ export function ConversationWorkspaceView({
           <ConversationDetail
             key={`${selection.workspace.id}:${selection.workspace.deal.id}`}
             workspace={selection.workspace}
+            incoming={liveActivities[selection.workspace.id] ?? []}
             onBack={selection.clearConversation}
             onMarkLost={onMarkLost}
             onRename={onRename}

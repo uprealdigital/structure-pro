@@ -56,6 +56,7 @@ export const callDraftSchema = z.object({
 export type CallDraft = z.infer<typeof callDraftSchema>;
 
 export const activitySchema = z.object({
+  position: z.number().int().nonnegative(),
   role: z.enum(["user", "model"]),
   text: z.string(),
   channel: activityChannelSchema,
@@ -65,6 +66,13 @@ export const activitySchema = z.object({
 });
 
 export type Activity = z.infer<typeof activitySchema>;
+
+export const activityEventSchema = z.object({
+  conversationId: z.string().trim().min(1),
+  activity: activitySchema,
+});
+
+export type ActivityEvent = z.infer<typeof activityEventSchema>;
 
 export const activityInsertSchema = z
   .object({

@@ -21,6 +21,11 @@ export function formatCallDuration(seconds: number | undefined): string {
 
 const messageChannels = new Set<Activity["channel"]>(["sms", "facebook", "email", "telegram"]);
 
+export function messageActivityAt(activity: Activity): string | undefined {
+  if (!messageChannels.has(activity.channel) || !activity.createdAt) return undefined;
+  return activity.createdAt;
+}
+
 export function lastMessageAt(activities: Activity[]): string {
   let latest = "";
   let latestMs = Number.NEGATIVE_INFINITY;

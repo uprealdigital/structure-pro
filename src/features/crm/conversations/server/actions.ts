@@ -5,6 +5,7 @@ import { createActivities, deleteLatestActivity, readActivities } from "@/src/fe
 import { createConversation, deleteConversation, readConversationById, updateConversation } from "@/src/features/crm/conversations/db/conversation";
 import {
   getConversation,
+  getConversationInboxItem,
   getConversationWorkspace,
   getCustomerDeals,
   getCustomerInboxItem,
@@ -261,6 +262,21 @@ export async function loadCustomerDeals(
     return { success: true, data: deals };
   } catch (error) {
     const message = error instanceof Error ? error.message : "Could not load deals";
+    return { error: message };
+  }
+}
+
+export async function loadConversationInboxItem(
+  id: string,
+): Promise<{ success: true; data: ConversationInboxItem | null } | { error: string }> {
+  const parsed = conversationIdSchema.safeParse(id);
+  if (!parsed.success) return { error: "A conversation is required" };
+
+  try {
+    const item = await getConversationInboxItem(parsed.data);
+    return { success: true, data: item ?? null };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Could not load conversation";
     return { error: message };
   }
 }

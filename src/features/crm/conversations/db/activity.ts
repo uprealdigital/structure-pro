@@ -1,8 +1,8 @@
 import { db } from "@/src/common/lib/supabase/supabase.service";
 import { throwIfError } from "@/src/common/utils/error-handling";
 import { createCall, readCalls } from "@/src/features/crm/conversations/db/call";
-import { activityInsertSchema, type Activity, type ActivityInsert } from "@/src/features/crm/conversations/types";
-import { toActivity, type ActivityRow } from "@/src/features/crm/conversations/utils/mappers";
+import { activityInsertSchema, type Activity, type ActivityEvent, type ActivityInsert } from "@/src/features/crm/conversations/types";
+import { toActivity, toActivityEvent, type ActivityRow } from "@/src/features/crm/conversations/utils/mappers";
 
 function crm() {
   return db("crm");
@@ -70,6 +70,24 @@ export async function readActivities(conversationId: string): Promise<Activity[]
   return rows
     .map((row) => toActivity(row, row.call_id ? callById.get(row.call_id) : undefined))
     .filter((activity): activity is Activity => activity != null);
+}
+
+export async function readActivitiesSince(since: string): Promise<ActivityEvent[]> {
+  if (Number.isNaN(Date.parse(since))) return [];
+  const { data, error } = await crm()
+    .from("activities")
+    .select(`conversation_id, ${activityColumns}`)
+    .gte("created_at", since)
+    .order("created_at", { ascending: true });
+  throwIfError(error);
+  const rows = (data ?? []) as Array<ActivityRow & { conversation_id: string }>;
+  const callIds = rows.map((row) => row.call_id).filter((id): id is string => typeof id === "string");
+  const calls = await readCalls(callIds);
+  const callById = new Map(calls.map((call) => [call.id, call]));
+  return rows.flatMap((row) => {
+    const event = toActivityEvent(row, row.call_id ? callById.get(row.call_id) : undefined);
+    return event ? [event] : [];
+  });
 }
 
 export async function deleteActivities(conversationId: string): Promise<void> {

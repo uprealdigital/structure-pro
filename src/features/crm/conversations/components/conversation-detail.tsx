@@ -14,6 +14,7 @@ import { useConversationActivities } from "@/src/features/crm/conversations/hook
 import { copy } from "@/src/features/crm/conversations/locales/en";
 import { sendConversationQuote, sendManualActivity } from "@/src/features/crm/conversations/server/actions";
 import type {
+  Activity,
   ComposerChannel,
   ConversationParticipant,
   ConversationQuote,
@@ -82,6 +83,7 @@ function DetailsToggle({
 
 export function ConversationDetail({
   workspace,
+  incoming = [],
   onBack,
   onMarkLost,
   onReopen,
@@ -90,6 +92,7 @@ export function ConversationDetail({
   onSelectCustomer,
 }: {
   workspace: ConversationWorkspace;
+  incoming?: Activity[];
   onBack: () => void;
   onMarkLost: (dealId: string) => Promise<{ success: true } | { error: string }>;
   onRename: (dealId: string, name: string) => Promise<{ success: true; data: { name: string } } | { error: string }>;
@@ -154,7 +157,7 @@ export function ConversationDetail({
   const [channelOpen, setChannelOpen] = useState(false);
   const threadId = workspace.id;
   const threadActivities = workspace.activities;
-  const { activities, setActivities } = useConversationActivities(threadId, threadActivities);
+  const { activities, setActivities } = useConversationActivities(threadId, threadActivities, incoming);
   const [sending, setSending] = useState(false);
   const [sendError, setSendError] = useState("");
   const [reviewOpen, setReviewOpen] = useState(false);
@@ -195,6 +198,7 @@ export function ConversationDetail({
   const [revisionError, setRevisionError] = useState("");
   const channelMenu = useRef<HTMLDivElement>(null);
   const thread = useRef<HTMLDivElement>(null);
+  const stickToBottom = useRef(true);
   const specs = focused.quote?.specs ?? [];
   const viewed = viewedRevision(focused.quote, selectedRevisionId);
   const title = productTitle(viewed?.specs ?? specs);
@@ -212,9 +216,15 @@ export function ConversationDetail({
     return () => document.removeEventListener("mousedown", closeMenu);
   }, []);
 
+  function onThreadScroll() {
+    const pane = thread.current;
+    if (!pane) return;
+    stickToBottom.current = pane.scrollHeight - pane.scrollTop - pane.clientHeight < 80;
+  }
+
   useEffect(() => {
     const pane = thread.current;
-    if (pane) pane.scrollTop = pane.scrollHeight;
+    if (pane && stickToBottom.current) pane.scrollTop = pane.scrollHeight;
   }, [activities.length]);
 
   useEffect(() => {
@@ -309,7 +319,9 @@ export function ConversationDetail({
       setSendError(copy.sendFailed);
       return;
     }
-    setActivities((current) => [...current, result.data]);
+    setActivities((current) =>
+      current.some((item) => item.position === result.data.position) ? current : [...current, result.data],
+    );
     setDraft("");
   }
 
@@ -498,7 +510,7 @@ export function ConversationDetail({
       </div>
 
       <div className="relative flex min-h-0 flex-1 flex-col">
-        <div ref={thread} className="min-h-0 flex-1 overflow-y-auto">
+        <div ref={thread} className="min-h-0 flex-1 overflow-y-auto" onScroll={onThreadScroll}>
           <ConversationThread
             activities={activities}
             contactName={workspace.customer.fullName}
