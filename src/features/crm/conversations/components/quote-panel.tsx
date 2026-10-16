@@ -117,7 +117,7 @@ export function QuoteRevisionMenu({
         className="inline-flex w-full cursor-pointer items-center justify-between gap-1.5 rounded-full bg-gray-50/90 px-2.5 py-1 text-[11px] font-semibold whitespace-nowrap text-gray-950 shadow-xs transition-colors hover:bg-gray-100"
       >
         <span>
-          {revision.totalLabel} - {revisionVersionLabel(revision.status, revision.revisionNumber)}
+          {revisionVersionLabel(revision.status, revision.revisionNumber)} - {revision.totalLabel}
         </span>
         <ChevronDown
           className={`h-3 w-3 shrink-0 text-gray-500 transition-transform duration-200 ${open ? "rotate-180" : ""}`}
