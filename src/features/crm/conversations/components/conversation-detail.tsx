@@ -33,10 +33,32 @@ import { DealStatusBadge } from "@/src/features/crm/deals/components/deal-status
 import { dealNameMaxLength, type DealStatus } from "@/src/features/crm/deals/types";
 import { participantsForDeal } from "@/src/features/crm/conversations/utils/participants";
 
-function TelegramIcon({ className }: { className?: string }) {
+function ChannelIcon({ channel, className }: { channel: ComposerChannel; className?: string }) {
+  const iconClass = className ?? "h-3.5 w-3.5 shrink-0";
+  if (channel === "telegram") {
+    return (
+      <svg className={iconClass} viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+        <path d="M21.94 4.32 18.7 19.72c-.24 1.08-.89 1.34-1.8.84l-4.97-3.66-2.4 2.31c-.26.27-.49.49-1 .49l.36-5.07 9.22-8.33c.4-.36-.09-.56-.62-.2L6.2 12.96l-4.9-1.53c-1.07-.33-1.09-1.07.22-1.58L20.4 3.1c.89-.33 1.66.2 1.54 1.22Z" />
+      </svg>
+    );
+  }
+  if (channel === "sms") {
+    return (
+      <svg className={iconClass} viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+        <path d="M5 3h14a3 3 0 0 1 3 3v8a3 3 0 0 1-3 3H10l-5 4v-4H5a3 3 0 0 1-3-3V6a3 3 0 0 1 3-3Z" />
+      </svg>
+    );
+  }
+  if (channel === "facebook") {
+    return (
+      <svg className={iconClass} viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+        <path d="M14.5 8H17V4.5h-2.5C11.6 4.5 9.5 6.6 9.5 9.5V12H7v3.5h2.5V22h3.5v-6.5H16l.7-3.5h-3.7V9.5c0-.8.7-1.5 1.5-1.5Z" />
+      </svg>
+    );
+  }
   return (
-    <svg className={className} viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-      <path d="M21.94 4.32 18.7 19.72c-.24 1.08-.89 1.34-1.8.84l-4.97-3.66-2.4 2.31c-.26.27-.49.49-1 .49l.36-5.07 9.22-8.33c.4-.36-.09-.56-.62-.2L6.2 12.96l-4.9-1.53c-1.07-.33-1.09-1.07.22-1.58L20.4 3.1c.89-.33 1.66.2 1.54 1.22Z" />
+    <svg className={iconClass} viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+      <path d="M3 6.2A2.2 2.2 0 0 1 5.2 4h13.6A2.2 2.2 0 0 1 21 6.2v.3l-9 5.6L3 6.5v-.3Zm0 2.7V17.8A2.2 2.2 0 0 0 5.2 20h13.6a2.2 2.2 0 0 0 2.2-2.2V8.9l-8.4 5.2a1.2 1.2 0 0 1-1.2 0L3 8.9Z" />
     </svg>
   );
 }
@@ -170,6 +192,7 @@ export function ConversationDetail({
   const [sendError, setSendError] = useState("");
   const [reviewOpen, setReviewOpen] = useState(false);
   const [editing, setEditing] = useState(false);
+  const composerRef = useRef<HTMLTextAreaElement>(null);
   const headerRef = useRef<HTMLElement>(null);
   const statusRef = useRef<HTMLDivElement>(null);
   const toggleRef = useRef<HTMLDivElement>(null);
@@ -314,6 +337,17 @@ export function ConversationDetail({
     setQuotePatches((current) => ({ ...current, [next.id]: next }));
     setDealStatusPatches((current) => ({ ...current, [focused.deal.id]: result.data.dealStatus }));
   }
+
+  useLayoutEffect(() => {
+    const node = composerRef.current;
+    if (!node) return;
+    if (!draft) {
+      node.style.height = "";
+      return;
+    }
+    node.style.height = "0px";
+    node.style.height = `${node.scrollHeight}px`;
+  }, [draft]);
 
   async function submitMessage(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -538,23 +572,31 @@ export function ConversationDetail({
             <span>{copy.attachDesignPreview}</span>
           </button>
         </div>
-        <div className="relative flex items-center rounded-lg border border-gray-300 bg-white shadow-xs focus-within:border-black focus-within:ring-2 focus-within:ring-black">
+        <div className="relative flex items-end rounded-lg border border-gray-300 bg-white shadow-xs focus-within:border-black focus-within:ring-1 focus-within:ring-black">
           <button
             type="button"
             title={copy.attach}
             aria-label={copy.attach}
-            className="ml-2 shrink-0 rounded p-1.5 text-gray-400 transition-colors hover:text-gray-700"
+            className="mb-1.5 ml-2 shrink-0 rounded p-1.5 text-gray-400 transition-colors hover:text-gray-700"
           >
             <Paperclip className="h-4 w-4" aria-hidden="true" />
           </button>
-          <input
+          <textarea
+            ref={composerRef}
+            rows={1}
             value={draft}
             onChange={(event) => setDraft(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter" && !event.shiftKey) {
+                event.preventDefault();
+                event.currentTarget.form?.requestSubmit();
+              }
+            }}
             aria-label={copy.composerPlaceholder}
             placeholder={copy.composerPlaceholder}
-            className="w-full border-0 bg-transparent py-2.5 pr-3.5 pl-2 text-xs text-gray-900 outline-none placeholder:text-gray-400 focus:ring-0"
+            className="max-h-60 min-h-10 w-full resize-none overflow-y-auto border-0 bg-transparent py-2.5 pr-3.5 pl-2 text-xs leading-5 text-gray-900 outline-none placeholder:text-gray-400 focus:ring-0"
           />
-          <div className="flex items-center space-x-1 pr-2">
+          <div className="mb-1.5 flex shrink-0 items-center space-x-1 pr-2">
             <div ref={channelMenu} className="relative mr-1.5 flex items-center">
               <button
                 type="button"
@@ -564,13 +606,7 @@ export function ConversationDetail({
                 onClick={() => setChannelOpen((open) => !open)}
                 className="inline-flex items-center gap-1.5 rounded-md bg-transparent px-2.5 py-1.5 text-xs font-semibold text-gray-800 transition-colors hover:bg-gray-100"
               >
-                {channel === "telegram" ? (
-                  <TelegramIcon className="h-3.5 w-3.5 shrink-0 text-gray-900" />
-                ) : (
-                  <svg className="h-3.5 w-3.5 shrink-0 text-gray-900" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" aria-hidden="true">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
-                  </svg>
-                )}
+                <ChannelIcon channel={channel} className="h-3.5 w-3.5 shrink-0 text-gray-900" />
                 <span className="font-medium">{activityChannelLabel(channel)}</span>
                 <svg className="h-3 w-3 shrink-0 text-gray-500" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" aria-hidden="true">
                   <path strokeLinecap="round" strokeLinejoin="round" d="M5 15l7-7 7 7" />
@@ -596,7 +632,7 @@ export function ConversationDetail({
                           option === channel ? "bg-gray-100 font-semibold text-gray-900" : "text-gray-700 hover:bg-gray-50"
                         }`}
                       >
-                        {option === "telegram" ? <TelegramIcon className="h-3.5 w-3.5 shrink-0" /> : null}
+                        <ChannelIcon channel={option} className="h-3.5 w-3.5 shrink-0" />
                         {activityChannelLabel(option)}
                       </button>
                     </li>
@@ -607,8 +643,10 @@ export function ConversationDetail({
             </div>
             <button
               type="submit"
-              disabled={sending}
-              className="inline-flex items-center gap-1.5 rounded bg-gray-900 px-3 py-1.5 text-xs font-medium text-white shadow-sm transition-all hover:bg-black disabled:opacity-60"
+              disabled={!draft.trim() || sending}
+              className={`inline-flex items-center gap-1.5 rounded px-3 py-1.5 text-xs font-medium text-white shadow-sm transition-colors ${
+                draft.trim() ? "bg-gray-900 hover:bg-black disabled:opacity-60" : "bg-gray-300"
+              }`}
             >
               {copy.send}
             </button>
