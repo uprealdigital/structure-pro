@@ -92,7 +92,7 @@ function SelectionToolbar({
   onSelectAll: () => void;
 }) {
   return (
-    <div className="flex items-center gap-2 py-0.5 pl-1.5">
+    <div className="flex h-[30px] items-center gap-2 pl-1.5">
       <SelectionMark allSelected={allSelected} onSelectAll={onSelectAll} onClear={onClear} />
       <span className="text-xs font-semibold whitespace-nowrap text-gray-900">
         {copy.selectedCount(count)}
@@ -265,7 +265,7 @@ export function ConversationList({
             onSelectAll={() => setCheckedIds(items.map((item) => item.id))}
           />
         ) : (
-        <div className="flex items-center gap-2">
+        <div className="flex h-[30px] items-center gap-2">
           <label className="relative min-w-0 flex-1">
             <span className="sr-only">{copy.searchPlaceholder}</span>
             <span className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
