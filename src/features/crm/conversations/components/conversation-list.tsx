@@ -19,6 +19,15 @@ const selectedStatusClass: Record<DealStatus, string> = {
   deal_lost: "border-red-200 bg-red-50 text-red-600 shadow-xs",
 };
 
+function conversationRange(items: { id: string }[], fromId: string, toId: string) {
+  const from = items.findIndex((item) => item.id === fromId);
+  const to = items.findIndex((item) => item.id === toId);
+  if (from < 0 || to < 0) return to >= 0 ? [toId] : [];
+  const start = Math.min(from, to);
+  const end = Math.max(from, to);
+  return items.slice(start, end + 1).map((item) => item.id);
+}
+
 function SelectionCheck({
   checked,
   label,
@@ -26,7 +35,7 @@ function SelectionCheck({
 }: {
   checked: boolean;
   label: string;
-  onChange: () => void;
+  onChange: (shiftKey: boolean) => void;
 }) {
   return (
     <button
@@ -36,7 +45,7 @@ function SelectionCheck({
       aria-label={label}
       onClick={(event) => {
         event.stopPropagation();
-        onChange();
+        onChange(event.ctrlKey || event.metaKey ? false : event.shiftKey);
       }}
       className={`flex h-4 w-4 shrink-0 cursor-pointer items-center justify-center rounded border ${
         checked ? "border-black bg-black text-white" : "border-gray-300 bg-white hover:border-gray-400"
@@ -186,12 +195,16 @@ export function ConversationList({
   const filters = useRef<HTMLDivElement>(null);
   const list = useRef<HTMLUListElement>(null);
   const hideUntilTop = useRef(false);
+  const anchorId = useRef<string | null>(null);
+  const shiftRangeIds = useRef<string[]>([]);
   const searching = query.trim().length > 0;
   const itemIds = items.map((item) => item.id).join("\n");
   const selecting = checkedIds.length > 0;
 
   useEffect(() => {
     const allowed = new Set(itemIds.split("\n").filter(Boolean));
+    if (anchorId.current && !allowed.has(anchorId.current)) anchorId.current = null;
+    shiftRangeIds.current = shiftRangeIds.current.filter((id) => allowed.has(id));
     setCheckedIds((current) => {
       const next = current.filter((id) => allowed.has(id));
       return next.length === current.length ? current : next;
@@ -222,11 +235,36 @@ export function ConversationList({
     setShowBackToTop(top > 8);
   }
 
-  function toggleChecked(id: string) {
+  function clearChecked() {
+    anchorId.current = null;
+    shiftRangeIds.current = [];
+    setCheckedIds([]);
+  }
+
+  function toggleChecked(id: string, shiftKey = false) {
     setFiltersOpen(false);
-    setCheckedIds((current) =>
-      current.includes(id) ? current.filter((item) => item !== id) : [...current, id],
-    );
+    if (shiftKey) {
+      const anchor =
+        (anchorId.current && items.some((item) => item.id === anchorId.current) && anchorId.current) ||
+        (selectedId && items.some((item) => item.id === selectedId) ? selectedId : null) ||
+        id;
+      anchorId.current = anchor;
+      const range = conversationRange(items, anchor, id);
+      const previous = new Set(shiftRangeIds.current);
+      shiftRangeIds.current = range;
+      setCheckedIds((current) => {
+        const kept = current.filter((item) => !previous.has(item));
+        return [...new Set([...kept, ...range])];
+      });
+      return;
+    }
+    shiftRangeIds.current = [];
+    anchorId.current = id;
+    setCheckedIds((current) => {
+      const next = current.includes(id) ? current.filter((item) => item !== id) : [...current, id];
+      if (next.length === 0) anchorId.current = null;
+      return next;
+    });
   }
 
   function backToTop() {
@@ -259,7 +297,7 @@ export function ConversationList({
           <SelectionToolbar
             count={checkedIds.length}
             allSelected={items.length > 0 && checkedIds.length === items.length}
-            onClear={() => setCheckedIds([])}
+            onClear={clearChecked}
             onRead={() => onMarkRead(checkedIds, true)}
             onUnread={() => onMarkRead(checkedIds, false)}
             onSelectAll={() => setCheckedIds(items.map((item) => item.id))}
@@ -401,7 +439,20 @@ export function ConversationList({
                   role="button"
                   tabIndex={0}
                   data-conversation-id={item.id}
-                  onClick={() => onSelect(item.id)}
+                  onMouseDown={(event) => {
+                    if (event.shiftKey || event.ctrlKey || event.metaKey) event.preventDefault();
+                  }}
+                  onClick={(event) => {
+                    if (event.ctrlKey || event.metaKey) {
+                      toggleChecked(item.id, false);
+                      return;
+                    }
+                    if (event.shiftKey) {
+                      toggleChecked(item.id, true);
+                      return;
+                    }
+                    onSelect(item.id);
+                  }}
                   onKeyDown={(event) => {
                     if (event.target !== event.currentTarget) return;
                     if (event.key !== "Enter" && event.key !== " ") return;
@@ -435,7 +486,7 @@ export function ConversationList({
                       <SelectionCheck
                         checked={checked}
                         label={copy.selectConversationItem(item.contactName)}
-                        onChange={() => toggleChecked(item.id)}
+                        onChange={(shiftKey) => toggleChecked(item.id, shiftKey)}
                       />
                     </span>
                   </span>
