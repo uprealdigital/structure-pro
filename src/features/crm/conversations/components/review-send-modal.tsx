@@ -132,7 +132,7 @@ function MenuPanel({
       if (anchorRef.current?.contains(target)) return;
       onCloseRef.current();
     }
-    function onKey(event: KeyboardEvent) {
+    function onKey(event: globalThis.KeyboardEvent) {
       if (event.key !== "Escape") return;
       event.preventDefault();
       event.stopImmediatePropagation();

@@ -116,7 +116,9 @@ export function quotePdfBytes(quote: QuotePortal): Uint8Array {
 
 export function quotePdfBlob(quote: QuotePortal): Blob {
   const bytes = quotePdfBytes(quote);
-  return new Blob([bytes], { type: "application/pdf" });
+  const buffer = new ArrayBuffer(bytes.byteLength);
+  new Uint8Array(buffer).set(bytes);
+  return new Blob([buffer], { type: "application/pdf" });
 }
 
 export function downloadQuotePdf(quote: QuotePortal) {
