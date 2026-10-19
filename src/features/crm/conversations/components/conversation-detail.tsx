@@ -905,6 +905,7 @@ export function ConversationDetail({
           title={title || copy.quote}
           priceLabel={viewed.totalLabel}
           invoiceId={focused.quote.invoiceId}
+          quoteId={focused.quote.id}
           imageUrl={viewed.imageUrl}
           statusLabel={revisionStatusLabel(viewed)}
           communication={communicationPatches[viewed.id] ?? viewed.communication}

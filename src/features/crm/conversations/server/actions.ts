@@ -223,6 +223,7 @@ export async function sendConversationQuote(input: {
     revalidatePath("/crm/conversations");
     revalidatePath("/crm/quotes");
     revalidatePath("/crm/deals");
+    revalidatePath(`/quote/${quoteId}`);
     return {
       success: true,
       data: { revisionId: saved.id, updatedAt: saved.updatedAt, dealStatus },

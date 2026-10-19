@@ -1,16 +1,27 @@
+import type { QuoteSelections } from "@/src/features/cpq/types";
 import {
   quoteCommunicationSchema,
   quoteListItemSchema,
+  quotePortalSchema,
   quoteRevisionSchema,
+  type QuoteCommunication,
   type QuoteCustomer,
   type QuoteListItem,
+  type QuotePortal,
+  type QuotePortalCustomer,
+  type QuotePortalRecipient,
+  type QuotePortalStatus,
   type QuoteRevision,
   type QuoteStatus,
 } from "@/src/features/crm/quotes/types";
 import {
+  formatQuoteCash,
+  formatQuoteDate,
   formatQuoteMonthly,
   formatQuotePrice,
   quoteDealLabel,
+  quoteMonthsLabel,
+  quoteVersionLabel,
   quoteZip,
 } from "@/src/features/crm/quotes/utils/formatting";
 
@@ -69,4 +80,56 @@ export function toQuoteListItem(input: {
     status: quoteStatus(input.contractSent, input.invoiceSent),
   });
   return item.success ? item.data : undefined;
+}
+
+export function toQuotePortal(input: {
+  id: string;
+  invoiceId: string;
+  revisionId: string;
+  dealName: string;
+  revisionNumber: number;
+  createdAt: string;
+  imageUrl: string;
+  monthly: number;
+  months: number;
+  lines: { label: string; amount: number }[];
+  specs: { label: string; value: string }[];
+  total: number;
+  zip: string;
+  won: boolean;
+  customers: QuotePortalCustomer[];
+  recipients: QuotePortalRecipient[];
+  dealIds: string[];
+  selections: QuoteSelections;
+  communication: QuoteCommunication | null;
+  status: QuotePortalStatus;
+}): QuotePortal | undefined {
+  const portal = quotePortalSchema.safeParse({
+    id: input.id,
+    invoiceId: input.invoiceId,
+    revisionId: input.revisionId,
+    dealName: input.dealName,
+    versionLabel: quoteVersionLabel(input.revisionNumber),
+    dateLabel: formatQuoteDate(input.createdAt),
+    imageUrl: input.imageUrl,
+    monthlyLabel: `${formatQuoteCash(input.monthly)}/mo`,
+    monthsLabel: quoteMonthsLabel(input.months),
+    lines: input.lines.map((line) => ({
+      label: line.label,
+      amountLabel: formatQuoteCash(line.amount),
+    })),
+    details: input.specs
+      .filter((spec) => spec.label !== "Delivery ZIP" && spec.value.trim())
+      .map((spec) => ({ label: spec.label, value: spec.value })),
+    totalLabel: formatQuoteCash(input.total),
+    zip: input.zip,
+    won: input.won,
+    customers: input.customers,
+    recipients: input.recipients,
+    dealIds: input.dealIds,
+    selections: input.selections,
+    communication: input.communication,
+    status: input.status,
+  });
+  return portal.success ? portal.data : undefined;
 }

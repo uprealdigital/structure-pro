@@ -78,6 +78,16 @@ export async function readDeal(id: string): Promise<Deal | undefined> {
   return toDeal(data as DealRow);
 }
 
+export async function readDealsByQuoteId(quoteId: string): Promise<Deal[]> {
+  if (!quoteId) return [];
+  const data = await queryDeals((columns) =>
+    crm().from("deals").select(columns).eq("quote_id", quoteId).order("created_at", { ascending: false }),
+  );
+  return ((data ?? []) as DealRow[])
+    .map(toDeal)
+    .filter((deal): deal is Deal => deal != null);
+}
+
 export async function updateDeal(
   id: string,
   patch: { status?: unknown; quoteId?: string; name?: string },

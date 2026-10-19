@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { quoteSelectionsSchema } from "@/src/features/cpq/types";
+import { customerSchema } from "@/src/features/crm/common/types";
 
 export const quoteStatusSchema = z.enum(["draft", "sent", "contract"]);
 export type QuoteStatus = z.infer<typeof quoteStatusSchema>;
@@ -70,3 +71,69 @@ export const quoteRevisionSchema = z.object({
 });
 
 export type QuoteRevision = z.infer<typeof quoteRevisionSchema>;
+
+export const quotePortalModeSchema = z.enum(["internal", "external"]);
+export type QuotePortalMode = z.infer<typeof quotePortalModeSchema>;
+
+export const quotePortalStatusSchema = z.enum([
+  "draft",
+  "sent",
+  "viewed",
+  "signed",
+  "deposit_paid",
+  "expired",
+]);
+export type QuotePortalStatus = z.infer<typeof quotePortalStatusSchema>;
+
+export const quotePortalLineSchema = z.object({
+  label: z.string(),
+  amountLabel: z.string(),
+});
+
+export const quotePortalDetailSchema = z.object({
+  label: z.string(),
+  value: z.string(),
+});
+
+export const quotePortalCustomerSchema = quoteCustomerSchema.extend({
+  primary: z.boolean(),
+});
+
+export type QuotePortalCustomer = z.infer<typeof quotePortalCustomerSchema>;
+
+export const quotePortalRecipientSchema = z.object({
+  dealId: z.string(),
+  isPrimary: z.boolean(),
+  customer: customerSchema,
+});
+
+export type QuotePortalRecipient = z.infer<typeof quotePortalRecipientSchema>;
+
+export const quotePortalSchema = z.object({
+  id: z.string().min(1),
+  invoiceId: z.string().min(1),
+  revisionId: z.string().min(1),
+  dealName: z.string().min(1),
+  versionLabel: z.string().min(1),
+  dateLabel: z.string(),
+  imageUrl: z.string().min(1),
+  monthlyLabel: z.string(),
+  monthsLabel: z.string(),
+  lines: z.array(quotePortalLineSchema),
+  details: z.array(quotePortalDetailSchema),
+  totalLabel: z.string(),
+  zip: z.string(),
+  won: z.boolean(),
+  customers: z.array(quotePortalCustomerSchema),
+  recipients: z.array(quotePortalRecipientSchema),
+  dealIds: z.array(z.string()),
+  selections: quoteSelectionsSchema,
+  communication: quoteCommunicationSchema.nullable(),
+  status: quotePortalStatusSchema,
+});
+
+export type QuotePortal = z.infer<typeof quotePortalSchema>;
+
+export const payQuoteDepositSchema = z.object({
+  quoteId: z.string().trim().min(1),
+});

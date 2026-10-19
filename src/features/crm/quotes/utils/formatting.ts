@@ -1,4 +1,7 @@
 import { specValue } from "@/src/features/crm/common/utils/formatting";
+import type { DealStatus } from "@/src/features/crm/deals/types";
+import { dealAdvancement } from "@/src/features/crm/deals/utils/status";
+import type { QuotePortalMode, QuotePortalStatus } from "@/src/features/crm/quotes/types";
 
 const dateFormat = new Intl.DateTimeFormat("en-US", {
   month: "short",
@@ -32,6 +35,57 @@ export function formatQuotePrice(amount: number): string {
 
 export function formatQuoteMonthly(amount: number): string {
   return `(${monthlyFormat.format(amount)}/mo)`;
+}
+
+const cashFormat = new Intl.NumberFormat("en-US", {
+  style: "currency",
+  currency: "USD",
+  maximumFractionDigits: 0,
+});
+
+export function formatQuoteCash(amount: number): string {
+  return cashFormat.format(amount);
+}
+
+export function quoteVersionLabel(revisionNumber: number): string {
+  return `Version ${revisionNumber}`;
+}
+
+export function quotePortalMode(value: string | string[] | undefined): QuotePortalMode {
+  const mode = Array.isArray(value) ? value[0] : value;
+  return mode === "internal" ? "internal" : "external";
+}
+
+export function quoteMonthsLabel(months: number): string {
+  return `for ${months} mos`;
+}
+
+export function quotePortalStatus(
+  deals: { status: DealStatus }[],
+  revisionStatus: "draft" | "sent",
+): QuotePortalStatus {
+  const open = deals.filter((deal) => deal.status !== "deal_lost");
+  if (deals.length > 0 && open.length === 0) return "expired";
+  if (revisionStatus === "draft") return "draft";
+  const lead = open.reduce<(typeof open)[number] | undefined>((best, deal) => {
+    if (!best || dealAdvancement(deal.status) > dealAdvancement(best.status)) return deal;
+    return best;
+  }, undefined);
+  if (!lead) return revisionStatus === "sent" ? "sent" : "draft";
+  if (lead.status === "deal_won") return "deposit_paid";
+  if (lead.status === "partially_signed") return "signed";
+  if (lead.status === "quote_viewed") return "viewed";
+  if (lead.status === "quote_sent") return "sent";
+  return revisionStatus === "sent" ? "sent" : "draft";
+}
+
+export function quotePortalDealName(
+  deals: { name: string | null }[],
+  specs: { label: string; value: string }[],
+  invoiceId: string,
+): string {
+  const name = deals.find((deal) => deal.name?.trim())?.name?.trim();
+  return name || quoteDealLabel(specs) || invoiceId;
 }
 
 export function quoteDealLabel(specs: { label: string; value: string }[]): string {

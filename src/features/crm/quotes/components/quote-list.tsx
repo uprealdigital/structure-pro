@@ -2,10 +2,11 @@
 
 import { ChevronRight, Filter, Plus, Search } from "lucide-react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { contactInitials } from "@/src/features/crm/common/utils/formatting";
+import { QuoteCustomers } from "@/src/features/crm/quotes/components/quote-customers";
 import { copy } from "@/src/features/crm/quotes/locales/en";
-import type { QuoteCustomer, QuoteListItem, QuoteStatus } from "@/src/features/crm/quotes/types";
+import type { QuoteListItem, QuoteStatus } from "@/src/features/crm/quotes/types";
 import { formatQuoteDate, quotePageNumbers } from "@/src/features/crm/quotes/utils/formatting";
 
 const pageSize = 15;
@@ -22,49 +23,8 @@ const statusClass: Record<QuoteStatus, string> = {
   contract: "border-emerald-200/60 bg-emerald-50 text-emerald-800",
 };
 
-function CustomerCell({ customers }: { customers: QuoteCustomer[] }) {
-  if (customers.length === 0) {
-    return <span className="text-gray-400">—</span>;
-  }
-
-  if (customers.length === 1) {
-    const customer = customers[0];
-    return (
-      <div className="flex items-center gap-2.5">
-        <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-gray-200 bg-gray-100 text-[11px] font-medium text-gray-700">
-          {contactInitials(customer.name)}
-        </div>
-        <span className="font-medium text-gray-900">{customer.name}</span>
-      </div>
-    );
-  }
-
-  return (
-    <div className="flex items-center gap-2.5">
-      <div className="flex shrink-0 items-center -space-x-2">
-        {customers.map((customer, index) => (
-          <div
-            key={customer.id}
-            className={`flex h-7 w-7 items-center justify-center rounded-full border-2 border-white text-[10px] font-medium ring-1 ring-gray-200 ${
-              index === 0 ? "z-10 bg-gray-100 text-gray-700" : "bg-slate-100 text-slate-800"
-            }`}
-          >
-            {contactInitials(customer.name)}
-          </div>
-        ))}
-      </div>
-      <div className="min-w-0">
-        {customers.map((customer) => (
-          <div key={customer.id} className="leading-tight font-medium text-gray-900">
-            {customer.name}
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
 export function QuoteList({ quotes, loadError }: { quotes: QuoteListItem[]; loadError: boolean }) {
+  const router = useRouter();
   const [query, setQuery] = useState("");
   const [pageIndex, setPageIndex] = useState(0);
   const needle = query.trim().toLowerCase();
@@ -158,6 +118,7 @@ export function QuoteList({ quotes, loadError }: { quotes: QuoteListItem[]; load
                     rows.map((quote, index) => (
                       <tr
                         key={quote.id}
+                        onClick={() => router.push(`/quote/${quote.id}?mode=internal`)}
                         className={`group cursor-pointer transition-colors hover:bg-gray-50/80 ${
                           index < rows.length - 1 ? "border-b border-gray-100" : ""
                         }`}
@@ -171,7 +132,11 @@ export function QuoteList({ quotes, loadError }: { quotes: QuoteListItem[]; load
                           <div className="font-semibold text-gray-950 group-hover:text-black">{quote.dealLabel}</div>
                         </td>
                         <td className="px-4 py-3 text-xs">
-                          <CustomerCell customers={quote.customers} />
+                          {quote.customers.length === 0 ? (
+                            <span className="text-gray-400">—</span>
+                          ) : (
+                            <QuoteCustomers customers={quote.customers} />
+                          )}
                         </td>
                         <td className="px-4 py-3 text-xs">
                           <div className="font-mono font-semibold text-gray-950">{quote.priceLabel}</div>

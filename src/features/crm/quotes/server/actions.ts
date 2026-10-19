@@ -2,13 +2,18 @@
 
 import { revalidatePath } from "next/cache";
 import { quoteSelectionsSchema } from "@/src/features/cpq/types";
-import { updateQuote } from "@/src/features/crm/quotes/db/quote";
+import { readDealsByQuoteId, updateDeal } from "@/src/features/crm/deals/db/deal";
+import { readActiveRevisionId, updateQuote } from "@/src/features/crm/quotes/db/quote";
 import {
   createQuoteRevision,
   readQuoteRevision,
   updateQuoteRevisionCommunication,
 } from "@/src/features/crm/quotes/db/quote-revision";
-import { quoteCommunicationWriteSchema, quoteRevisionActivateSchema } from "@/src/features/crm/quotes/types";
+import {
+  payQuoteDepositSchema,
+  quoteCommunicationWriteSchema,
+  quoteRevisionActivateSchema,
+} from "@/src/features/crm/quotes/types";
 
 export async function saveQuoteSelections(input: {
   quoteId: string;
@@ -36,6 +41,7 @@ export async function saveQuoteSelections(input: {
     revalidatePath("/crm/conversations");
     revalidatePath("/crm/quotes");
     revalidatePath("/crm/deals");
+    revalidatePath(`/quote/${quoteId}`);
     return {
       success: true,
       data: {
@@ -88,6 +94,32 @@ export async function activateQuoteRevision(input: {
     return { success: true, data: { revisionId: revision.id } };
   } catch (error) {
     const message = error instanceof Error ? error.message : "Could not update the active revision";
+    return { error: message };
+  }
+}
+
+export async function payQuoteDeposit(
+  input: unknown,
+): Promise<{ success: true } | { error: string }> {
+  const parsed = payQuoteDepositSchema.safeParse(input);
+  if (!parsed.success) return { error: "A quote is required" };
+
+  try {
+    const revisionId = await readActiveRevisionId(parsed.data.quoteId);
+    if (!revisionId) return { error: "Quote was not found" };
+    const deals = await readDealsByQuoteId(parsed.data.quoteId);
+    if (deals.length === 0) return { error: "This quote is not attached to a deal" };
+    for (const deal of deals) {
+      if (deal.status === "deal_won") continue;
+      await updateDeal(deal.id, { status: "deal_won" });
+    }
+    revalidatePath("/crm/conversations");
+    revalidatePath("/crm/quotes");
+    revalidatePath("/crm/deals");
+    revalidatePath(`/quote/${parsed.data.quoteId}`);
+    return { success: true };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Could not record this deposit";
     return { error: message };
   }
 }

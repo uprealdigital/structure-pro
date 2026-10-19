@@ -633,6 +633,7 @@ export function ReviewSendModal({
   title,
   priceLabel,
   invoiceId,
+  quoteId,
   imageUrl,
   statusLabel,
   communication,
@@ -644,6 +645,7 @@ export function ReviewSendModal({
   title: string;
   priceLabel: string;
   invoiceId: string;
+  quoteId: string;
   imageUrl: string;
   statusLabel: string;
   communication: QuoteCommunication | null;
@@ -762,13 +764,15 @@ export function ReviewSendModal({
                 </div>
                 <span className="mt-1 block text-base leading-none font-semibold text-gray-900">{priceLabel}</span>
               </div>
-              <button
-                type="button"
+              <a
+                href={`/quote/${quoteId}?mode=internal`}
+                target="_blank"
+                rel="noopener noreferrer"
                 className="inline-flex shrink-0 cursor-pointer items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 shadow-xs transition-colors hover:bg-gray-50"
               >
                 <Eye className="h-3.5 w-3.5 text-gray-500" strokeWidth={1.8} aria-hidden="true" />
                 <span>{copy.seeQuoteDetails}</span>
-              </button>
+              </a>
             </div>
           </div>
 
