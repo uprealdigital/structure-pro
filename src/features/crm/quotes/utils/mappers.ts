@@ -1,4 +1,5 @@
 import {
+  quoteCommunicationSchema,
   quoteListItemSchema,
   quoteRevisionSchema,
   type QuoteCustomer,
@@ -19,17 +20,20 @@ export type QuoteRevisionRow = {
   revision_number: number;
   status: string;
   selections: unknown;
+  communication?: unknown;
   created_at?: string | null;
   updated_at?: string | null;
 };
 
 export function toQuoteRevision(row: QuoteRevisionRow): QuoteRevision | undefined {
+  const communication = quoteCommunicationSchema.safeParse(row.communication);
   const revision = quoteRevisionSchema.safeParse({
     id: row.id,
     quoteId: row.quote_id,
     revisionNumber: row.revision_number,
     status: row.status,
     selections: row.selections,
+    communication: communication.success ? communication.data : null,
     createdAt: row.created_at ?? "",
     updatedAt: row.updated_at ?? row.created_at ?? "",
   });

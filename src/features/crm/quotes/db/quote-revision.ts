@@ -1,8 +1,10 @@
 import { db } from "@/src/common/lib/supabase/supabase.service";
 import { throwIfError } from "@/src/common/utils/error-handling";
 import {
+  quoteCommunicationSchema,
   quoteRevisionPatchSchema,
   quoteRevisionWriteSchema,
+  type QuoteCommunication,
   type QuoteRevision,
 } from "@/src/features/crm/quotes/types";
 import { toQuoteRevision, type QuoteRevisionRow } from "@/src/features/crm/quotes/utils/mappers";
@@ -12,7 +14,7 @@ function crm() {
 }
 
 const revisionColumns =
-  "id, quote_id, revision_number, status, selections, created_at, updated_at";
+  "id, quote_id, revision_number, status, selections, communication, created_at, updated_at";
 
 export async function createQuoteRevision(input: {
   quoteId: string;
@@ -47,6 +49,15 @@ export async function createQuoteRevision(input: {
   const saved = data ? toQuoteRevision(data as QuoteRevisionRow) : undefined;
   if (!saved) throw new Error("Quote revision was not saved");
   return saved;
+}
+
+export async function readQuoteRevisionsByIds(ids: string[]): Promise<QuoteRevision[]> {
+  if (ids.length === 0) return [];
+  const { data, error } = await crm().from("quote_revisions").select(revisionColumns).in("id", ids);
+  throwIfError(error);
+  return ((data ?? []) as QuoteRevisionRow[])
+    .map(toQuoteRevision)
+    .filter((revision): revision is QuoteRevision => revision != null);
 }
 
 export async function readQuoteRevision(id: string): Promise<QuoteRevision | undefined> {
@@ -93,6 +104,22 @@ export async function updateQuoteRevision(
   const saved = data ? toQuoteRevision(data as QuoteRevisionRow) : undefined;
   if (!saved) throw new Error("Quote revision was not saved");
   return saved;
+}
+
+export async function updateQuoteRevisionCommunication(
+  id: string,
+  communication: QuoteCommunication,
+): Promise<void> {
+  const next = quoteCommunicationSchema.parse(communication);
+  const { error } = await crm()
+    .from("quote_revisions")
+    .update({
+      communication: next,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", id);
+
+  throwIfError(error);
 }
 
 export async function deleteQuoteRevision(id: string): Promise<void> {

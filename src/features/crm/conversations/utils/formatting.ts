@@ -118,6 +118,23 @@ export function reviewQuoteSubject(invoiceId: string, title: string): string {
   return `TimberCraft Quote #${invoiceId} • ${title}`;
 }
 
+export const reviewMessageToken = {
+  firstName: "{{firstName}}",
+  lastName: "{{lastName}}",
+  dealName: "{{dealName}}",
+  dealPrice: "{{dealPrice}}",
+} as const;
+
+export const reviewFirstNameToken = reviewMessageToken.firstName;
+
+export function reviewEmailBody(title: string, priceLabel: string): string {
+  return `Hi ${reviewFirstNameToken}, ${copy.reviewEmailLead} ${title} (${priceLabel}). ${copy.reviewEmailClose}`;
+}
+
+export function reviewSmsBody(operatorFirst: string, title: string, priceLabel: string): string {
+  return `Hi ${reviewFirstNameToken}! ${operatorFirst} ${copy.reviewSmsLead} ${title} ${copy.reviewSmsQuote} (${priceLabel}). ${copy.reviewSmsClose}`;
+}
+
 export function dealSummarySentence(input: {
   source: "quote" | "yard_preview";
   style: string;

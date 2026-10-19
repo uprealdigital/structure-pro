@@ -186,6 +186,7 @@ export function toConversationQuoteRevision(input: {
   createdAt: string;
   updatedAt: string;
   selections: QuoteSelections;
+  communication?: ConversationQuoteRevision["communication"];
 }): ConversationQuoteRevision | undefined {
   const summary = priceSummary(input.selections);
   const revision = conversationQuoteRevisionSchema.safeParse({
@@ -200,6 +201,7 @@ export function toConversationQuoteRevision(input: {
     lines: summary.lines,
     imageUrl: summary.imageUrl,
     selections: input.selections,
+    communication: input.communication ?? null,
   });
   return revision.success ? revision.data : undefined;
 }
@@ -231,6 +233,7 @@ export function conversationQuoteFromSelections(
     createdAt: saved.createdAt,
     updatedAt: saved.updatedAt,
     selections,
+    communication: null,
   });
   if (!revision) return undefined;
   const summary = priceSummary(selections);

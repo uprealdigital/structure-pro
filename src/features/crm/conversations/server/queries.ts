@@ -110,6 +110,7 @@ async function revisionsForQuote(
         createdAt: row.createdAt,
         updatedAt: row.updatedAt,
         selections: row.selections,
+        communication: row.communication,
       }),
     )
     .filter((revision): revision is ConversationQuoteRevision => revision != null);

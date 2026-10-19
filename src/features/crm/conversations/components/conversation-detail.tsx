@@ -28,7 +28,8 @@ import {
   conversationQuoteWithActiveRevision,
   conversationQuoteWithSentRevision,
 } from "@/src/features/crm/conversations/utils/mappers";
-import { activateQuoteRevision, saveQuoteSelections } from "@/src/features/crm/quotes/server/actions";
+import { activateQuoteRevision, saveQuoteCommunication, saveQuoteSelections } from "@/src/features/crm/quotes/server/actions";
+import type { QuoteCommunication } from "@/src/features/crm/quotes/types";
 import type { QuoteSelections } from "@/src/features/cpq/types";
 import { DealStatusBadge } from "@/src/features/crm/deals/components/deal-status-badge";
 import { dealNameMaxLength, type DealStatus } from "@/src/features/crm/deals/types";
@@ -227,6 +228,7 @@ export function ConversationDetail({
   const [sending, setSending] = useState(false);
   const [sendError, setSendError] = useState("");
   const [reviewOpen, setReviewOpen] = useState(false);
+  const [communicationPatches, setCommunicationPatches] = useState<Record<string, QuoteCommunication>>({});
   const [editing, setEditing] = useState(false);
   const composerRef = useRef<HTMLTextAreaElement>(null);
   const headerRef = useRef<HTMLElement>(null);
@@ -550,6 +552,13 @@ export function ConversationDetail({
     setQuotePatches((current) => ({ ...current, [next.id]: next }));
     setSelectedRevisionId(result.data.id);
     setEditing(false);
+  }
+
+  async function saveViewedCommunication(communication: QuoteCommunication) {
+    if (!viewed) throw new Error(copy.saveQuoteError);
+    const result = await saveQuoteCommunication({ revisionId: viewed.id, communication });
+    if ("error" in result) throw new Error(result.error);
+    setCommunicationPatches((current) => ({ ...current, [viewed.id]: communication }));
   }
 
   async function sendViewedQuote() {
@@ -892,12 +901,14 @@ export function ConversationDetail({
       </div>
       {reviewOpen && focused.quote && viewed ? (
         <ReviewSendModal
-          customerName={workspace.customer.fullName}
+          participants={participants}
           title={title || copy.quote}
           priceLabel={viewed.totalLabel}
           invoiceId={focused.quote.invoiceId}
           imageUrl={viewed.imageUrl}
           statusLabel={revisionStatusLabel(viewed)}
+          communication={communicationPatches[viewed.id] ?? viewed.communication}
+          onSave={saveViewedCommunication}
           onSend={sendViewedQuote}
           onClose={() => setReviewOpen(false)}
         />

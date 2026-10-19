@@ -2,7 +2,7 @@ import { db } from "@/src/common/lib/supabase/supabase.service";
 import { throwIfError } from "@/src/common/utils/error-handling";
 import { quoteSelectionsSchema, type ListedQuote, type QuoteRecord } from "@/src/features/cpq/types";
 import { toListedQuote, type QuoteListRow } from "@/src/features/cpq/utils/mappers";
-import { createQuoteRevision } from "@/src/features/crm/quotes/db/quote-revision";
+import { createQuoteRevision, readQuoteRevisionsByIds } from "@/src/features/crm/quotes/db/quote-revision";
 
 function crm() {
   return db("crm");
@@ -17,7 +17,6 @@ export async function createQuote(input: {
     .from("quotes")
     .insert({
       invoice_id: input.invoiceId,
-      selections,
     })
     .select("id")
     .single();
@@ -47,37 +46,81 @@ function quoteRecord(row: {
   return { id: row.id, invoiceId: row.invoice_id, selections: selections.data };
 }
 
+type QuoteRow = {
+  id?: unknown;
+  invoice_id?: unknown;
+  active_revision_id?: unknown;
+  created_at?: string | null;
+};
+
+async function selectionsByRevision(rows: QuoteRow[]) {
+  const ids = rows
+    .map((row) => (typeof row.active_revision_id === "string" ? row.active_revision_id : ""))
+    .filter((id) => id.length > 0);
+  const revisions = await readQuoteRevisionsByIds(ids);
+  return new Map(revisions.map((revision) => [revision.id, revision.selections]));
+}
+
+function quoteFromRow(
+  row: QuoteRow,
+  selectionsById: Map<string, QuoteRecord["selections"]>,
+): QuoteRecord | undefined {
+  const selections =
+    typeof row.active_revision_id === "string" ? selectionsById.get(row.active_revision_id) : undefined;
+  if (!selections) return undefined;
+  return quoteRecord({ id: row.id, invoice_id: row.invoice_id, selections });
+}
+
 export async function readQuote(id: string): Promise<QuoteRecord | undefined> {
   const { data, error } = await crm()
     .from("quotes")
-    .select("id, invoice_id, selections")
+    .select("id, invoice_id, active_revision_id")
     .eq("id", id)
     .maybeSingle();
 
   throwIfError(error);
   if (!data) return undefined;
-  return quoteRecord(data);
+  const selectionsById = await selectionsByRevision([data]);
+  return quoteFromRow(data, selectionsById);
 }
 
 export async function readQuotesByIds(ids: string[]): Promise<QuoteRecord[]> {
   if (ids.length === 0) return [];
-  const { data, error } = await crm().from("quotes").select("id, invoice_id, selections").in("id", ids);
+  const { data, error } = await crm()
+    .from("quotes")
+    .select("id, invoice_id, active_revision_id")
+    .in("id", ids);
   throwIfError(error);
-  return (data ?? [])
-    .map((row) => quoteRecord(row))
+  const rows = (data ?? []) as QuoteRow[];
+  const selectionsById = await selectionsByRevision(rows);
+  return rows
+    .map((row) => quoteFromRow(row, selectionsById))
     .filter((quote): quote is QuoteRecord => quote != null);
 }
 
 export async function readQuotes(): Promise<ListedQuote[]> {
   const { data, error } = await crm()
     .from("quotes")
-    .select("id, invoice_id, selections, created_at")
+    .select("id, invoice_id, active_revision_id, created_at")
     .order("created_at", { ascending: false });
 
   throwIfError(error);
-  return ((data ?? []) as QuoteListRow[])
-    .map(toListedQuote)
-    .filter((quote): quote is ListedQuote => quote != null);
+  const rows = (data ?? []) as QuoteRow[];
+  const selectionsById = await selectionsByRevision(rows);
+  return rows
+    .flatMap((row) => {
+      if (typeof row.id !== "string" || typeof row.invoice_id !== "string") return [];
+      const selections =
+        typeof row.active_revision_id === "string" ? selectionsById.get(row.active_revision_id) : undefined;
+      if (!selections) return [];
+      const listed = toListedQuote({
+        id: row.id,
+        invoice_id: row.invoice_id,
+        selections,
+        created_at: row.created_at,
+      });
+      return listed ? [listed] : [];
+    });
 }
 
 export async function readActiveRevisionId(quoteId: string): Promise<string | undefined> {
@@ -93,11 +136,10 @@ export async function readActiveRevisionId(quoteId: string): Promise<string | un
 
 export async function updateQuote(
   id: string,
-  patch: { invoiceId?: string; selections?: unknown; activeRevisionId?: string },
+  patch: { invoiceId?: string; activeRevisionId?: string },
 ): Promise<void> {
   const row: Record<string, unknown> = { updated_at: new Date().toISOString() };
   if (patch.invoiceId) row.invoice_id = patch.invoiceId;
-  if (patch.selections) row.selections = quoteSelectionsSchema.parse(patch.selections);
   if (patch.activeRevisionId) row.active_revision_id = patch.activeRevisionId;
   const { error } = await crm().from("quotes").update(row).eq("id", id);
   throwIfError(error);

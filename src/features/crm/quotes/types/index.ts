@@ -28,6 +28,16 @@ export type QuoteListItem = z.infer<typeof quoteListItemSchema>;
 export const quoteRevisionStatusSchema = z.enum(["draft", "sent"]);
 export type QuoteRevisionStatus = z.infer<typeof quoteRevisionStatusSchema>;
 
+export const quoteCommunicationSchema = z.object({
+  subject: z.string(),
+  emailBody: z.string(),
+  smsBody: z.string(),
+  emailRecipientIds: z.array(z.string()),
+  smsRecipientIds: z.array(z.string()),
+});
+
+export type QuoteCommunication = z.infer<typeof quoteCommunicationSchema>;
+
 export const quoteRevisionWriteSchema = z.object({
   quoteId: z.string().trim().min(1),
   selections: quoteSelectionsSchema,
@@ -36,6 +46,11 @@ export const quoteRevisionWriteSchema = z.object({
 
 export const quoteRevisionPatchSchema = z.object({
   status: quoteRevisionStatusSchema,
+});
+
+export const quoteCommunicationWriteSchema = z.object({
+  revisionId: z.string().trim().min(1),
+  communication: quoteCommunicationSchema,
 });
 
 export const quoteRevisionActivateSchema = z.object({
@@ -49,6 +64,7 @@ export const quoteRevisionSchema = z.object({
   revisionNumber: z.number().int().positive(),
   status: quoteRevisionStatusSchema,
   selections: quoteSelectionsSchema,
+  communication: quoteCommunicationSchema.nullable(),
   createdAt: z.string(),
   updatedAt: z.string(),
 });

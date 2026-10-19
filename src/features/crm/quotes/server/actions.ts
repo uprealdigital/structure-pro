@@ -3,8 +3,12 @@
 import { revalidatePath } from "next/cache";
 import { quoteSelectionsSchema } from "@/src/features/cpq/types";
 import { updateQuote } from "@/src/features/crm/quotes/db/quote";
-import { createQuoteRevision, readQuoteRevision } from "@/src/features/crm/quotes/db/quote-revision";
-import { quoteRevisionActivateSchema } from "@/src/features/crm/quotes/types";
+import {
+  createQuoteRevision,
+  readQuoteRevision,
+  updateQuoteRevisionCommunication,
+} from "@/src/features/crm/quotes/db/quote-revision";
+import { quoteCommunicationWriteSchema, quoteRevisionActivateSchema } from "@/src/features/crm/quotes/types";
 
 export async function saveQuoteSelections(input: {
   quoteId: string;
@@ -28,10 +32,7 @@ export async function saveQuoteSelections(input: {
       selections: selections.data,
       status: "draft",
     });
-    await updateQuote(quoteId, {
-      selections: selections.data,
-      activeRevisionId: revision.id,
-    });
+    await updateQuote(quoteId, { activeRevisionId: revision.id });
     revalidatePath("/crm/conversations");
     revalidatePath("/crm/quotes");
     revalidatePath("/crm/deals");
@@ -50,6 +51,24 @@ export async function saveQuoteSelections(input: {
   }
 }
 
+export async function saveQuoteCommunication(input: {
+  revisionId: string;
+  communication: unknown;
+}): Promise<{ success: true } | { error: string }> {
+  const parsed = quoteCommunicationWriteSchema.safeParse(input);
+  if (!parsed.success) return { error: "A revision and message are required" };
+
+  try {
+    const revision = await readQuoteRevision(parsed.data.revisionId);
+    if (!revision) return { error: "Quote revision was not found" };
+    await updateQuoteRevisionCommunication(parsed.data.revisionId, parsed.data.communication);
+    return { success: true };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Could not save the message";
+    return { error: message };
+  }
+}
+
 export async function activateQuoteRevision(input: {
   quoteId: string;
   revisionId: string;
@@ -62,10 +81,7 @@ export async function activateQuoteRevision(input: {
     if (!revision || revision.quoteId !== parsed.data.quoteId) {
       return { error: "Quote revision was not found" };
     }
-    await updateQuote(parsed.data.quoteId, {
-      selections: revision.selections,
-      activeRevisionId: revision.id,
-    });
+    await updateQuote(parsed.data.quoteId, { activeRevisionId: revision.id });
     revalidatePath("/crm/conversations");
     revalidatePath("/crm/quotes");
     revalidatePath("/crm/deals");
