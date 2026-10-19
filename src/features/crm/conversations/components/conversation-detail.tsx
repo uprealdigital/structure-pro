@@ -13,7 +13,7 @@ import { ReviewSendModal } from "@/src/features/crm/conversations/components/rev
 import { useConversationActivities } from "@/src/features/crm/conversations/hooks/use-conversation-activities";
 import { useVisibleActivityReads } from "@/src/features/crm/conversations/hooks/use-visible-activity-reads";
 import { copy } from "@/src/features/crm/conversations/locales/en";
-import { sendConversationQuote, sendManualActivity, recordSystemActivity, deleteConversationActivity } from "@/src/features/crm/conversations/server/actions";
+import { sendQuoteMessages, sendManualActivity, recordSystemActivity, deleteConversationActivity } from "@/src/features/crm/conversations/server/actions";
 import type {
   Activity,
   ComposerChannel,
@@ -561,13 +561,16 @@ export function ConversationDetail({
     setCommunicationPatches((current) => ({ ...current, [viewed.id]: communication }));
   }
 
-  async function sendViewedQuote() {
+  async function sendViewedQuote(communication: QuoteCommunication) {
     const quote = focused.quote;
     if (!quote || !viewed) throw new Error(copy.sendQuoteError);
-    const result = await sendConversationQuote({
+    const result = await sendQuoteMessages({
       quoteId: quote.id,
       revisionId: viewed.id,
-      dealId: focused.deal.id,
+      dealIds: [focused.deal.id],
+      dealName: focusedOption?.title || title || copy.quote,
+      dealPrice: viewed.totalLabel,
+      communication,
     });
     if ("error" in result) throw new Error(result.error);
     const next = conversationQuoteWithSentRevision(quote, result.data.revisionId, result.data.updatedAt);

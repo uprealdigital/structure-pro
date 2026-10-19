@@ -67,7 +67,13 @@ export function QuotePortal({
   const internal = mode === "internal";
   const { won, pending, error, pay } = usePayDeposit(quote.id, quote.won);
   const { save } = useSaveQuoteRevision(quote.id);
-  const { send } = useSendQuote(quote.id, quote.revisionId, quote.dealIds);
+  const { send } = useSendQuote({
+    quoteId: quote.id,
+    revisionId: quote.revisionId,
+    dealIds: quote.dealIds,
+    dealName: quote.dealName,
+    dealPrice: quote.totalLabel,
+  });
   const [editing, setEditing] = useState(false);
   const [reviewOpen, setReviewOpen] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
@@ -231,7 +237,12 @@ export function QuotePortal({
                 {portalCopy.download}
               </button>
               {internal ? (
-                <Link href={customerQuotePath(quote.id)} className={actionClass}>
+                <Link
+                  href={`/quote/${quote.id}?mode=external`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className={actionClass}
+                >
                   <Eye className="h-4 w-4" aria-hidden="true" />
                   {portalCopy.viewAsCustomer}
                 </Link>
@@ -257,7 +268,7 @@ export function QuotePortal({
       ) : (
         <div className="min-h-0 flex-1 overflow-y-auto">
           <section className="mx-auto grid w-full max-w-7xl grid-cols-1 items-start gap-8 px-4 py-6 sm:px-6 lg:grid-cols-12 lg:px-10">
-            <div className="flex min-h-[460px] items-center justify-center rounded-xl bg-[#f3f3f5] p-6 sm:p-8 lg:col-span-7 lg:min-h-[520px]">
+            <div className="flex min-h-[460px] items-center justify-center lg:col-span-7 lg:min-h-[520px]">
               <img
                 src={quote.imageUrl}
                 alt={quote.dealName}
@@ -284,7 +295,7 @@ export function QuotePortal({
                   {quote.lines.map((line) => (
                     <div
                       key={line.label}
-                      className="flex items-center justify-between gap-4 border-b border-[#f3f3f5] py-1.5 text-xs"
+                      className="flex items-center justify-between gap-4 py-1.5 text-xs"
                     >
                       <span className="font-medium text-[#1a1c1d]">{line.label}</span>
                       <span className="font-mono font-semibold text-[#1a1c1d]">{line.amountLabel}</span>

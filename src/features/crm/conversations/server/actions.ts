@@ -1,7 +1,11 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { sendMail } from "@/src/common/utils/mail";
 import { demoChatId, sendTelegramMessage } from "@/src/common/lib/telegram/telegram.service";
+import { sendSms } from "@/src/common/lib/twilio/twilio.service";
+import { outboundTextTransport } from "@/src/features/crm/conversations/config/outbound-text";
+import { copy } from "@/src/features/crm/conversations/locales/en";
 import {
   conversationUnreadCount,
   createActivities,
@@ -11,7 +15,13 @@ import {
   readActivities,
   updateActivitiesRead,
 } from "@/src/features/crm/conversations/db/activity";
-import { createConversation, deleteConversation, readConversationById, updateConversation } from "@/src/features/crm/conversations/db/conversation";
+import {
+  createConversation,
+  deleteConversation,
+  readConversationById,
+  readConversationSummaryByCustomer,
+  updateConversation,
+} from "@/src/features/crm/conversations/db/conversation";
 import {
   getConversation,
   getConversationInboxItem,
@@ -25,6 +35,7 @@ import {
   composerChannelSchema,
   conversationIdSchema,
   conversationReadUpdateSchema,
+  sendQuoteMessagesSchema,
   visibleActivityReadSchema,
   customerDealsRequestSchema,
   type Activity,
@@ -37,6 +48,12 @@ import { readCustomer, updateCustomer } from "@/src/features/crm/common/db/custo
 import { readDealCustomersForCustomer } from "@/src/features/crm/common/db/deal-customer";
 import { readDeal, updateDeal } from "@/src/features/crm/deals/db/deal";
 import { systemEventBody } from "@/src/features/crm/conversations/utils/formatting";
+import {
+  emailHtml,
+  fillReviewMessage,
+  reviewMessageValues,
+} from "@/src/features/crm/conversations/utils/review-message";
+import type { Customer } from "@/src/features/crm/common/types";
 import { dealIdSchema, dealNameSchema, type DealStatus } from "@/src/features/crm/deals/types";
 import { readQuoteRevision, updateQuoteRevision } from "@/src/features/crm/quotes/db/quote-revision";
 
@@ -230,6 +247,125 @@ export async function sendConversationQuote(input: {
     };
   } catch (error) {
     const message = error instanceof Error ? error.message : "Could not send quote";
+    return { error: message };
+  }
+}
+
+function uniqueIds(ids: string[]): string[] {
+  return ids.filter((id, index) => id.trim() && ids.indexOf(id) === index);
+}
+
+async function conversationForCustomer(customer: Customer): Promise<string> {
+  const existing = await readConversationSummaryByCustomer(customer.id);
+  if (existing) return existing.id;
+  const created = await createConversation({
+    lookupKey: customer.phone.trim() || customer.id,
+    customerId: customer.id,
+    contractSent: false,
+    activities: [],
+  });
+  return created.id;
+}
+
+async function recordOutbound(conversationId: string, channel: "email" | "sms", text: string) {
+  const sentAt = new Date().toISOString();
+  await createActivities(conversationId, [
+    {
+      role: "model",
+      channel,
+      text,
+      generatedBy: "manual",
+      createdAt: sentAt,
+      readAt: sentAt,
+    },
+  ]);
+}
+
+async function deliverText(body: string, phone: string) {
+  if (outboundTextTransport === "telegram") {
+    await sendTelegramMessage(demoChatId(), body);
+    return;
+  }
+  await sendSms(phone, body);
+}
+
+export async function sendQuoteMessages(
+  input: unknown,
+): Promise<
+  | { success: true; data: { revisionId: string; updatedAt: string; dealStatus: ConversationWorkspace["deal"]["status"] } }
+  | { error: string }
+> {
+  const parsed = sendQuoteMessagesSchema.safeParse(input);
+  if (!parsed.success) return { error: "A quote, deal, and message are required" };
+
+  const { quoteId, revisionId, dealName, dealPrice, communication } = parsed.data;
+  const emailIds = uniqueIds(communication.emailRecipientIds);
+  const textIds = uniqueIds(communication.smsRecipientIds);
+  if (emailIds.length === 0 && textIds.length === 0) return { error: copy.noRecipients };
+  if (emailIds.length > 0 && !communication.subject.trim() && !communication.emailBody.trim()) {
+    return { error: copy.emptyEmail };
+  }
+  if (textIds.length > 0 && !communication.smsBody.trim()) return { error: copy.emptyText };
+
+  try {
+    const ids = uniqueIds([...emailIds, ...textIds]);
+    const customers = await Promise.all(ids.map((id) => readCustomer(id)));
+    const byId = new Map<string, Customer>();
+    ids.forEach((id, index) => {
+      const customer = customers[index];
+      if (customer) byId.set(id, customer);
+    });
+
+    const emailRecipients = emailIds.map((id) => byId.get(id));
+    const textRecipients = textIds.map((id) => byId.get(id));
+    if (emailRecipients.some((customer) => !customer) || textRecipients.some((customer) => !customer)) {
+      return { error: copy.missingCustomer };
+    }
+    for (const customer of emailRecipients) {
+      if (!customer?.email.trim()) return { error: copy.missingEmail(customer?.fullName || "A recipient") };
+    }
+    if (outboundTextTransport === "sms") {
+      for (const customer of textRecipients) {
+        if (!customer?.phone.trim()) return { error: copy.missingPhone(customer?.fullName || "A recipient") };
+      }
+    }
+
+    for (const customer of emailRecipients) {
+      if (!customer) continue;
+      const values = reviewMessageValues(customer.fullName, dealName, dealPrice);
+      const subject = fillReviewMessage(communication.subject, values).trim();
+      const body = fillReviewMessage(communication.emailBody, values).trim();
+      await sendMail({
+        to: customer.email.trim(),
+        subject,
+        text: body,
+        html: emailHtml(body),
+      });
+      const conversationId = await conversationForCustomer(customer);
+      const text = subject ? `${subject}\n\n${body}` : body;
+      await recordOutbound(conversationId, "email", text);
+    }
+
+    for (const customer of textRecipients) {
+      if (!customer) continue;
+      const values = reviewMessageValues(customer.fullName, dealName, dealPrice);
+      const body = fillReviewMessage(communication.smsBody, values).trim();
+      await deliverText(body, customer.phone.trim());
+      const conversationId = await conversationForCustomer(customer);
+      await recordOutbound(conversationId, "sms", body);
+    }
+
+    let latest: { revisionId: string; updatedAt: string; dealStatus: ConversationWorkspace["deal"]["status"] } | undefined;
+    for (const dealId of parsed.data.dealIds) {
+      const sent = await sendConversationQuote({ quoteId, revisionId, dealId });
+      if ("error" in sent) return sent;
+      latest = sent.data;
+    }
+    if (!latest) return { error: copy.sendQuoteError };
+    revalidatePath("/crm/conversations");
+    return { success: true, data: latest };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : copy.sendQuoteError;
     return { error: message };
   }
 }

@@ -271,3 +271,14 @@ export const conversationWorkspaceSchema = z.object({
 });
 
 export type ConversationWorkspace = z.infer<typeof conversationWorkspaceSchema>;
+
+export const sendQuoteMessagesSchema = z.object({
+  quoteId: z.string().trim().min(1),
+  revisionId: z.string().trim().min(1),
+  dealIds: z.array(z.string().trim().min(1)).min(1),
+  dealName: z.string(),
+  dealPrice: z.string(),
+  communication: quoteCommunicationSchema,
+});
+
+export type SendQuoteMessages = z.infer<typeof sendQuoteMessagesSchema>;

@@ -650,7 +650,7 @@ export function ReviewSendModal({
   statusLabel: string;
   communication: QuoteCommunication | null;
   onSave: (communication: QuoteCommunication) => Promise<void>;
-  onSend: () => Promise<void>;
+  onSend: (communication: QuoteCommunication) => Promise<void>;
   onClose: () => void;
 }) {
   const people = dealRecipients(participants);
@@ -710,7 +710,7 @@ export function ReviewSendModal({
       return;
     }
     try {
-      await onSend();
+      await onSend(draftRef.current);
       onClose();
     } catch (error) {
       setSendError(error instanceof Error ? error.message : copy.sendQuoteError);

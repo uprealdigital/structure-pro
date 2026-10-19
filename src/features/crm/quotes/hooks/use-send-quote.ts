@@ -1,17 +1,21 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { sendConversationQuote } from "@/src/features/crm/conversations/server/actions";
+import { sendQuoteMessages } from "@/src/features/crm/conversations/server/actions";
+import type { QuoteCommunication } from "@/src/features/crm/quotes/types";
 
-export function useSendQuote(quoteId: string, revisionId: string, dealIds: string[]) {
+export function useSendQuote(input: {
+  quoteId: string;
+  revisionId: string;
+  dealIds: string[];
+  dealName: string;
+  dealPrice: string;
+}) {
   const router = useRouter();
 
-  async function send() {
-    if (dealIds.length === 0) throw new Error("This quote is not attached to a deal");
-    for (const dealId of dealIds) {
-      const result = await sendConversationQuote({ quoteId, revisionId, dealId });
-      if ("error" in result) throw new Error(result.error);
-    }
+  async function send(communication: QuoteCommunication) {
+    const result = await sendQuoteMessages({ ...input, communication });
+    if ("error" in result) throw new Error(result.error);
     router.refresh();
   }
 
