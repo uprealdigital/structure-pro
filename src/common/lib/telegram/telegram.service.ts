@@ -40,6 +40,25 @@ async function telegramCall<T>(
   return payload.result as T;
 }
 
+export async function sendTelegramFile(
+  chatId: string,
+  file: { name: string; type: string; bytes: Uint8Array },
+): Promise<void> {
+  const image = file.type.startsWith("image/");
+  const method = image ? "sendPhoto" : "sendDocument";
+  const field = image ? "photo" : "document";
+  const copy = new ArrayBuffer(file.bytes.byteLength);
+  new Uint8Array(copy).set(file.bytes);
+  const body = new FormData();
+  body.set("chat_id", chatId);
+  body.set(field, new Blob([copy], { type: file.type || "application/octet-stream" }), file.name);
+  const response = await fetch(apiUrl(method), { method: "POST", body });
+  const payload = (await response.json()) as TelegramResult<unknown>;
+  if (!payload.ok) {
+    throw new Error(payload.description || `Telegram ${method} failed`);
+  }
+}
+
 export async function sendTelegramMessage(
   chatId: string,
   text: string,

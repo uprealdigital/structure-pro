@@ -3,6 +3,7 @@
 import { ArrowUpRight, Paperclip, Pencil, Phone, Plus, X } from "lucide-react";
 import { useEffect, useLayoutEffect, useRef, useState, type FormEvent } from "react";
 import { BuildingConfigurator } from "@/src/features/cpq/components/building-configurator";
+import { ComposerAttachments, type ComposerAttachment } from "@/src/features/crm/conversations/components/composer-attachments";
 import { activityChannelLabel, ConversationThread } from "@/src/features/crm/conversations/components/conversation-thread";
 import { CustomerMenu } from "@/src/features/crm/conversations/components/customer-menu";
 import { DealHeading } from "@/src/features/crm/conversations/components/deal-menu";
@@ -13,7 +14,7 @@ import { ReviewSendModal } from "@/src/features/crm/conversations/components/rev
 import { useConversationActivities } from "@/src/features/crm/conversations/hooks/use-conversation-activities";
 import { useVisibleActivityReads } from "@/src/features/crm/conversations/hooks/use-visible-activity-reads";
 import { copy } from "@/src/features/crm/conversations/locales/en";
-import { sendQuoteMessages, sendManualActivity, recordSystemActivity, deleteConversationActivity } from "@/src/features/crm/conversations/server/actions";
+import { sendQuoteMessages, sendManualActivity, sendStoredAttachment, discardStoredAttachment, recordSystemActivity, deleteConversationActivity, markDealViewed } from "@/src/features/crm/conversations/server/actions";
 import type {
   Activity,
   ComposerChannel,
@@ -22,7 +23,8 @@ import type {
   ConversationQuoteRevision,
   ConversationWorkspace,
 } from "@/src/features/crm/conversations/types";
-import { productTitle, revisionVersionLabel } from "@/src/features/crm/conversations/utils/formatting";
+import { uploadComposerAttachment } from "@/src/features/crm/conversations/utils/upload-attachment";
+import { productTitle, revisionVersionLabel, systemEventText } from "@/src/features/crm/conversations/utils/formatting";
 import {
   conversationQuoteFromSelections,
   conversationQuoteWithActiveRevision,
@@ -149,6 +151,7 @@ export function ConversationDetail({
   onReopen,
   onRename,
   onActivateDeal,
+  onFocusDeal,
   onSystemActivity,
   onRemoveActivity,
   onSelectCustomer,
@@ -164,6 +167,7 @@ export function ConversationDetail({
     dealId: string,
   ) => Promise<{ success: true; data: { status: DealStatus } } | { error: string }>;
   onActivateDeal: (dealId: string, status: DealStatus) => void;
+  onFocusDeal: (dealId: string) => Promise<ConversationWorkspace | undefined>;
   onSystemActivity: (conversationId: string, activity: Activity) => void;
   onRemoveActivity: (conversationId: string, position: number) => void;
   onSelectCustomer: (participant: ConversationParticipant, dealId: string) => void;
@@ -177,6 +181,8 @@ export function ConversationDetail({
   const [quotePatches, setQuotePatches] = useState<Record<string, ConversationQuote>>({});
   const [dealStatusPatches, setDealStatusPatches] = useState<Record<string, DealStatus>>({});
   const [dealNamePatches, setDealNamePatches] = useState<Record<string, string>>({});
+  const [seenDealIds, setSeenDealIds] = useState<string[]>([]);
+  const requestedNewDeals = useRef(new Set<string>());
   const [notice, setNotice] = useState<{ id: number; message: string; pending: boolean } | null>(null);
   const noticeRecord = useRef<NoticeRecord | null>(null);
   const publishActivityRef = useRef<(activity: Activity) => void>(() => {});
@@ -185,8 +191,10 @@ export function ConversationDetail({
   const deals = workspace.deals.map((option) => {
     const status = dealStatusPatches[option.id];
     const renamed = dealNamePatches[option.id];
+    const seen = seenDealIds.includes(option.id);
     const deal = {
       ...option.deal,
+      viewedAt: seen ? option.deal.viewedAt ?? new Date().toISOString() : option.deal.viewedAt,
       ...(status
         ? {
             previousStatus: option.deal.status === status ? option.deal.previousStatus : option.deal.status,
@@ -197,7 +205,7 @@ export function ConversationDetail({
     };
     const patch = option.quote ? quotePatches[option.quote.id] : undefined;
     const customName = deal.name?.trim();
-    if (!patch && !status && !renamed) return option;
+    if (!patch && !status && !renamed && !seen) return option;
     return {
       ...option,
       title: customName || (patch ? productTitle(patch.specs) || option.title : option.title),
@@ -218,11 +226,28 @@ export function ConversationDetail({
     ? { ...workspace, deal: focusedOption.deal, quote: focusedOption.quote }
     : workspace;
   const [draft, setDraft] = useState("");
+  const [attachments, setAttachments] = useState<ComposerAttachment[]>([]);
+  const attachmentsRef = useRef(attachments);
+  attachmentsRef.current = attachments;
+  const uploads = useRef(new Map<string, { abort: () => void }>());
+  const droppedAttachments = useRef(new Set<string>());
+  const fileInput = useRef<HTMLInputElement>(null);
   const [channel, setChannel] = useState<ComposerChannel>("telegram");
   const [channelOpen, setChannelOpen] = useState(false);
   const threadId = workspace.id;
   const threadActivities = workspace.activities;
   const { activities, setActivities } = useConversationActivities(threadId, threadActivities, incoming);
+  useEffect(() => {
+    for (const activity of activities) {
+      if (activity.channel !== "system") continue;
+      const event = systemEventText(activity.text);
+      if (event.kind !== "created" || !event.dealId || deals.some((deal) => deal.id === event.dealId)) continue;
+      if (requestedNewDeals.current.has(event.dealId)) continue;
+      requestedNewDeals.current.add(event.dealId);
+      void onFocusDeal(focusedDealId);
+      return;
+    }
+  }, [activities, deals, focusedDealId, onFocusDeal]);
   const activitiesRef = useRef(activities);
   activitiesRef.current = activities;
   const [sending, setSending] = useState(false);
@@ -479,14 +504,19 @@ export function ConversationDetail({
     const previous = deals.find((deal) => deal.id === focusedDealId);
     const option = focusDeal(dealId);
     if (!option || !previous || option.id === previous.id) return;
+    setSeenDealIds((current) => (current.includes(option.id) ? current : [...current, option.id]));
     const previousId = previous.id;
     showNotice(
       copy.activeDealSwitchedToast(option.title),
       async () => {
+        setSeenDealIds((current) => current.filter((id) => id !== option.id));
         focusDeal(previousId);
         return true;
       },
-      () => recordNamedActivity("deal", option.title),
+      async () => {
+        await markDealViewed(option.id);
+        return recordNamedActivity("deal", option.title);
+      },
     );
   }
 
@@ -590,22 +620,115 @@ export function ConversationDetail({
     node.style.height = `${node.scrollHeight}px`;
   }, [draft]);
 
+  useEffect(() => {
+    const pendingUploads = uploads.current;
+    const dropped = droppedAttachments.current;
+    return () => {
+      for (const item of attachmentsRef.current) {
+        dropped.add(item.id);
+        if (item.previewUrl) URL.revokeObjectURL(item.previewUrl);
+        pendingUploads.get(item.id)?.abort();
+        void discardStoredAttachment(item.id);
+      }
+    };
+  }, []);
+
+  function appendActivity(activity: Activity) {
+    setActivities((current) =>
+      current.some((item) => item.position === activity.position) ? current : [...current, activity],
+    );
+  }
+
+  function addAttachments(list: FileList | null) {
+    const files = Array.from(list ?? []);
+    if (files.length === 0) return;
+    const next = files.map((file) => {
+      const id = crypto.randomUUID();
+      const previewUrl = file.type.startsWith("image/") ? URL.createObjectURL(file) : undefined;
+      return { id, file, previewUrl, phase: "uploading" as const, progress: 0 };
+    });
+    setAttachments((current) => [...current, ...next]);
+    for (const item of next) {
+      const upload = uploadComposerAttachment(item.id, item.file, (progress) => {
+        setAttachments((current) =>
+          current.map((row) => (row.id === item.id && row.phase === "uploading" ? { ...row, progress } : row)),
+        );
+      });
+      uploads.current.set(item.id, upload);
+      void upload.done.then((result) => {
+        uploads.current.delete(item.id);
+        if (droppedAttachments.current.has(item.id)) {
+          void discardStoredAttachment(item.id);
+          return;
+        }
+        if ("error" in result) {
+          setAttachments((current) =>
+            current.map((row) => (row.id === item.id ? { ...row, phase: "failed", progress: 0 } : row)),
+          );
+          setSendError(result.error);
+          return;
+        }
+        setAttachments((current) =>
+          current.map((row) => (row.id === item.id && row.phase === "uploading" ? { ...row, progress: 100 } : row)),
+        );
+      });
+    }
+  }
+
+  function showUploadFinished(id: string) {
+    setAttachments((current) =>
+      current.map((row) => (row.id === id && row.phase === "uploading" ? { ...row, phase: "ready", progress: 100 } : row)),
+    );
+  }
+
+  function removeAttachment(id: string) {
+    droppedAttachments.current.add(id);
+    uploads.current.get(id)?.abort();
+    uploads.current.delete(id);
+    void discardStoredAttachment(id);
+    setAttachments((current) => {
+      const item = current.find((row) => row.id === id);
+      if (item?.previewUrl) URL.revokeObjectURL(item.previewUrl);
+      return current.filter((row) => row.id !== id);
+    });
+  }
+
   async function submitMessage(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const text = draft.trim();
-    if (!text || sending || !threadId) return;
+    const pending = attachmentsRef.current.filter((item) => item.phase === "ready");
+    const uploading = attachmentsRef.current.some((item) => item.phase === "uploading");
+    if (sending || uploading || !threadId || (!text && pending.length === 0)) return;
     setSending(true);
     setSendError("");
-    const result = await sendManualActivity({ conversationId: threadId, text, channel });
-    setSending(false);
-    if ("error" in result) {
-      setSendError(copy.sendFailed);
-      return;
+    if (text) {
+      const result = await sendManualActivity({ conversationId: threadId, text, channel });
+      if ("error" in result) {
+        setSending(false);
+        setSendError(copy.sendFailed);
+        return;
+      }
+      appendActivity(result.data);
+      setDraft("");
     }
-    setActivities((current) =>
-      current.some((item) => item.position === result.data.position) ? current : [...current, result.data],
-    );
-    setDraft("");
+    for (const item of pending) {
+      const result = await sendStoredAttachment({
+        conversationId: threadId,
+        channel,
+        id: item.id,
+        name: item.file.name || copy.attachment,
+      });
+      if ("error" in result) {
+        setSending(false);
+        setSendError(result.error);
+        return;
+      }
+      appendActivity(result.data);
+      droppedAttachments.current.add(item.id);
+      if (item.previewUrl) URL.revokeObjectURL(item.previewUrl);
+      setAttachments((current) => current.filter((row) => row.id !== item.id));
+    }
+    setSending(false);
   }
 
   async function rename(name: string) {
@@ -614,15 +737,24 @@ export function ConversationDetail({
     const result = await onRename(dealId, name);
     if ("error" in result) return result;
     setDealNamePatches((current) => ({ ...current, [dealId]: result.data.name }));
+    const nextName = result.data.name;
     showNotice(
-      copy.dealRenamedTo(result.data.name),
+      copy.dealRenamedTo(nextName),
       async () => {
         const undone = await onRename(dealId, previousName);
         if ("error" in undone) return false;
         setDealNamePatches((current) => ({ ...current, [dealId]: undone.data.name }));
         return true;
       },
-      async () => null,
+      async () => {
+        const saved = await recordSystemActivity({
+          conversationId: workspace.id,
+          kind: "renamed",
+          name: nextName,
+          previousName,
+        });
+        return "error" in saved ? null : saved.data;
+      },
     );
     return { success: true as const };
   }
@@ -653,6 +785,72 @@ export function ConversationDetail({
       return;
     }
     setDealStatusPatches((current) => ({ ...current, [dealId]: result.data.status }));
+  }
+
+  const uploadingAttachment = attachments.some((item) => item.phase === "uploading");
+  const canSend =
+    !sending &&
+    !uploadingAttachment &&
+    (Boolean(draft.trim()) || attachments.some((item) => item.phase === "ready"));
+
+  function composerActions() {
+    return (
+      <div className="mb-1.5 flex shrink-0 items-center space-x-1 pr-2">
+        <div ref={channelMenu} className="relative mr-1.5 flex items-center">
+          <button
+            type="button"
+            aria-haspopup="listbox"
+            aria-expanded={channelOpen}
+            aria-label={copy.messageSource}
+            onClick={() => setChannelOpen((open) => !open)}
+            className="inline-flex items-center gap-1.5 rounded-md bg-transparent px-2.5 py-1.5 text-xs font-semibold text-gray-800 transition-colors hover:bg-gray-100"
+          >
+            <ChannelIcon channel={channel} className="h-3.5 w-3.5 shrink-0 text-gray-900" />
+            <span className="font-medium">{activityChannelLabel(channel)}</span>
+            <svg className="h-3 w-3 shrink-0 text-gray-500" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" aria-hidden="true">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M5 15l7-7 7 7" />
+            </svg>
+          </button>
+          {channelOpen ? (
+            <ul
+              role="listbox"
+              aria-label={copy.messageSource}
+              className="absolute right-0 bottom-full z-30 mb-2 w-40 overflow-hidden rounded-md border border-gray-200 bg-white py-1 shadow-md"
+            >
+              {channels.map((option) => (
+                <li key={option}>
+                  <button
+                    type="button"
+                    role="option"
+                    aria-selected={option === channel}
+                    onClick={() => {
+                      setChannel(option);
+                      setChannelOpen(false);
+                    }}
+                    className={`flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs ${
+                      option === channel ? "bg-gray-100 font-semibold text-gray-900" : "text-gray-700 hover:bg-gray-50"
+                    }`}
+                  >
+                    <ChannelIcon channel={option} className="h-3.5 w-3.5 shrink-0" />
+                    {activityChannelLabel(option)}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          ) : null}
+          <div className="ml-1.5 h-4 w-px bg-gray-300" />
+        </div>
+        <button
+          type="submit"
+          disabled={!canSend}
+          className={`inline-flex items-center gap-1.5 rounded px-3 py-1.5 text-xs font-medium text-white shadow-sm transition-colors ${
+            canSend ? "bg-gray-900 hover:bg-black" : "bg-gray-300"
+          }`}
+        >
+          {copy.send}
+        </button>
+      </div>
+    );
   }
 
   return (
@@ -790,10 +988,7 @@ export function ConversationDetail({
 
       <div className="relative flex min-h-0 flex-1 flex-col">
         <div ref={thread} className="min-h-0 flex-1 overflow-y-auto" onScroll={onThreadScroll}>
-          <ConversationThread
-            activities={activities}
-            contactName={workspace.customer.fullName}
-          />
+          <ConversationThread activities={activities} contactName={workspace.customer.fullName} />
         </div>
 
       <form
@@ -809,85 +1004,54 @@ export function ConversationDetail({
             <span>{copy.attachDesignPreview}</span>
           </button>
         </div>
-        <div className="relative flex items-end rounded-lg border border-gray-300 bg-white shadow-xs focus-within:border-gray-600">
-          <button
-            type="button"
-            title={copy.attach}
-            aria-label={copy.attach}
-            className="mb-1.5 ml-2 shrink-0 rounded p-1.5 text-gray-400 transition-colors hover:text-gray-700"
-          >
-            <Paperclip className="h-4 w-4" aria-hidden="true" />
-          </button>
-          <textarea
-            ref={composerRef}
-            rows={1}
-            value={draft}
-            onChange={(event) => setDraft(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key === "Enter" && !event.shiftKey) {
-                event.preventDefault();
-                event.currentTarget.form?.requestSubmit();
-              }
+        <div
+          className={`relative rounded-lg border border-gray-300 bg-white shadow-xs focus-within:border-gray-600 ${
+            attachments.length > 0 ? "flex flex-col" : "flex items-end"
+          }`}
+        >
+          <input
+            ref={fileInput}
+            type="file"
+            multiple
+            className="hidden"
+            onChange={(event) => {
+              addAttachments(event.target.files);
+              event.target.value = "";
             }}
-            aria-label={copy.composerPlaceholder}
-            placeholder={copy.composerPlaceholder}
-            className="max-h-60 min-h-10 w-full resize-none overflow-y-auto border-0 bg-transparent py-2.5 pr-3.5 pl-2 text-xs leading-5 text-gray-900 outline-none placeholder:text-gray-400 focus:ring-0"
           />
-          <div className="mb-1.5 flex shrink-0 items-center space-x-1 pr-2">
-            <div ref={channelMenu} className="relative mr-1.5 flex items-center">
-              <button
-                type="button"
-                aria-haspopup="listbox"
-                aria-expanded={channelOpen}
-                aria-label={copy.messageSource}
-                onClick={() => setChannelOpen((open) => !open)}
-                className="inline-flex items-center gap-1.5 rounded-md bg-transparent px-2.5 py-1.5 text-xs font-semibold text-gray-800 transition-colors hover:bg-gray-100"
-              >
-                <ChannelIcon channel={channel} className="h-3.5 w-3.5 shrink-0 text-gray-900" />
-                <span className="font-medium">{activityChannelLabel(channel)}</span>
-                <svg className="h-3 w-3 shrink-0 text-gray-500" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" aria-hidden="true">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M5 15l7-7 7 7" />
-                </svg>
-              </button>
-              {channelOpen ? (
-                <ul
-                  role="listbox"
-                  aria-label={copy.messageSource}
-                  className="absolute right-0 bottom-full z-30 mb-2 w-40 overflow-hidden rounded-md border border-gray-200 bg-white py-1 shadow-md"
-                >
-                  {channels.map((option) => (
-                    <li key={option}>
-                      <button
-                        type="button"
-                        role="option"
-                        aria-selected={option === channel}
-                        onClick={() => {
-                          setChannel(option);
-                          setChannelOpen(false);
-                        }}
-                        className={`flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs ${
-                          option === channel ? "bg-gray-100 font-semibold text-gray-900" : "text-gray-700 hover:bg-gray-50"
-                        }`}
-                      >
-                        <ChannelIcon channel={option} className="h-3.5 w-3.5 shrink-0" />
-                        {activityChannelLabel(option)}
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              ) : null}
-              <div className="ml-1.5 h-4 w-px bg-gray-300" />
-            </div>
+          <div className={attachments.length > 0 ? "flex items-end" : "contents"}>
             <button
-              type="submit"
-              disabled={!draft.trim() || sending}
-              className={`inline-flex items-center gap-1.5 rounded px-3 py-1.5 text-xs font-medium text-white shadow-sm transition-colors ${
-                draft.trim() ? "bg-gray-900 hover:bg-black disabled:opacity-60" : "bg-gray-300"
-              }`}
+              type="button"
+              title={copy.attach}
+              aria-label={copy.attach}
+              onClick={() => fileInput.current?.click()}
+              className="mb-1.5 ml-2 shrink-0 rounded p-1.5 text-gray-400 transition-colors hover:text-gray-700"
             >
-              {copy.send}
+              <Paperclip className="h-4 w-4" aria-hidden="true" />
             </button>
+            <textarea
+              ref={composerRef}
+              rows={1}
+              value={draft}
+              onChange={(event) => setDraft(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" && !event.shiftKey) {
+                  event.preventDefault();
+                  event.currentTarget.form?.requestSubmit();
+                }
+              }}
+              aria-label={copy.composerPlaceholder}
+              placeholder={copy.composerPlaceholder}
+              className="max-h-60 min-h-10 w-full resize-none overflow-y-auto border-0 bg-transparent py-2.5 pr-3.5 pl-2 text-xs leading-5 text-gray-900 outline-none placeholder:text-gray-400 focus:ring-0"
+            />
+            {attachments.length === 0 ? composerActions() : null}
           </div>
+          {attachments.length > 0 ? (
+            <>
+              <ComposerAttachments attachments={attachments} onRemove={removeAttachment} onUploadShown={showUploadFinished} />
+              <div className="flex justify-end">{composerActions()}</div>
+            </>
+          ) : null}
         </div>
         {sendError ? <p className="mt-2 text-xs text-red-600">{sendError}</p> : null}
       </form>

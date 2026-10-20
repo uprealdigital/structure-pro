@@ -26,6 +26,7 @@ export const dealSchema = z.object({
   status: dealStatusSchema,
   previousStatus: dealStatusSchema.nullable(),
   name: z.string().nullable(),
+  viewedAt: z.string().nullable().default(null),
   createdAt: z.string().optional(),
 });
 
@@ -40,6 +41,7 @@ export const dealPatchSchema = z.object({
   status: dealStatusSchema.optional(),
   quoteId: z.string().optional(),
   name: dealNameSchema.optional(),
+  viewedAt: z.string().nullable().optional(),
 });
 
 export const dealStageSchema = dealStatusSchema;

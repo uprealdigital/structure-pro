@@ -17,6 +17,7 @@ function menuItems(deals: ConversationDealOption[]): ConversationDealListItem[] 
     stage: deal.stage,
     dateLabel: deal.dateLabel,
     createdAt: deal.deal.createdAt ?? "",
+    isNew: !deal.deal.viewedAt,
   }));
 }
 
@@ -173,6 +174,10 @@ function DealSwitchList({
                       <span className="shrink-0 rounded-full bg-gray-100 px-1.5 py-0.5 text-[10px] leading-none font-medium text-gray-600">
                         {copy.active}
                       </span>
+                    ) : deal.isNew ? (
+                      <span className="shrink-0 rounded-full bg-[#121314] px-1.5 py-0.5 text-[10px] leading-none font-medium text-white">
+                        {copy.newDeal}
+                      </span>
                     ) : null}
                   </span>
                   <span
@@ -256,6 +261,7 @@ export function DealHeading({
   const menu = useRef<HTMLDivElement>(null);
   const items = menuItems(deals);
   const extra = Math.max(0, items.length - 1);
+  const hasNewDeal = items.some((deal) => deal.isNew && deal.id !== selectedId && deal.stage !== "deal_lost");
   const lostCount = items.filter((deal) => deal.stage === "deal_lost").length;
   const visible = orderedDealMenu(items, showLost);
 
@@ -375,6 +381,11 @@ export function DealHeading({
             <span className="font-serif text-sm font-normal tracking-tight whitespace-nowrap text-gray-950">
               {title || copy.quote}
             </span>
+            {hasNewDeal ? (
+              <span className="ml-1.5 inline-flex animate-pulse items-center rounded-full bg-[#121314] px-1.5 py-0.5 text-[10px] leading-none font-medium text-white [animation-duration:2.8s] motion-reduce:animate-none">
+                {copy.newDeal}
+              </span>
+            ) : null}
             <span className="ml-1.5 inline-flex items-center rounded-full bg-gray-100 px-1.5 py-0.5 text-xs font-semibold text-gray-700 shadow-xs">
               <span className="text-[11px] leading-none">+{extra}</span>
             </span>

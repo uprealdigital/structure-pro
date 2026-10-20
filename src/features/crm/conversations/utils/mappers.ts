@@ -175,6 +175,7 @@ export function toConversationDealListItem(input: {
     dateLabel: formatDealMenuDate(input.deal.createdAt ?? ""),
     createdAt: input.deal.createdAt ?? "",
     conversationId: input.conversationId,
+    isNew: !input.deal.viewedAt,
   });
   return item.success ? item.data : undefined;
 }

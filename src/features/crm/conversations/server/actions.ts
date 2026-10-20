@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { sendMail } from "@/src/common/utils/mail";
-import { demoChatId, sendTelegramMessage } from "@/src/common/lib/telegram/telegram.service";
+import { demoChatId, sendTelegramFile, sendTelegramMessage } from "@/src/common/lib/telegram/telegram.service";
 import { sendSms } from "@/src/common/lib/twilio/twilio.service";
 import { outboundTextTransport } from "@/src/features/crm/conversations/config/outbound-text";
 import { copy } from "@/src/features/crm/conversations/locales/en";
@@ -15,6 +15,7 @@ import {
   readActivities,
   updateActivitiesRead,
 } from "@/src/features/crm/conversations/db/activity";
+import { deleteAttachmentFile, readAttachmentFile, storeAttachmentFile } from "@/src/features/crm/conversations/db/attachment";
 import {
   createConversation,
   deleteConversation,
@@ -152,6 +153,79 @@ export async function sendManualActivity(input: {
     return { success: true, data: activity };
   } catch (error) {
     const message = error instanceof Error ? error.message : "Could not send message";
+    return { error: message };
+  }
+}
+
+const maxAttachmentBytes = 20 * 1024 * 1024;
+
+export async function storeManualAttachment(input: {
+  id: string;
+  file: File;
+}): Promise<{ success: true } | { error: string }> {
+  const file = input.file;
+  if (!(file instanceof File) || file.size <= 0) return { error: copy.attachmentUploadFailed };
+  if (file.size > maxAttachmentBytes) return { error: copy.attachmentTooLarge };
+  try {
+    await storeAttachmentFile({
+      id: input.id,
+      name: file.name.trim() || copy.attachment,
+      type: file.type,
+      bytes: new Uint8Array(await file.arrayBuffer()),
+    });
+    return { success: true };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : copy.attachmentUploadFailed;
+    return { error: message };
+  }
+}
+
+export async function discardStoredAttachment(id: string): Promise<void> {
+  await deleteAttachmentFile(id);
+}
+
+export async function sendStoredAttachment(input: {
+  conversationId: string;
+  channel: unknown;
+  id: string;
+  name: string;
+}): Promise<{ success: true; data: Activity } | { error: string }> {
+  const conversationId = conversationIdSchema.safeParse(input.conversationId);
+  const channel = composerChannelSchema.safeParse(input.channel);
+  const name = input.name.trim() || copy.attachment;
+  if (!conversationId.success || !channel.success || !input.id) {
+    return { error: "A conversation, channel, and file are required" };
+  }
+
+  try {
+    const stored = await readAttachmentFile(input.id);
+    if (!stored) return { error: copy.attachmentUploadFailed };
+    if (channel.data === "telegram") {
+      const conversation = await readConversationById(conversationId.data);
+      await sendTelegramFile(conversation?.chatId?.trim() || demoChatId(), {
+        name,
+        type: stored.type,
+        bytes: stored.bytes,
+      });
+    }
+    const sentAt = new Date().toISOString();
+    await createActivities(conversationId.data, [
+      {
+        role: "model",
+        channel: channel.data,
+        text: name,
+        generatedBy: "manual",
+        createdAt: sentAt,
+        readAt: sentAt,
+      },
+    ]);
+    const activity = (await readActivities(conversationId.data)).at(-1);
+    if (!activity) return { error: "The attachment was not saved" };
+    await deleteAttachmentFile(input.id).catch(() => undefined);
+    revalidatePath("/crm/conversations");
+    return { success: true, data: activity };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Could not send attachment";
     return { error: message };
   }
 }
@@ -416,20 +490,43 @@ export async function setCustomerActiveDeal(input: {
   }
 }
 
+export async function markDealViewed(dealId: string): Promise<{ success: true } | { error: string }> {
+  const parsed = dealIdSchema.safeParse(dealId);
+  if (!parsed.success) return { error: "A deal is required" };
+
+  try {
+    await updateDeal(parsed.data, { viewedAt: new Date().toISOString() });
+    return { success: true };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Could not update the deal";
+    return { error: message };
+  }
+}
+
 export async function recordSystemActivity(input: {
   conversationId: string;
-  kind: "deal" | "quote";
+  kind: "deal" | "quote" | "created" | "renamed";
   name: string;
+  dealId?: string;
+  previousName?: string;
 }): Promise<{ success: true; data: Activity } | { error: string }> {
   const conversationId = conversationIdSchema.safeParse(input.conversationId);
   const name = input.name.trim();
-  if (!conversationId.success || (input.kind !== "deal" && input.kind !== "quote") || !name) {
+  const dealId = input.dealId?.trim();
+  const previousName = input.previousName?.trim();
+  if (
+    !conversationId.success ||
+    (input.kind !== "deal" && input.kind !== "quote" && input.kind !== "created" && input.kind !== "renamed") ||
+    !name ||
+    (input.kind === "created" && !dealId) ||
+    (input.kind === "renamed" && !previousName)
+  ) {
     return { error: "A conversation and event are required" };
   }
 
   try {
     const sentAt = new Date().toISOString();
-    const text = systemEventBody(input.kind, name);
+    const text = systemEventBody(input.kind, name, dealId, previousName);
     await createActivities(conversationId.data, [
       {
         role: "model",

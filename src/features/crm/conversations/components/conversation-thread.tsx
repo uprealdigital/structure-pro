@@ -1,4 +1,4 @@
-import { ArrowRightLeft, Phone } from "lucide-react";
+import { ArrowRightLeft, CirclePlus, Pencil, Phone } from "lucide-react";
 import { copy } from "@/src/features/crm/conversations/locales/en";
 import type { Activity, ActivityChannel } from "@/src/features/crm/conversations/types";
 import { formatCallDuration, formatMessageClock, formatMessageDay, systemEventText } from "@/src/features/crm/conversations/utils/formatting";
@@ -45,11 +45,24 @@ function SystemActivity({ activity }: { activity: Activity }) {
 
   return (
     <div className="my-2 flex flex-col items-center justify-center">
-      <div className="inline-flex items-center gap-1.5 rounded-full border border-gray-200/80 bg-transparent px-3 py-1 text-xs text-gray-600 shadow-xs transition-colors hover:bg-gray-50">
-        <ArrowRightLeft className="h-3.5 w-3.5 shrink-0 text-gray-500" strokeWidth={1.8} aria-hidden="true" />
-        <span>
-          {event.label} <strong className="font-medium text-gray-900">{event.name}</strong>
-        </span>
+      <div className="inline-flex max-w-full flex-wrap items-center justify-center gap-x-1.5 gap-y-1 rounded-full border border-gray-200/80 bg-transparent px-3 py-1 text-center text-xs text-gray-600 shadow-xs transition-colors hover:bg-gray-50">
+        {event.kind === "created" ? (
+          <CirclePlus className="h-3.5 w-3.5 shrink-0 text-gray-500" strokeWidth={1.8} aria-hidden="true" />
+        ) : event.kind === "renamed" ? (
+          <Pencil className="h-3.5 w-3.5 shrink-0 text-gray-500" strokeWidth={1.8} aria-hidden="true" />
+        ) : (
+          <ArrowRightLeft className="h-3.5 w-3.5 shrink-0 text-gray-500" strokeWidth={1.8} aria-hidden="true" />
+        )}
+        {event.kind === "renamed" && event.previousName ? (
+          <span>
+            {copy.dealWasRenamedFrom} <strong className="font-medium text-gray-900">{event.previousName}</strong>{" "}
+            {copy.dealWasRenamedTo} <strong className="font-medium text-gray-900">{event.name}</strong>
+          </span>
+        ) : (
+          <span>
+            {event.label} <strong className="font-medium text-gray-900">{event.name}</strong>
+          </span>
+        )}
       </div>
       {clock ? (
         <span className="mt-1 text-[10px] text-gray-400">

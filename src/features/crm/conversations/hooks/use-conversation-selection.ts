@@ -46,6 +46,19 @@ export function useConversationSelection({
     replaceUrl(id);
   }
 
+  async function focusLoadedDeal(dealId: string): Promise<ConversationWorkspace | undefined> {
+    const id = selectedId;
+    if (!id) return undefined;
+    const ticket = request.current + 1;
+    request.current = ticket;
+    const result = await loadConversationWorkspace(id, dealId);
+    if (ticket !== request.current) return undefined;
+    if ("error" in result || !result.data) return undefined;
+    setWorkspace(result.data);
+    setStatus("ready");
+    return result.data;
+  }
+
   async function selectConversation(id: string, dealId?: string) {
     if (id === selectedId && (status === "ready" || status === "pending")) return;
 
@@ -110,6 +123,7 @@ export function useConversationSelection({
     workspace,
     status,
     selectConversation,
+    focusLoadedDeal,
     highlightConversation,
     clearConversation,
     patchDealStatus,

@@ -48,16 +48,69 @@ export function lastMessageAt(activities: Activity[]): string {
 }
 
 const quoteSystemPrefix = "quote:";
+const createdDealPrefix = "deal-created:";
+const renamedDealPrefix = "deal-renamed:";
 
-export function systemEventBody(kind: "deal" | "quote", name: string): string {
-  return kind === "quote" ? `${quoteSystemPrefix}${name}` : name;
+export type SystemEventKind = "deal" | "quote" | "created" | "renamed";
+
+export type SystemEvent = {
+  kind: SystemEventKind;
+  label: string;
+  name: string;
+  previousName?: string;
+  dealId?: string;
+};
+
+function decodedName(value: string): string {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return value;
+  }
 }
 
-export function systemEventText(text: string): { label: string; name: string } {
-  if (text.startsWith(quoteSystemPrefix)) {
-    return { label: copy.activeQuoteSwitchedTo, name: text.slice(quoteSystemPrefix.length) };
+export function systemEventBody(
+  kind: SystemEventKind,
+  name: string,
+  dealId?: string,
+  previousName?: string,
+): string {
+  if (kind === "quote") return `${quoteSystemPrefix}${name}`;
+  if (kind === "created" && dealId) return `${createdDealPrefix}${dealId}:${name}`;
+  if (kind === "renamed" && previousName) {
+    return `${renamedDealPrefix}${encodeURIComponent(previousName)}:${encodeURIComponent(name)}`;
   }
-  return { label: copy.activeDealSwitchedTo, name: text };
+  return name;
+}
+
+export function systemEventText(text: string): SystemEvent {
+  if (text.startsWith(renamedDealPrefix)) {
+    const rest = text.slice(renamedDealPrefix.length);
+    const split = rest.indexOf(":");
+    if (split > 0) {
+      const previousName = decodedName(rest.slice(0, split));
+      const name = decodedName(rest.slice(split + 1));
+      if (previousName && name) {
+        return { kind: "renamed", label: copy.dealWasRenamedFrom, previousName, name };
+      }
+    }
+  }
+  if (text.startsWith(createdDealPrefix)) {
+    const rest = text.slice(createdDealPrefix.length);
+    const split = rest.indexOf(":");
+    if (split > 0) {
+      return {
+        kind: "created",
+        label: copy.createdDeal,
+        dealId: rest.slice(0, split),
+        name: rest.slice(split + 1),
+      };
+    }
+  }
+  if (text.startsWith(quoteSystemPrefix)) {
+    return { kind: "quote", label: copy.activeQuoteSwitchedTo, name: text.slice(quoteSystemPrefix.length) };
+  }
+  return { kind: "deal", label: copy.activeDealSwitchedTo, name: text };
 }
 
 export function activityPreview(activity: Activity | undefined): string {
@@ -65,6 +118,9 @@ export function activityPreview(activity: Activity | undefined): string {
   if (activity.channel === "system") {
     const event = systemEventText(activity.text);
     const name = messagePreview(event.name);
+    if (event.kind === "renamed" && event.previousName) {
+      return `${event.label} ${messagePreview(event.previousName)} ${copy.dealWasRenamedTo} ${name}`;
+    }
     return name ? `${event.label} ${name}` : event.label;
   }
   if (activity.channel === "call") {

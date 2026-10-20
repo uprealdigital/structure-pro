@@ -381,6 +381,7 @@ export function ConversationWorkspaceView({
             onRename={onRename}
             onReopen={onReopen}
             onActivateDeal={activateDeal}
+            onFocusDeal={selection.focusLoadedDeal}
             onSystemActivity={(conversationId, activity) => {
               applyActivity({ conversationId, activity });
             }}

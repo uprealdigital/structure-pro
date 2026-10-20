@@ -3,7 +3,10 @@
 import { revalidatePath } from "next/cache";
 import { callRouter, readJson } from "@/src/common/utils/internal-call";
 import { toE164 } from "@/src/common/utils/phone";
+import { priceSummary } from "@/src/features/cpq/utils/pricing";
 import { openingSms } from "@/src/features/cpq/utils/system";
+import { recordSystemActivity } from "@/src/features/crm/conversations/server/actions";
+import { productTitle } from "@/src/features/crm/conversations/utils/formatting";
 import { createConfiguration } from "@/src/features/cpq/db/configuration";
 import { createQuote, deleteQuote } from "@/src/features/crm/quotes/db/quote";
 import { getConfiguration } from "@/src/features/cpq/server/queries";
@@ -123,7 +126,18 @@ export async function createQuoteAction(input: {
     conversationId = started.conversationId;
     createdConversation = started.created === true;
 
+    if (conversationId && dealId) {
+      const dealName = productTitle(priceSummary(selections.data).specs) || invoiceId;
+      await recordSystemActivity({
+        conversationId,
+        kind: "created",
+        name: dealName,
+        dealId,
+      });
+    }
+
     revalidatePath("/");
+    revalidatePath("/crm/conversations");
     return { success: true, data: { invoiceId, channel } };
   } catch (error) {
     if (createdConversation && lookupKey) {

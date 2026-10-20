@@ -241,6 +241,7 @@ export const conversationDealListItemSchema = z.object({
   dateLabel: z.string(),
   createdAt: z.string(),
   conversationId: z.string().optional(),
+  isNew: z.boolean().default(false),
 });
 
 export type ConversationDealListItem = z.infer<typeof conversationDealListItemSchema>;
