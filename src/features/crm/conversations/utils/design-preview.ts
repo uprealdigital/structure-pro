@@ -16,16 +16,35 @@ export type DesignPreviewChange = {
   text: string;
 };
 
-export function previousSentRevision(
+export function previousSharedPhotosRevision(
   revisions: ConversationQuoteRevision[],
   viewed: ConversationQuoteRevision,
 ): ConversationQuoteRevision | null {
   let match: ConversationQuoteRevision | null = null;
   for (const revision of revisions) {
-    if (revision.status !== "sent" || revision.revisionNumber >= viewed.revisionNumber) continue;
+    if (!revision.sharedPhotosAt || revision.revisionNumber >= viewed.revisionNumber) continue;
     if (!match || revision.revisionNumber > match.revisionNumber) match = revision;
   }
   return match;
+}
+
+export function changesSinceSharedPhotos(
+  revisions: ConversationQuoteRevision[],
+  viewed: ConversationQuoteRevision,
+): DesignPreviewChange[] {
+  const baseline = previousSharedPhotosRevision(revisions, viewed);
+  if (!baseline) return [];
+  const accumulated = revisions
+    .filter(
+      (revision) =>
+        revision.revisionNumber > baseline.revisionNumber && revision.revisionNumber <= viewed.revisionNumber,
+    )
+    .sort((left, right) => left.revisionNumber - right.revisionNumber)
+    .reduce<QuoteSelections>(
+      (selections, revision) => ({ ...selections, ...revision.configChanges }),
+      baseline.selections,
+    );
+  return designPreviewChanges(baseline.selections, accumulated);
 }
 
 function priceDeltaLabel(delta: number): string {

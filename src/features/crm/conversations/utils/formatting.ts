@@ -52,11 +52,12 @@ export function lastMessageAt(activities: Activity[]): string {
 }
 
 const quoteSystemPrefix = "quote:";
+const savedRevisionPrefix = "saved-revision:";
 const activeQuotePrefix = "active-quote:";
 const createdDealPrefix = "deal-created:";
 const renamedDealPrefix = "deal-renamed:";
 
-export type SystemEventKind = "deal" | "quote" | "activeQuote" | "created" | "renamed";
+export type SystemEventKind = "deal" | "quote" | "activeQuote" | "created" | "renamed" | "savedRevision";
 
 export type SystemEvent = {
   kind: SystemEventKind;
@@ -85,6 +86,9 @@ export function systemEventBody(
     return `${quoteSystemPrefix}${encodeURIComponent(previousName)}:${encodeURIComponent(name)}`;
   }
   if (kind === "quote") return `${quoteSystemPrefix}${name}`;
+  if (kind === "savedRevision" && previousName) {
+    return `${savedRevisionPrefix}${encodeURIComponent(previousName)}:${encodeURIComponent(name)}`;
+  }
   if (kind === "created" && dealId) return `${createdDealPrefix}${dealId}:${name}`;
   if (kind === "renamed" && previousName) {
     return `${renamedDealPrefix}${encodeURIComponent(previousName)}:${encodeURIComponent(name)}`;
@@ -123,6 +127,17 @@ export function systemEventText(text: string): SystemEvent {
       name: text.slice(activeQuotePrefix.length),
     };
   }
+  if (text.startsWith(savedRevisionPrefix)) {
+    const rest = text.slice(savedRevisionPrefix.length);
+    const split = rest.indexOf(":");
+    if (split > 0) {
+      const quoteName = decodedName(rest.slice(0, split));
+      const revisionName = decodedName(rest.slice(split + 1));
+      if (quoteName && revisionName) {
+        return { kind: "savedRevision", label: copy.newRevision, previousName: quoteName, name: revisionName };
+      }
+    }
+  }
   if (text.startsWith(quoteSystemPrefix)) {
     const rest = text.slice(quoteSystemPrefix.length);
     const split = rest.indexOf(":");
@@ -154,6 +169,9 @@ export function activityPreview(activity: Activity | undefined): string {
     }
     if (event.kind === "quote" && event.previousName) {
       return `${messagePreview(event.previousName)} ${copy.revisionSwitchedTo} ${name}`;
+    }
+    if (event.kind === "savedRevision" && event.previousName) {
+      return `${copy.newRevision} ${name} ${copy.newRevisionFor} ${messagePreview(event.previousName)}`;
     }
     return name ? `${event.label} ${name}` : event.label;
   }
@@ -217,6 +235,7 @@ export const reviewMessageToken = {
   lastName: "{{lastName}}",
   dealName: "{{dealName}}",
   dealPrice: "{{dealPrice}}",
+  quoteLink: "{{quoteLink}}",
 } as const;
 
 export const reviewFirstNameToken = reviewMessageToken.firstName;

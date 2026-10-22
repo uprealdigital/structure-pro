@@ -1,7 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { Check, ChevronDown, DollarSign, Minus, Plus, RotateCw, X } from "lucide-react";
+import { ArrowLeftRight, Check, DollarSign, Plus, RotateCw, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import type { BuildingCapture } from "@/src/features/cpq/components/building-scene";
 import type { DesignAngle } from "@/src/features/cpq/components/building-view";
@@ -9,7 +9,8 @@ import { toBuildingConfig } from "@/src/features/cpq/utils/mappers";
 import { copy } from "@/src/features/crm/conversations/locales/en";
 import type { ConversationQuoteRevision } from "@/src/features/crm/conversations/types";
 import {
-  designPreviewChanges,
+  changesSinceSharedPhotos,
+  previousSharedPhotosRevision,
   type DesignPreviewChange,
 } from "@/src/features/crm/conversations/utils/design-preview";
 
@@ -35,9 +36,9 @@ type DesignView = {
 
 type DesignPreviewModalProps = {
   current: ConversationQuoteRevision;
-  previous: ConversationQuoteRevision | null;
+  revisions: ConversationQuoteRevision[];
   onClose: () => void;
-  onAttach: (file: File) => void;
+  onAttach: (file: File) => void | Promise<void>;
 };
 
 function createView(angle: DesignAngle): DesignView {
@@ -46,10 +47,8 @@ function createView(angle: DesignAngle): DesignView {
 
 function ChangeIcon({ kind }: { kind: DesignPreviewChange["kind"] }) {
   const className = "mt-0.5 h-3.5 w-3.5 shrink-0";
-  if (kind === "price") return <DollarSign className={className} strokeWidth={2.4} aria-hidden="true" />;
-  if (kind === "added") return <Plus className={className} strokeWidth={2.4} aria-hidden="true" />;
-  if (kind === "removed") return <Minus className={className} strokeWidth={2.4} aria-hidden="true" />;
-  return <Check className={className} strokeWidth={2.4} aria-hidden="true" />;
+  if (kind === "price") return <DollarSign className={className} strokeWidth={1.5} aria-hidden="true" />;
+  return <ArrowLeftRight className={className} strokeWidth={1.5} aria-hidden="true" />;
 }
 
 function roundedCell(context: CanvasRenderingContext2D, x: number, y: number, width: number, height: number, radius: number) {
@@ -160,18 +159,17 @@ function DesignAngleCard({
   );
 }
 
-export function DesignPreviewModal({ current, previous, onClose, onAttach }: DesignPreviewModalProps) {
+export function DesignPreviewModal({ current, revisions, onClose, onAttach }: DesignPreviewModalProps) {
   const [views, setViews] = useState<DesignView[]>(() => defaultAngles.map(createView));
-  const [expanded, setExpanded] = useState(false);
   const [attaching, setAttaching] = useState(false);
   const [error, setError] = useState("");
   const captures = useRef(new Map<string, () => BuildingCapture | null>());
   const viewCount = useRef(views.length);
   const listEnd = useRef<HTMLDivElement>(null);
   const config = toBuildingConfig(current.selections);
-  const changes = previous ? designPreviewChanges(previous.selections, current.selections) : [];
-  const hiddenChanges = Math.max(0, changes.length - visibleChangeCount);
-  const shown = expanded ? changes : changes.slice(0, visibleChangeCount);
+  const baseline = previousSharedPhotosRevision(revisions, current);
+  const changes = changesSinceSharedPhotos(revisions, current);
+  const changesScroll = changes.length > visibleChangeCount;
 
   useEffect(() => {
     function onKey(event: KeyboardEvent) {
@@ -207,9 +205,9 @@ export function DesignPreviewModal({ current, previous, onClose, onAttach }: Des
         if (!capture) throw new Error(copy.designPreviewViewsLoading);
         blobs.push(await capture());
       }
-      onAttach(await composeDesignPreview(blobs));
+      await onAttach(await composeDesignPreview(blobs));
     } catch (caught) {
-      setError(caught instanceof Error && caught.message === copy.designPreviewViewsLoading ? caught.message : copy.designPreviewAttachFailed);
+      setError(caught instanceof Error ? caught.message : copy.designPreviewAttachFailed);
       setAttaching(false);
     }
   }
@@ -252,28 +250,20 @@ export function DesignPreviewModal({ current, previous, onClose, onAttach }: Des
             </span>
           </div>
           {changes.length === 0 ? (
-            <p className="text-xs text-gray-500">{previous ? copy.noChangesSinceSent : copy.noEarlierSentRevision}</p>
+            <p className="text-xs text-gray-500">{baseline ? copy.noChangesSinceSharedPhotos : copy.noEarlierSharedPhotos}</p>
           ) : (
-            <ul className="space-y-1.5">
-              {shown.map((change) => (
-                <li key={change.id} className="flex items-start gap-2 text-xs leading-5 font-medium text-green-600">
+            <ul
+              className={`space-y-1.5 ${changesScroll ? "max-h-[calc(4.5*1.25rem+4*0.375rem)] overflow-y-scroll overscroll-contain pr-2" : ""}`}
+              onWheel={changesScroll ? (event) => event.stopPropagation() : undefined}
+            >
+              {changes.map((change) => (
+                <li key={change.id} className="flex items-start gap-2 text-xs leading-5 font-normal text-gray-950">
                   <ChangeIcon kind={change.kind} />
                   <span>{change.text}</span>
                 </li>
               ))}
             </ul>
           )}
-          {hiddenChanges > 0 ? (
-            <button
-              type="button"
-              aria-expanded={expanded}
-              onClick={() => setExpanded((open) => !open)}
-              className="mt-2 inline-flex items-center gap-1 text-xs font-medium text-gray-500 transition-colors hover:text-gray-800"
-            >
-              <span>{expanded ? copy.hideChanges : copy.seeMoreChanges(hiddenChanges)}</span>
-              <ChevronDown className={`h-3.5 w-3.5 transition-transform ${expanded ? "rotate-180" : ""}`} aria-hidden="true" />
-            </button>
-          ) : null}
 
           <div className="mt-6 mb-3 flex items-center justify-between gap-3">
             <h3 className="text-[11px] font-semibold tracking-wider text-gray-500 uppercase">{copy.designPreviewAngles}</h3>

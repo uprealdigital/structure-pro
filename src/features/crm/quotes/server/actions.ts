@@ -11,6 +11,7 @@ import {
   readQuoteRevision,
   storeQuoteRevisionRender,
   updateQuoteRevisionCommunication,
+  updateQuoteRevisionPhotosShare,
   updateQuoteRevisionRenders,
 } from "@/src/features/crm/quotes/db/quote-revision";
 import {
@@ -123,6 +124,27 @@ export async function saveQuoteCommunication(input: {
     return { success: true };
   } catch (error) {
     const message = error instanceof Error ? error.message : "Could not save the message";
+    return { error: message };
+  }
+}
+
+export async function shareQuoteRevisionPhotos(
+  revisionId: string,
+): Promise<{ success: true; data: { sharedPhotosAt: string } } | { error: string }> {
+  const id = revisionId.trim();
+  if (!id) return { error: "A quote revision is required" };
+
+  try {
+    const revision = await readQuoteRevision(id);
+    if (!revision) return { error: "Quote revision was not found" };
+    const sharedPhotosAt = new Date().toISOString();
+    const saved = await updateQuoteRevisionPhotosShare({ revisionId: revision.id, sharedPhotosAt });
+    revalidatePath("/crm/conversations");
+    revalidatePath("/crm/quotes");
+    revalidatePath(`/quote/${revision.quoteId}`);
+    return { success: true, data: { sharedPhotosAt: saved.sharedPhotosAt ?? sharedPhotosAt } };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Could not record the shared photos";
     return { error: message };
   }
 }

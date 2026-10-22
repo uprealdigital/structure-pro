@@ -194,6 +194,8 @@ export function toConversationQuoteRevision(input: {
   configChanges?: ConfigChanges;
   communication?: ConversationQuoteRevision["communication"];
   renders?: QuoteRevisionRenders | null;
+  sharedPhotosAt?: string | null;
+  sharedQuoteAt?: string | null;
 }): ConversationQuoteRevision | undefined {
   const summary = priceSummary(input.selections);
   const changes = configChangesSummary(input.configChanges ?? {});
@@ -210,7 +212,10 @@ export function toConversationQuoteRevision(input: {
     imageUrl: summary.imageUrl,
     renders: input.renders ?? null,
     selections: input.selections,
+    configChanges: input.configChanges ?? {},
     communication: input.communication ?? null,
+    sharedPhotosAt: input.sharedPhotosAt ?? null,
+    sharedQuoteAt: input.sharedQuoteAt ?? null,
   });
   return revision.success ? revision.data : undefined;
 }
@@ -254,6 +259,8 @@ export function conversationQuoteFromSelections(
     configChanges: changedConfig(previous?.selections, selections),
     communication: null,
     renders: saved.renders ?? null,
+    sharedPhotosAt: null,
+    sharedQuoteAt: null,
   });
   if (!revision) return undefined;
   return toConversationQuote({
@@ -294,6 +301,7 @@ export function conversationQuoteWithSentRevision(
   quote: ConversationQuote,
   revisionId: string,
   updatedAt: string,
+  sharedQuoteAt: string,
 ): ConversationQuote | undefined {
   return toConversationQuote({
     id: quote.id,
@@ -306,7 +314,28 @@ export function conversationQuoteWithSentRevision(
     activeRevisionId: quote.activeRevisionId,
     status: quote.status === "draft" ? "sent" : quote.status,
     revisions: quote.revisions.map((revision) =>
-      revision.id === revisionId ? { ...revision, status: "sent", updatedAt } : revision,
+      revision.id === revisionId ? { ...revision, status: "sent", updatedAt, sharedQuoteAt } : revision,
+    ),
+  });
+}
+
+export function conversationQuoteWithSharedPhotos(
+  quote: ConversationQuote,
+  revisionId: string,
+  sharedPhotosAt: string,
+): ConversationQuote | undefined {
+  return toConversationQuote({
+    id: quote.id,
+    invoiceId: quote.invoiceId,
+    totalLabel: quote.totalLabel,
+    specs: quote.specs,
+    lines: quote.lines,
+    imageUrl: quote.imageUrl,
+    selections: quote.selections,
+    activeRevisionId: quote.activeRevisionId,
+    status: quote.status,
+    revisions: quote.revisions.map((revision) =>
+      revision.id === revisionId ? { ...revision, sharedPhotosAt } : revision,
     ),
   });
 }

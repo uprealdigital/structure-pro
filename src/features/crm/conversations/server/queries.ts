@@ -115,6 +115,8 @@ async function revisionsForQuote(
         configChanges: row.configChanges,
         communication: row.communication,
         renders: row.renders,
+        sharedPhotosAt: row.sharedPhotosAt,
+        sharedQuoteAt: row.sharedQuoteAt,
       }),
     )
     .filter((revision): revision is ConversationQuoteRevision => revision != null);

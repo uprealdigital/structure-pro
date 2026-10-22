@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowUpRight, Paperclip, Pencil, Phone, Plus, X } from "lucide-react";
+import { ArrowUpRight, Camera, Paperclip, Pencil, Phone, X } from "lucide-react";
 import { useEffect, useLayoutEffect, useRef, useState, type FormEvent } from "react";
 import { BuildingConfigurator } from "@/src/features/cpq/components/building-configurator";
 import type { QuoteRevisionRenderFiles } from "@/src/features/cpq/components/building-scene";
@@ -26,18 +26,19 @@ import type {
   ConversationWorkspace,
 } from "@/src/features/crm/conversations/types";
 import { uploadComposerAttachment } from "@/src/features/crm/conversations/utils/upload-attachment";
-import { previousSentRevision } from "@/src/features/crm/conversations/utils/design-preview";
 import { productTitle, quoteMenuName, revisionMenuLabel, systemEventText } from "@/src/features/crm/conversations/utils/formatting";
 import {
   conversationQuoteFromSelections,
   conversationQuoteWithActiveRevision,
   conversationQuoteWithSentRevision,
+  conversationQuoteWithSharedPhotos,
 } from "@/src/features/crm/conversations/utils/mappers";
 import {
   activateQuoteRevision,
   createDealQuoteAction,
   saveQuoteCommunication,
   saveQuoteSelections,
+  shareQuoteRevisionPhotos,
 } from "@/src/features/crm/quotes/server/actions";
 import type { QuoteCommunication } from "@/src/features/crm/quotes/types";
 import type { QuoteSelections } from "@/src/features/cpq/types";
@@ -263,6 +264,8 @@ export function ConversationDetail({
   attachmentsRef.current = attachments;
   const [outgoing, setOutgoing] = useState<OutgoingMessage[]>([]);
   const outgoingRef = useRef<OutgoingMessage[]>([]);
+  const quotesByIdRef = useRef(new Map<string, ConversationQuote>());
+  quotesByIdRef.current = new Map(deals.flatMap((deal) => deal.quotes.map((quote) => [quote.id, quote])));
   const heldPreviews = useRef(new Map<string, string>());
   const previewFrames = useRef(new Map<string, number>());
   const imageHeights = useRef(new Map<string, number>());
@@ -688,6 +691,15 @@ export function ConversationDetail({
     setQuotePatches((current) => ({ ...current, [next.id]: next }));
     setSelectedRevisionId(result.data.id);
     setEditing(false);
+    const quoteIndex = listedQuotes.findIndex((item) => item.id === quote.id);
+    const quoteName = quoteIndex >= 0 ? quoteMenuName(quoteIndex) : copy.quote;
+    const saved = await recordSystemActivity({
+      conversationId: workspace.id,
+      kind: "savedRevision",
+      name: String(result.data.revisionNumber),
+      previousName: quoteName,
+    });
+    if (!("error" in saved)) publishActivity(saved.data);
   }
 
   async function saveAndShareFocusedQuote(selections: QuoteSelections, renders: QuoteRevisionRenderFiles) {
@@ -719,7 +731,12 @@ export function ConversationDetail({
       communication,
     });
     if ("error" in result) throw new Error(result.error);
-    const next = conversationQuoteWithSentRevision(quote, result.data.revisionId, result.data.updatedAt);
+    const next = conversationQuoteWithSentRevision(
+      quote,
+      result.data.revisionId,
+      result.data.updatedAt,
+      result.data.sharedQuoteAt || result.data.updatedAt,
+    );
     if (!next) throw new Error(copy.sendQuoteError);
     setQuotePatches((current) => ({ ...current, [next.id]: next }));
     setDealStatusPatches((current) => ({ ...current, [focused.deal.id]: result.data.dealStatus }));
@@ -760,12 +777,20 @@ export function ConversationDetail({
     });
   }
 
-  function addAttachmentFiles(files: File[]) {
+  function addAttachmentFiles(files: File[], source?: { quoteId: string; revisionId: string }) {
     if (files.length === 0) return;
     const next = files.map((file) => {
       const id = crypto.randomUUID();
       const previewUrl = file.type.startsWith("image/") ? URL.createObjectURL(file) : undefined;
-      return { id, file, previewUrl, phase: "uploading" as const, progress: 0 };
+      return {
+        id,
+        file,
+        previewUrl,
+        phase: "uploading" as const,
+        progress: 0,
+        quoteId: source?.quoteId,
+        revisionId: source?.revisionId,
+      };
     });
     setAttachments((current) => [...current, ...next]);
     for (const item of next) {
@@ -863,6 +888,18 @@ export function ConversationDetail({
       replaceOutgoing(
         outgoingRef.current.map((row) => (row.id === item.id ? { ...row, status: "sent", error: "" } : row)),
       );
+      if (item.quoteId && item.revisionId) {
+        const shared = await shareQuoteRevisionPhotos(item.revisionId);
+        if ("error" in shared) {
+          setSendError(shared.error);
+        } else {
+          const quote = quotesByIdRef.current.get(item.quoteId);
+          const next = quote
+            ? conversationQuoteWithSharedPhotos(quote, item.revisionId, shared.data.sharedPhotosAt)
+            : undefined;
+          if (next) setQuotePatches((current) => ({ ...current, [next.id]: next }));
+        }
+      }
     }
     delivering.current = false;
   }
@@ -906,6 +943,8 @@ export function ConversationDetail({
         text: "",
         name: item.file.name || copy.attachment,
         previewUrl: item.previewUrl,
+        quoteId: item.quoteId,
+        revisionId: item.revisionId,
         sentAt,
         afterPosition,
         status: "queued",
@@ -1224,7 +1263,7 @@ export function ConversationDetail({
             onClick={() => setDesignPreviewOpen(true)}
             className="inline-flex items-center gap-1.5 rounded-full border border-gray-200 bg-white px-3 py-1.5 text-xs font-medium text-gray-800 shadow-xs transition-colors hover:bg-gray-50 disabled:opacity-40"
           >
-            <Plus className="h-3.5 w-3.5 shrink-0 text-gray-500" strokeWidth={2} aria-hidden="true" />
+            <Camera className="h-3.5 w-3.5 shrink-0 text-gray-500" strokeWidth={2} aria-hidden="true" />
             <span>{copy.attachDesignPreview}</span>
           </button>
         </div>
@@ -1299,10 +1338,11 @@ export function ConversationDetail({
       {designPreviewOpen && focused.quote && viewed ? (
         <DesignPreviewModal
           current={viewed}
-          previous={previousSentRevision(focused.quote.revisions, viewed)}
+          revisions={focused.quote.revisions}
           onClose={() => setDesignPreviewOpen(false)}
           onAttach={(file) => {
-            addAttachmentFiles([file]);
+            if (!focused.quote) return;
+            addAttachmentFiles([file], { quoteId: focused.quote.id, revisionId: viewed.id });
             setDesignPreviewOpen(false);
           }}
         />
@@ -1314,6 +1354,7 @@ export function ConversationDetail({
           priceLabel={viewed.totalLabel}
           invoiceId={focused.quote.invoiceId}
           quoteId={focused.quote.id}
+          revisionId={viewed.id}
           imageUrl={viewed.renders?.render_small_url || viewed.imageUrl}
           statusLabel={revisionStatusLabel(viewed)}
           communication={communicationPatches[viewed.id] ?? viewed.communication}

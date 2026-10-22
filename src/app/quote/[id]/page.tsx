@@ -8,12 +8,19 @@ export const dynamic = "force-dynamic";
 
 export async function generateMetadata({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>;
+  searchParams: Promise<{ revision?: string | string[] }>;
 }): Promise<Metadata> {
   const { id } = await params;
-  const quote = await getQuotePortal(id);
+  const { revision } = await searchParams;
+  const quote = await getQuotePortal(id, firstQueryValue(revision));
   return { title: quote ? `${quote.dealName} — Quote` : "Quote" };
+}
+
+function firstQueryValue(value: string | string[] | undefined): string | undefined {
+  return Array.isArray(value) ? value[0] : value;
 }
 
 export default async function QuotePage({
@@ -21,11 +28,11 @@ export default async function QuotePage({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ mode?: string | string[] }>;
+  searchParams: Promise<{ mode?: string | string[]; revision?: string | string[] }>;
 }) {
   const { id } = await params;
-  const { mode } = await searchParams;
-  const quote = await getQuotePortal(id);
+  const { mode, revision } = await searchParams;
+  const quote = await getQuotePortal(id, firstQueryValue(revision));
   if (!quote) notFound();
   return <QuotePortal quote={quote} mode={quotePortalMode(mode)} />;
 }

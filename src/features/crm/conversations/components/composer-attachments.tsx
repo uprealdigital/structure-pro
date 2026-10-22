@@ -9,6 +9,8 @@ export type ComposerAttachment = {
   previewUrl?: string;
   phase: "uploading" | "ready" | "failed";
   progress: number;
+  quoteId?: string;
+  revisionId?: string;
 };
 
 export function UploadProgress({

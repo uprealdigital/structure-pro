@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { quoteSelectionsSchema } from "@/src/features/cpq/types";
 import {
+  configChangesSchema,
   quoteCommunicationSchema,
   quoteRecordStatusSchema,
   quoteRevisionRendersSchema,
@@ -205,7 +206,10 @@ export const conversationQuoteRevisionSchema = z.object({
   imageUrl: z.string().min(1),
   renders: quoteRevisionRendersSchema.nullable().default(null),
   selections: quoteSelectionsSchema,
+  configChanges: configChangesSchema.default({}),
   communication: quoteCommunicationSchema.nullable(),
+  sharedPhotosAt: z.string().nullable().default(null),
+  sharedQuoteAt: z.string().nullable().default(null),
 });
 
 export type ConversationQuoteRevision = z.infer<typeof conversationQuoteRevisionSchema>;

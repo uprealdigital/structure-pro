@@ -53,6 +53,12 @@ export const quoteRevisionWriteSchema = z.object({
 
 export const quoteRevisionPatchSchema = z.object({
   status: quoteRevisionStatusSchema,
+  sharedQuoteAt: z.string().min(1).optional(),
+});
+
+export const quoteRevisionPhotosShareSchema = z.object({
+  revisionId: z.string().trim().min(1),
+  sharedPhotosAt: z.string().min(1),
 });
 
 export const quoteCommunicationWriteSchema = z.object({
@@ -101,6 +107,8 @@ export const quoteRevisionSchema = z.object({
   configChanges: configChangesSchema.default({}),
   communication: quoteCommunicationSchema.nullable(),
   renders: quoteRevisionRendersSchema.nullable().default(null),
+  sharedPhotosAt: z.string().nullable().default(null),
+  sharedQuoteAt: z.string().nullable().default(null),
   createdAt: z.string(),
   updatedAt: z.string(),
 });

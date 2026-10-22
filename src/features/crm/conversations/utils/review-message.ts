@@ -5,6 +5,7 @@ export type ReviewMessageValues = {
   lastName: string;
   dealName: string;
   dealPrice: string;
+  quoteLink: string;
 };
 
 export function customerNameParts(fullName: string): { firstName: string; lastName: string } {
@@ -20,13 +21,15 @@ export function fillReviewMessage(template: string, values: ReviewMessageValues)
     .replaceAll(reviewMessageToken.firstName, values.firstName)
     .replaceAll(reviewMessageToken.lastName, values.lastName)
     .replaceAll(reviewMessageToken.dealName, values.dealName)
-    .replaceAll(reviewMessageToken.dealPrice, values.dealPrice);
+    .replaceAll(reviewMessageToken.dealPrice, values.dealPrice)
+    .replaceAll(reviewMessageToken.quoteLink, values.quoteLink);
 }
 
 export function reviewMessageValues(
   fullName: string,
   dealName: string,
   dealPrice: string,
+  quoteLink: string,
 ): ReviewMessageValues {
   const name = customerNameParts(fullName);
   return {
@@ -34,7 +37,12 @@ export function reviewMessageValues(
     lastName: name.lastName,
     dealName,
     dealPrice,
+    quoteLink,
   };
+}
+
+export function quoteRevisionPath(quoteId: string, revisionId: string): string {
+  return `/quote/${quoteId}?revision=${encodeURIComponent(revisionId)}`;
 }
 
 export function emailHtml(text: string): string {

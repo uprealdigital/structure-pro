@@ -68,12 +68,19 @@ function QuoteRow({
       }`}
     >
       <span className="flex items-center gap-2">
+        <span className="flex w-3.5 shrink-0 items-center justify-center">
+          {viewing ? <Check className="h-3.5 w-3.5 text-black" strokeWidth={2.5} aria-hidden="true" /> : null}
+        </span>
+        {current?.renders?.render_small_url ? (
+          <img
+            src={current.renders.render_small_url}
+            alt=""
+            className="h-10 w-10 shrink-0 object-contain"
+          />
+        ) : null}
         <span className="min-w-0 flex-1">
           <span className="flex min-h-[19px] items-center justify-between gap-3">
-            <span className={`flex min-w-0 items-center gap-1.5 ${viewing ? "" : "pl-5"}`}>
-              {viewing ? (
-                <Check className="h-3.5 w-3.5 shrink-0 text-black" strokeWidth={2.5} aria-hidden="true" />
-              ) : null}
+            <span className="flex min-w-0 items-center gap-1.5">
               <span className={`truncate text-xs ${viewing ? "font-bold text-gray-950" : "font-semibold text-gray-900"}`}>
                 {name}
               </span>
@@ -87,7 +94,7 @@ function QuoteRow({
               {current?.totalLabel ?? quote.totalLabel}
             </span>
           </span>
-          <span className="mt-1 flex items-center justify-between gap-3 pl-5">
+          <span className="mt-1 flex items-center justify-between gap-3">
             <span className={`inline-flex rounded px-1.5 py-0.5 text-[10px] font-medium ${statusClass[quote.status]}`}>
               {statusLabel[quote.status]}
             </span>
@@ -289,7 +296,7 @@ export function QuoteMenu({
       {open ? (
         <div
           ref={panel}
-          className="absolute top-full right-0 z-50 mt-1.5 w-80 rounded-xl border border-gray-200/80 bg-white p-2 text-gray-900 shadow-xl"
+          className="absolute top-full right-0 z-50 mt-1.5 w-96 rounded-xl border border-gray-200/80 bg-white p-2 text-gray-900 shadow-xl"
         >
           <ul role="menu" aria-label={copy.quotesMenu} className="max-h-80 space-y-1 overflow-y-auto overscroll-contain">
             {quotes.map((quote, index) => (

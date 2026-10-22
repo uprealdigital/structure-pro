@@ -108,14 +108,16 @@ export async function getQuoteCount(): Promise<number> {
   return (await getQuoteList()).length;
 }
 
-export const getQuotePortal = cache(async (id: string): Promise<QuotePortal | undefined> => {
+export const getQuotePortal = cache(async (id: string, revisionId?: string): Promise<QuotePortal | undefined> => {
   const quoteId = id.trim();
   if (!quoteId) return undefined;
   const quote = await readQuote(quoteId);
   if (!quote) return undefined;
-  const revisionId = await readActiveRevisionId(quoteId);
-  if (!revisionId) return undefined;
-  const revision = await readQuoteRevision(revisionId);
+  const requested = revisionId?.trim();
+  const activeRevisionId = await readActiveRevisionId(quoteId);
+  const chosenId = requested || activeRevisionId;
+  if (!chosenId) return undefined;
+  const revision = await readQuoteRevision(chosenId);
   if (!revision || revision.quoteId !== quoteId) return undefined;
   const [directDeals, quoteLinks] = await Promise.all([
     readDealsByQuoteId(quoteId),

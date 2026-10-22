@@ -1,6 +1,6 @@
 "use client";
 
-import { Check, ChevronDown } from "lucide-react";
+import { Calculator, Camera, Check, ChevronDown } from "lucide-react";
 import {
   useEffect,
   useLayoutEffect,
@@ -618,9 +618,13 @@ function SaveAndShareMenu({
               type="button"
               role="menuitem"
               onClick={() => choose(onShare)}
-              className="block w-full px-3 py-2 text-left text-xs font-medium whitespace-nowrap text-gray-900 hover:bg-gray-50"
+              className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs font-medium whitespace-nowrap text-gray-900 hover:bg-gray-50"
             >
-              {copy.shareDesignPreview}
+              <Camera className="h-3.5 w-3.5 shrink-0 text-gray-500" strokeWidth={1.8} aria-hidden="true" />
+              <span className="min-w-0 flex-1">{copy.shareDesignPreview}</span>
+              <span className="shrink-0 rounded bg-gray-100 px-1.5 py-0.5 text-[10px] font-medium text-gray-600">
+                {copy.photosBadge}
+              </span>
             </button>
           ) : null}
           {onReview ? (
@@ -628,9 +632,13 @@ function SaveAndShareMenu({
               type="button"
               role="menuitem"
               onClick={() => choose(onReview)}
-              className="block w-full px-3 py-2 text-left text-xs font-medium whitespace-nowrap text-gray-900 hover:bg-gray-50"
+              className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs font-medium whitespace-nowrap text-gray-900 hover:bg-gray-50"
             >
-              {copy.reviewAndSendFormalQuote}
+              <Calculator className="h-3.5 w-3.5 shrink-0 text-gray-500" strokeWidth={1.8} aria-hidden="true" />
+              <span className="min-w-0 flex-1">{copy.reviewAndSendFormalQuote}</span>
+              <span className="shrink-0 rounded bg-gray-100 px-1.5 py-0.5 text-[10px] font-medium text-gray-600">
+                {copy.quotesBadge}
+              </span>
             </button>
           ) : null}
         </div>

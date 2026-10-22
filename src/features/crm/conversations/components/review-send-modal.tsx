@@ -1,6 +1,6 @@
 "use client";
 
-import { Eye, Mail, MessageSquare, Plus, Send, X } from "lucide-react";
+import { Calculator, Mail, MessageSquare, Plus, Send, X } from "lucide-react";
 import {
   memo,
   useCallback,
@@ -244,6 +244,7 @@ const messageTokens = [
   { id: "lastName", token: reviewMessageToken.lastName, label: copy.lastNameToken, group: "customer" },
   { id: "dealName", token: reviewMessageToken.dealName, label: copy.dealNameToken, group: "deal" },
   { id: "dealPrice", token: reviewMessageToken.dealPrice, label: copy.dealPriceToken, group: "deal" },
+  { id: "quoteLink", token: reviewMessageToken.quoteLink, label: copy.quoteLinkToken, group: "quote" },
 ] as const;
 
 type MessageTokenId = (typeof messageTokens)[number]["id"];
@@ -567,6 +568,7 @@ const RichMessageEditor = memo(function RichMessageEditor({
             [
               { label: copy.variableCustomer, group: "customer" },
               { label: copy.variableDeal, group: "deal" },
+              { label: copy.variableQuote, group: "quote" },
             ] as const
           ).map((section) => (
             <div key={section.group}>
@@ -634,6 +636,7 @@ export function ReviewSendModal({
   priceLabel,
   invoiceId,
   quoteId,
+  revisionId,
   imageUrl,
   statusLabel,
   communication,
@@ -646,6 +649,7 @@ export function ReviewSendModal({
   priceLabel: string;
   invoiceId: string;
   quoteId: string;
+  revisionId: string;
   imageUrl: string;
   statusLabel: string;
   communication: QuoteCommunication | null;
@@ -765,12 +769,12 @@ export function ReviewSendModal({
                 <span className="mt-1 block text-base leading-none font-semibold text-gray-900">{priceLabel}</span>
               </div>
               <a
-                href={`/quote/${quoteId}?mode=internal`}
+                href={`/quote/${quoteId}?mode=internal&revision=${encodeURIComponent(revisionId)}`}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="inline-flex shrink-0 cursor-pointer items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 shadow-xs transition-colors hover:bg-gray-50"
               >
-                <Eye className="h-3.5 w-3.5 text-gray-500" strokeWidth={1.8} aria-hidden="true" />
+                <Calculator className="h-3.5 w-3.5 text-gray-500" strokeWidth={1.8} aria-hidden="true" />
                 <span>{copy.seeQuoteDetails}</span>
               </a>
             </div>

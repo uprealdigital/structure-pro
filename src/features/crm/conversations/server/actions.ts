@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { headers } from "next/headers";
 import { sendMail } from "@/src/common/utils/mail";
 import { demoChatId, sendTelegramFile, sendTelegramMessage } from "@/src/common/lib/telegram/telegram.service";
 import { sendSms } from "@/src/common/lib/twilio/twilio.service";
@@ -53,6 +54,7 @@ import { systemEventBody } from "@/src/features/crm/conversations/utils/formatti
 import {
   emailHtml,
   fillReviewMessage,
+  quoteRevisionPath,
   reviewMessageValues,
 } from "@/src/features/crm/conversations/utils/review-message";
 import type { Customer } from "@/src/features/crm/common/types";
@@ -291,7 +293,15 @@ export async function sendConversationQuote(input: {
   revisionId: string;
   dealId: string;
 }): Promise<
-  | { success: true; data: { revisionId: string; updatedAt: string; dealStatus: ConversationWorkspace["deal"]["status"] } }
+  | {
+      success: true;
+      data: {
+        revisionId: string;
+        updatedAt: string;
+        sharedQuoteAt: string | null;
+        dealStatus: ConversationWorkspace["deal"]["status"];
+      };
+    }
   | { error: string }
 > {
   const quoteId = input.quoteId.trim();
@@ -309,8 +319,8 @@ export async function sendConversationQuote(input: {
     if (!revision || revision.quoteId !== quoteId) return { error: "Quote revision was not found" };
     if (!deal) return { error: "Deal was not found" };
 
-    const saved =
-      revision.status === "sent" ? revision : await updateQuoteRevision(revision.id, { status: "sent" });
+    const sharedQuoteAt = new Date().toISOString();
+    const saved = await updateQuoteRevision(revision.id, { status: "sent", sharedQuoteAt });
     await markQuoteSent(quoteId);
     const dealStatus = deal.status === "lead" ? "quote_sent" : deal.status;
     if (dealStatus !== deal.status) await updateDeal(deal.id, { status: dealStatus });
@@ -321,7 +331,7 @@ export async function sendConversationQuote(input: {
     revalidatePath(`/quote/${quoteId}`);
     return {
       success: true,
-      data: { revisionId: saved.id, updatedAt: saved.updatedAt, dealStatus },
+      data: { revisionId: saved.id, updatedAt: saved.updatedAt, sharedQuoteAt: saved.sharedQuoteAt, dealStatus },
     };
   } catch (error) {
     const message = error instanceof Error ? error.message : "Could not send quote";
@@ -359,6 +369,16 @@ async function recordOutbound(conversationId: string, channel: "email" | "sms", 
   ]);
 }
 
+async function currentQuoteLink(quoteId: string, revisionId: string): Promise<string> {
+  const headerStore = await headers();
+  const host = (headerStore.get("x-forwarded-host") ?? headerStore.get("host") ?? "").split(",")[0]?.trim() ?? "";
+  const path = quoteRevisionPath(quoteId, revisionId);
+  if (!host) return path;
+  const forwarded = headerStore.get("x-forwarded-proto")?.split(",")[0]?.trim();
+  const proto = forwarded || (host.startsWith("localhost") || host.startsWith("127.0.0.1") ? "http" : "https");
+  return `${proto}://${host}${path}`;
+}
+
 async function deliverText(body: string, phone: string) {
   if (outboundTextTransport === "telegram") {
     await sendTelegramMessage(demoChatId(), body);
@@ -370,7 +390,15 @@ async function deliverText(body: string, phone: string) {
 export async function sendQuoteMessages(
   input: unknown,
 ): Promise<
-  | { success: true; data: { revisionId: string; updatedAt: string; dealStatus: ConversationWorkspace["deal"]["status"] } }
+  | {
+      success: true;
+      data: {
+        revisionId: string;
+        updatedAt: string;
+        sharedQuoteAt: string | null;
+        dealStatus: ConversationWorkspace["deal"]["status"];
+      };
+    }
   | { error: string }
 > {
   const parsed = sendQuoteMessagesSchema.safeParse(input);
@@ -408,9 +436,10 @@ export async function sendQuoteMessages(
       }
     }
 
+    const quoteLink = await currentQuoteLink(quoteId, revisionId);
     for (const customer of emailRecipients) {
       if (!customer) continue;
-      const values = reviewMessageValues(customer.fullName, dealName, dealPrice);
+      const values = reviewMessageValues(customer.fullName, dealName, dealPrice, quoteLink);
       const subject = fillReviewMessage(communication.subject, values).trim();
       const body = fillReviewMessage(communication.emailBody, values).trim();
       await sendMail({
@@ -426,14 +455,19 @@ export async function sendQuoteMessages(
 
     for (const customer of textRecipients) {
       if (!customer) continue;
-      const values = reviewMessageValues(customer.fullName, dealName, dealPrice);
+      const values = reviewMessageValues(customer.fullName, dealName, dealPrice, quoteLink);
       const body = fillReviewMessage(communication.smsBody, values).trim();
       await deliverText(body, customer.phone.trim());
       const conversationId = await conversationForCustomer(customer);
       await recordOutbound(conversationId, "sms", body);
     }
 
-    let latest: { revisionId: string; updatedAt: string; dealStatus: ConversationWorkspace["deal"]["status"] } | undefined;
+    let latest: {
+      revisionId: string;
+      updatedAt: string;
+      sharedQuoteAt: string | null;
+      dealStatus: ConversationWorkspace["deal"]["status"];
+    } | undefined;
     for (const dealId of parsed.data.dealIds) {
       const sent = await sendConversationQuote({ quoteId, revisionId, dealId });
       if ("error" in sent) return sent;
@@ -509,7 +543,7 @@ export async function markDealViewed(dealId: string): Promise<{ success: true } 
 
 export async function recordSystemActivity(input: {
   conversationId: string;
-  kind: "deal" | "quote" | "activeQuote" | "created" | "renamed";
+  kind: "deal" | "quote" | "activeQuote" | "created" | "renamed" | "savedRevision";
   name: string;
   dealId?: string;
   previousName?: string;
@@ -524,10 +558,12 @@ export async function recordSystemActivity(input: {
       input.kind !== "quote" &&
       input.kind !== "activeQuote" &&
       input.kind !== "created" &&
-      input.kind !== "renamed") ||
+      input.kind !== "renamed" &&
+      input.kind !== "savedRevision") ||
     !name ||
     (input.kind === "created" && !dealId) ||
-    (input.kind === "renamed" && !previousName)
+    (input.kind === "renamed" && !previousName) ||
+    (input.kind === "savedRevision" && !previousName)
   ) {
     return { error: "A conversation and event are required" };
   }

@@ -4,6 +4,7 @@ import { quoteSelectionsSchema } from "@/src/features/cpq/types";
 import {
   quoteCommunicationSchema,
   quoteRevisionPatchSchema,
+  quoteRevisionPhotosShareSchema,
   quoteRevisionRendersSchema,
   quoteRevisionWriteSchema,
   type QuoteCommunication,
@@ -20,8 +21,11 @@ function crm() {
 
 const revisionColumns =
   "id, quote_id, revision_number, status, config, config_changes, communication, renders, created_at, updated_at";
+const revisionColumnsWithShare =
+  "id, quote_id, revision_number, status, config, config_changes, communication, renders, shared_photos_at, shared_quote_at, created_at, updated_at";
 const revisionColumnsWithoutRenders =
   "id, quote_id, revision_number, status, config, config_changes, communication, created_at, updated_at";
+const shareMigration = "Run supabase/migrate-crm-quote-revision-shared-at.sql in the Supabase SQL editor.";
 const legacyRevisionColumns =
   "id, quote_id, revision_number, status, selections, communication, created_at, updated_at";
 const renderBucket = "quote-revision-renders";
@@ -32,6 +36,15 @@ function missingConfigColumn(error: { message: string } | null): boolean {
   const message = error.message.toLowerCase();
   return (
     (message.includes("config") || message.includes("selections")) &&
+    (message.includes("schema cache") || message.includes("could not find") || message.includes("does not exist"))
+  );
+}
+
+function missingShareColumn(error: { message: string } | null): boolean {
+  if (!error) return false;
+  const message = error.message.toLowerCase();
+  return (
+    (message.includes("shared_photos_at") || message.includes("shared_quote_at")) &&
     (message.includes("schema cache") || message.includes("could not find") || message.includes("does not exist"))
   );
 }
@@ -53,7 +66,10 @@ function rowsFrom(data: unknown): QuoteRevisionRow[] {
 async function revisionRows(
   apply: (columns: string) => PromiseLike<{ data: unknown; error: { message: string } | null }>,
 ): Promise<QuoteRevisionRow[]> {
-  const current = await apply(revisionColumns);
+  const current = await apply(revisionColumnsWithShare);
+  if (missingShareColumn(current.error)) {
+    return revisionRowsFrom(apply, revisionColumns);
+  }
   if (missingRendersColumn(current.error)) {
     return revisionRowsFrom(apply, revisionColumnsWithoutRenders);
   }
@@ -175,21 +191,53 @@ export async function readQuoteRevisions(quoteId: string): Promise<QuoteRevision
 
 export async function updateQuoteRevision(
   id: string,
-  patch: { status: unknown },
+  patch: { status: unknown; sharedQuoteAt?: unknown },
 ): Promise<QuoteRevision> {
   const next = quoteRevisionPatchSchema.parse(patch);
-  const rows = await revisionRows((columns) =>
-    crm()
-      .from("quote_revisions")
-      .update({
-        status: next.status,
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", id)
-      .select(columns)
-      .single(),
-  );
-  return savedRevision(rows[0]);
+  const updatedAt = new Date().toISOString();
+  const update: {
+    status: string;
+    updated_at: string;
+    shared_quote_at?: string;
+  } = {
+    status: next.status,
+    updated_at: updatedAt,
+  };
+  if (next.sharedQuoteAt) update.shared_quote_at = next.sharedQuoteAt;
+  if (!next.sharedQuoteAt) {
+    const rows = await revisionRows((columns) =>
+      crm().from("quote_revisions").update(update).eq("id", id).select(columns).single(),
+    );
+    return savedRevision(rows[0]);
+  }
+  const saved = await crm()
+    .from("quote_revisions")
+    .update(update)
+    .eq("id", id)
+    .select(revisionColumnsWithShare)
+    .single();
+  if (missingShareColumn(saved.error)) throw new Error(shareMigration);
+  throwIfError(saved.error);
+  return savedRevision(saved.data as QuoteRevisionRow);
+}
+
+export async function updateQuoteRevisionPhotosShare(input: {
+  revisionId: string;
+  sharedPhotosAt: string;
+}): Promise<QuoteRevision> {
+  const next = quoteRevisionPhotosShareSchema.parse(input);
+  const saved = await crm()
+    .from("quote_revisions")
+    .update({
+      shared_photos_at: next.sharedPhotosAt,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", next.revisionId)
+    .select(revisionColumnsWithShare)
+    .single();
+  if (missingShareColumn(saved.error)) throw new Error(shareMigration);
+  throwIfError(saved.error);
+  return savedRevision(saved.data as QuoteRevisionRow);
 }
 
 export async function updateQuoteRevisionCommunication(

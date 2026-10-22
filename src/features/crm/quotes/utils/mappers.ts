@@ -37,9 +37,15 @@ export type QuoteRevisionRow = {
   config_changes?: unknown;
   communication?: unknown;
   renders?: unknown;
+  shared_photos_at?: string | null;
+  shared_quote_at?: string | null;
   created_at?: string | null;
   updated_at?: string | null;
 };
+
+function savedAt(value: unknown): string | null {
+  return typeof value === "string" && value.trim() ? value : null;
+}
 
 export function toQuoteRevision(row: QuoteRevisionRow): QuoteRevision | undefined {
   const communication = quoteCommunicationSchema.safeParse(row.communication);
@@ -54,6 +60,8 @@ export function toQuoteRevision(row: QuoteRevisionRow): QuoteRevision | undefine
     configChanges: changes.success ? changes.data : {},
     communication: communication.success ? communication.data : null,
     renders: renders.success ? renders.data : null,
+    sharedPhotosAt: savedAt(row.shared_photos_at),
+    sharedQuoteAt: savedAt(row.shared_quote_at),
     createdAt: row.created_at ?? "",
     updatedAt: row.updated_at ?? row.created_at ?? "",
   });

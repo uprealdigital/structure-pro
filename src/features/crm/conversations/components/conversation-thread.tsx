@@ -22,6 +22,8 @@ export type OutgoingMessage = {
   afterPosition?: number;
   status: "queued" | "sending" | "sent" | "failed";
   error: string;
+  quoteId?: string;
+  revisionId?: string;
 };
 
 function AiStar() {
@@ -66,7 +68,7 @@ function SystemActivity({ activity }: { activity: Activity }) {
   return (
     <div className="my-2 flex flex-col items-center justify-center">
       <div className="inline-flex max-w-full flex-wrap items-center justify-center gap-x-1.5 gap-y-1 rounded-full border border-gray-200/80 bg-transparent px-3 py-1 text-center text-xs text-gray-600 shadow-xs transition-colors hover:bg-gray-50">
-        {event.kind === "created" ? (
+        {event.kind === "created" || event.kind === "savedRevision" ? (
           <CirclePlus className="h-3.5 w-3.5 shrink-0 text-gray-500" strokeWidth={1.8} aria-hidden="true" />
         ) : event.kind === "renamed" ? (
           <Pencil className="h-3.5 w-3.5 shrink-0 text-gray-500" strokeWidth={1.8} aria-hidden="true" />
@@ -77,6 +79,11 @@ function SystemActivity({ activity }: { activity: Activity }) {
           <span>
             {copy.dealWasRenamedFrom} <strong className="font-medium text-gray-900">{event.previousName}</strong>{" "}
             {copy.dealWasRenamedTo} <strong className="font-medium text-gray-900">{event.name}</strong>
+          </span>
+        ) : event.kind === "savedRevision" && event.previousName ? (
+          <span>
+            {copy.newRevision} <strong className="font-bold text-gray-900">{event.name}</strong> {copy.newRevisionFor}{" "}
+            <strong className="font-bold text-gray-900">{event.previousName}</strong>
           </span>
         ) : event.kind === "quote" && event.previousName ? (
           <span>
