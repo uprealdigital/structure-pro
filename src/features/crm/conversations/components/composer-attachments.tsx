@@ -11,7 +11,15 @@ export type ComposerAttachment = {
   progress: number;
 };
 
-function UploadProgress({ progress, onFilled }: { progress: number; onFilled: () => void }) {
+export function UploadProgress({
+  progress,
+  onFilled,
+  idle = false,
+}: {
+  progress: number;
+  onFilled: () => void;
+  idle?: boolean;
+}) {
   const radius = 11;
   const circumference = 2 * Math.PI * radius;
   const targetRef = useRef(progress);
@@ -23,6 +31,7 @@ function UploadProgress({ progress, onFilled }: { progress: number; onFilled: ()
   filledRef.current = onFilled;
 
   useEffect(() => {
+    if (idle) return;
     let frame = 0;
     let creep = 0;
     const tick = () => {
@@ -47,7 +56,7 @@ function UploadProgress({ progress, onFilled }: { progress: number; onFilled: ()
     };
     frame = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(frame);
-  }, []);
+  }, [idle]);
 
   const offset = circumference - (Math.min(100, Math.max(0, shown)) / 100) * circumference;
 
@@ -100,10 +109,12 @@ export function ComposerAttachments({
   attachments,
   onRemove,
   onUploadShown,
+  disabled = false,
 }: {
   attachments: ComposerAttachment[];
   onRemove: (id: string) => void;
   onUploadShown: (id: string) => void;
+  disabled?: boolean;
 }) {
   if (attachments.length === 0) return null;
 
@@ -115,7 +126,7 @@ export function ComposerAttachments({
         return (
           <li
             key={attachment.id}
-            className="flex w-[220px] max-w-full items-center gap-2 rounded-lg border border-gray-200 bg-white py-1.5 pr-1.5 pl-1.5"
+            className={`flex w-[220px] max-w-full items-center gap-2 rounded-lg border border-gray-200 bg-white py-1.5 pr-1.5 pl-1.5 ${disabled ? "opacity-50" : ""}`}
           >
             <AttachmentMark attachment={attachment} onUploadShown={onUploadShown} />
             <span className={`min-w-0 flex-1 ${uploading ? "opacity-50" : ""}`}>
@@ -127,6 +138,7 @@ export function ComposerAttachments({
             <button
               type="button"
               aria-label={copy.removeAttachment(name)}
+              disabled={disabled}
               onClick={() => onRemove(attachment.id)}
               className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-gray-400 hover:bg-gray-100 hover:text-gray-700 disabled:opacity-40"
             >

@@ -1,8 +1,24 @@
-import { ArrowRightLeft, CirclePlus, Pencil, Phone } from "lucide-react";
+import { ArrowRightLeft, CirclePlus, FileText, Pencil, Phone } from "lucide-react";
+import { UploadProgress } from "@/src/features/crm/conversations/components/composer-attachments";
 import { copy } from "@/src/features/crm/conversations/locales/en";
 import type { Activity, ActivityChannel } from "@/src/features/crm/conversations/types";
+import { attachmentPreviewPath, fileAttachment, imageAttachment } from "@/src/features/crm/conversations/utils/attachments";
 import { formatCallDuration, formatMessageClock, formatMessageDay, systemEventText } from "@/src/features/crm/conversations/utils/formatting";
 import { contactInitials } from "@/src/features/crm/common/utils/formatting";
+
+export type OutgoingMessage = {
+  id: string;
+  kind: "text" | "image" | "file";
+  channel: ActivityChannel;
+  text: string;
+  name: string;
+  previewUrl?: string;
+  frameHeight?: number;
+  sentAt?: string;
+  afterPosition?: number;
+  status: "queued" | "sending" | "sent" | "failed";
+  error: string;
+};
 
 function AiStar() {
   return (
@@ -107,14 +123,184 @@ function CallActivity({ activity }: { activity: Activity }) {
   );
 }
 
+function PendingProgress({ status }: { status?: OutgoingMessage["status"] }) {
+  if (status !== "queued" && status !== "sending") return null;
+  return <UploadProgress progress={0} idle={status === "queued"} onFilled={() => undefined} />;
+}
+
+function RetryButton({ onRetry }: { onRetry?: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onRetry}
+      className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full bg-white px-3 py-1.5 text-xs font-medium text-gray-900 shadow-sm"
+    >
+      {copy.retry}
+    </button>
+  );
+}
+
+export const previewFrameWidth = 224;
+const previewFrameMaxHeight = 256;
+
+export function previewFrameHeight(width: number, height: number): number {
+  if (width <= 0 || height <= 0) return previewFrameMaxHeight;
+  return Math.round(Math.min(previewFrameMaxHeight, (previewFrameWidth * height) / width));
+}
+
+function ImagePreview({
+  src,
+  name,
+  status,
+  error,
+  onRetry,
+  frameHeight,
+}: {
+  src: string;
+  name: string;
+  status?: OutgoingMessage["status"];
+  error?: string;
+  onRetry?: () => void;
+  frameHeight?: number;
+}) {
+  const pending = status === "queued" || status === "sending";
+  const height = frameHeight ?? (status ? previewFrameMaxHeight : undefined);
+  return (
+    <div className="shrink-0 text-right">
+      <div
+        className="relative shrink-0 overflow-hidden rounded-2xl rounded-tr-sm bg-gray-100"
+        style={height ? { width: previewFrameWidth, height } : undefined}
+      >
+        <img
+          src={src}
+          alt={name}
+          className={`${height ? "absolute inset-0 h-full w-full" : "block max-h-64 w-56"} object-cover ${pending ? "opacity-50" : ""}`}
+        />
+        {status ? <PendingProgress status={status} /> : null}
+        {status === "failed" ? <RetryButton onRetry={onRetry} /> : null}
+      </div>
+      {status === "failed" && error ? <p className="mt-1 text-xs text-red-600">{error}</p> : null}
+    </div>
+  );
+}
+
+function FilePreview({
+  name,
+  status,
+  error,
+  onRetry,
+}: {
+  name: string;
+  status?: OutgoingMessage["status"];
+  error?: string;
+  onRetry?: () => void;
+}) {
+  const pending = status === "queued" || status === "sending";
+  const pdf = name.toLowerCase().endsWith(".pdf");
+  return (
+    <div className="min-w-0 text-right">
+      <div className="relative inline-flex max-w-xs items-center gap-2 rounded-2xl rounded-tr-sm bg-[#121314] p-2 pr-3.5 text-left text-xs text-white">
+        <span className="relative h-9 w-9 shrink-0">
+          <span className={`flex h-full w-full items-center justify-center rounded-md ${pdf ? "bg-[#e11d2e]" : "bg-white/15"} ${pending ? "opacity-50" : ""}`}>
+            <FileText className="h-4 w-4" strokeWidth={1.8} aria-hidden="true" />
+          </span>
+          <PendingProgress status={status} />
+          {status === "failed" ? <RetryButton onRetry={onRetry} /> : null}
+        </span>
+        <p className={`min-w-0 truncate leading-relaxed ${pending ? "opacity-50" : ""}`}>{name}</p>
+      </div>
+      {status === "failed" && error ? <p className="mt-1 text-xs text-red-600">{error}</p> : null}
+    </div>
+  );
+}
+
+function messageStamp(sentAt: string | undefined, channel: ActivityChannel): string {
+  const clock = sentAt ? formatMessageClock(sentAt) : "";
+  if (!clock) return "";
+  return `${clock} • ${copy.viaChannel} ${activityChannelLabel(channel)}`;
+}
+
+function StaffText({
+  text,
+  stamp,
+  initials,
+  ai = false,
+  error,
+  onRetry,
+}: {
+  text: string;
+  stamp: string;
+  initials: string;
+  ai?: boolean;
+  error?: string;
+  onRetry?: () => void;
+}) {
+  return (
+    <div className="ml-auto flex max-w-xl items-start justify-end">
+      <div className="min-w-0 text-right">
+        <div className="rounded-2xl rounded-tr-sm bg-[#121314] p-3.5 text-left text-xs text-white shadow-xs">
+          <p className="leading-relaxed whitespace-pre-wrap">{text}</p>
+        </div>
+        {stamp ? (
+          <div className="mt-1 flex items-center justify-end gap-2 pr-1">
+            <span className="text-[10px] text-gray-400">{stamp}</span>
+          </div>
+        ) : null}
+        {error ? <p className="mt-1 text-xs text-red-600">{error}</p> : null}
+        {error && onRetry ? (
+          <button type="button" onClick={onRetry} className="mt-1 text-xs font-medium text-gray-900">
+            {copy.retry}
+          </button>
+        ) : null}
+      </div>
+      <div className="ml-2.5 flex shrink-0 flex-col items-center">
+        <div className="relative">
+          <div className="flex h-7 w-7 items-center justify-center rounded-full bg-gray-900 font-serif text-[10px] font-bold text-white">
+            {initials}
+          </div>
+          {ai ? (
+            <span className="absolute -right-0.5 -bottom-0.5 flex h-3 w-3 items-center justify-center rounded-full border border-white bg-purple-50 text-purple-700">
+              <AiStar />
+            </span>
+          ) : null}
+        </div>
+        {ai ? (
+          <span className="mt-1.5 inline-flex items-center gap-1 rounded-full border border-purple-200 bg-purple-50 px-1.5 py-0.5 text-[9px] font-medium whitespace-nowrap text-purple-700">
+            <AiStar />
+            {copy.ai}
+          </span>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+function StaffAvatar() {
+  return (
+    <div className="ml-2.5 flex shrink-0 flex-col items-center">
+      <div className="flex h-7 w-7 items-center justify-center rounded-full bg-gray-900 font-serif text-[10px] font-bold text-white">
+        {contactInitials(copy.operatorName)}
+      </div>
+    </div>
+  );
+}
+
 export function ConversationThread({
   activities,
   contactName,
+  outgoing = [],
+  onRetry,
+  imageHeights,
+  previewUrls,
 }: {
   activities: Activity[];
   contactName: string;
+  outgoing?: OutgoingMessage[];
+  onRetry?: (id: string) => void;
+  imageHeights?: ReadonlyMap<string, number>;
+  previewUrls?: ReadonlyMap<string, string>;
 }) {
-  if (activities.length === 0) {
+  if (activities.length === 0 && outgoing.length === 0) {
     return (
       <div className="flex flex-1 items-center justify-center px-6 py-10 text-xs text-gray-500">
         {copy.noMessages}
@@ -154,13 +340,96 @@ export function ConversationThread({
     return items;
   }, []);
 
+  const pieces: Array<
+    | { key: string; at: number; seq: number; row: (typeof rows)[number]; item?: undefined }
+    | { key: string; at: number; seq: number; item: OutgoingMessage; row?: undefined }
+  > = [];
+  for (const row of rows) {
+    const image = imageAttachment(row.activity.text);
+    const file = fileAttachment(row.activity.text);
+    const held =
+      (image && outgoing.some((item) => item.id === image.id && item.status !== "failed")) ||
+      (file && outgoing.some((item) => item.kind === "file" && item.id === file.id && item.status !== "failed")) ||
+      outgoing.some(
+        (item) =>
+          item.kind === "text" &&
+          item.status !== "failed" &&
+          item.text === row.activity.text &&
+          item.channel === row.activity.channel &&
+          row.activity.role === "model" &&
+          row.activity.generatedBy === "manual" &&
+          row.activity.position > (item.afterPosition ?? -1),
+      );
+    if (held) continue;
+    const at = row.activity.createdAt ? Date.parse(row.activity.createdAt) : 0;
+    pieces.push({
+      key: `activity-${row.activity.position}`,
+      at: Number.isNaN(at) ? 0 : at,
+      seq: row.activity.position,
+      row,
+    });
+  }
+  outgoing.forEach((item, index) => {
+    const at = item.sentAt ? Date.parse(item.sentAt) : Number.POSITIVE_INFINITY;
+    pieces.push({
+      key: item.id,
+      at: Number.isNaN(at) ? Number.POSITIVE_INFINITY : at,
+      seq: (item.afterPosition ?? -1) + (index + 1) / 1000,
+      item,
+    });
+  });
+  pieces.sort((left, right) => left.at - right.at || left.seq - right.seq);
+
   return (
     <ol className="flex flex-col gap-4 px-6 py-5" aria-label={copy.messages}>
-      {rows.map((row) => {
-        const { activity, fromCustomer, showDay, day, stamp } = row;
+      {pieces.map((piece) => {
+        if (piece.item) {
+          const item = piece.item;
+          return (
+            <li key={piece.key} className="flex flex-col gap-4">
+              {item.kind === "text" ? (
+                <StaffText
+                  text={item.text}
+                  stamp={messageStamp(item.sentAt, item.channel)}
+                  initials={operatorInitials}
+                  error={item.status === "failed" ? item.error : ""}
+                  onRetry={() => onRetry?.(item.id)}
+                />
+              ) : (
+                <div className="ml-auto flex max-w-xl items-start justify-end">
+                  {item.kind === "image" && item.previewUrl ? (
+                    <div>
+                      <ImagePreview
+                        src={item.previewUrl}
+                        name={item.name}
+                        status={item.status === "sent" ? undefined : item.status}
+                        error={item.error}
+                        frameHeight={item.frameHeight}
+                        onRetry={() => onRetry?.(item.id)}
+                      />
+                      <span className="mt-1 block pr-1 text-right text-[10px] text-gray-400">{messageStamp(item.sentAt, item.channel)}</span>
+                    </div>
+                  ) : (
+                    <FilePreview
+                      name={item.name}
+                      status={item.status === "sent" ? undefined : item.status}
+                      error={item.error}
+                      onRetry={() => onRetry?.(item.id)}
+                    />
+                  )}
+                  <StaffAvatar />
+                </div>
+              )}
+            </li>
+          );
+        }
+
+        const { activity, fromCustomer, showDay, day, stamp } = piece.row;
+        const image = imageAttachment(activity.text);
+        const file = fileAttachment(activity.text);
 
         return (
-          <li key={row.key} data-activity-position={activity.position} className="flex flex-col gap-4">
+          <li key={piece.key} data-activity-position={activity.position} className="flex flex-col gap-4">
             {showDay ? (
               <div className="my-2 flex items-center justify-center">
                 <span className="rounded-full bg-gray-200/60 px-3 py-1 text-[11px] font-medium text-gray-400">
@@ -184,37 +453,30 @@ export function ConversationThread({
                   {stamp ? <span className="mt-1 block pl-1 text-[10px] text-gray-400">{stamp}</span> : null}
                 </div>
               </div>
-            ) : (
+            ) : file ? (
               <div className="ml-auto flex max-w-xl items-start justify-end">
-                <div className="min-w-0 text-right">
-                  <div className="rounded-2xl rounded-tr-sm bg-[#121314] p-3.5 text-left text-xs text-white shadow-xs">
-                    <p className="leading-relaxed whitespace-pre-wrap">{activity.text}</p>
-                  </div>
-                  {stamp ? (
-                    <div className="mt-1 flex items-center justify-end gap-2 pr-1">
-                      <span className="text-[10px] text-gray-400">{stamp}</span>
-                    </div>
-                  ) : null}
-                </div>
-                <div className="ml-2.5 flex shrink-0 flex-col items-center">
-                  <div className="relative">
-                    <div className="flex h-7 w-7 items-center justify-center rounded-full bg-gray-900 font-serif text-[10px] font-bold text-white">
-                      {operatorInitials}
-                    </div>
-                    {activity.generatedBy === "ai" ? (
-                      <span className="absolute -right-0.5 -bottom-0.5 flex h-3 w-3 items-center justify-center rounded-full border border-white bg-purple-50 text-purple-700">
-                        <AiStar />
-                      </span>
-                    ) : null}
-                  </div>
-                  {activity.generatedBy === "ai" ? (
-                    <span className="mt-1.5 inline-flex items-center gap-1 rounded-full border border-purple-200 bg-purple-50 px-1.5 py-0.5 text-[9px] font-medium whitespace-nowrap text-purple-700">
-                      <AiStar />
-                      {copy.ai}
-                    </span>
-                  ) : null}
-                </div>
+                <FilePreview name={file.name} />
+                <StaffAvatar />
               </div>
+            ) : image ? (
+              <div className="ml-auto flex max-w-xl items-start justify-end">
+                <div>
+                  <ImagePreview
+                    src={previewUrls?.get(image.id) ?? attachmentPreviewPath(image.id)}
+                    name={image.name}
+                    frameHeight={imageHeights?.get(image.id)}
+                  />
+                  {stamp ? <span className="mt-1 block pr-1 text-right text-[10px] text-gray-400">{stamp}</span> : null}
+                </div>
+                <StaffAvatar />
+              </div>
+            ) : (
+              <StaffText
+                text={activity.text}
+                stamp={stamp}
+                initials={operatorInitials}
+                ai={activity.generatedBy === "ai"}
+              />
             )}
           </li>
         );

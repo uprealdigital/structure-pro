@@ -48,6 +48,7 @@ import {
 import { readCustomer, updateCustomer } from "@/src/features/crm/common/db/customer";
 import { readDealCustomersForCustomer } from "@/src/features/crm/common/db/deal-customer";
 import { readDeal, updateDeal } from "@/src/features/crm/deals/db/deal";
+import { fileActivityText, imageActivityText } from "@/src/features/crm/conversations/utils/attachments";
 import { systemEventBody } from "@/src/features/crm/conversations/utils/formatting";
 import {
   emailHtml,
@@ -189,6 +190,7 @@ export async function sendStoredAttachment(input: {
   channel: unknown;
   id: string;
   name: string;
+  image?: boolean;
 }): Promise<{ success: true; data: Activity } | { error: string }> {
   const conversationId = conversationIdSchema.safeParse(input.conversationId);
   const channel = composerChannelSchema.safeParse(input.channel);
@@ -213,7 +215,7 @@ export async function sendStoredAttachment(input: {
       {
         role: "model",
         channel: channel.data,
-        text: name,
+        text: input.image ? imageActivityText(input.id, name) : fileActivityText(input.id, name),
         generatedBy: "manual",
         createdAt: sentAt,
         readAt: sentAt,
@@ -221,7 +223,7 @@ export async function sendStoredAttachment(input: {
     ]);
     const activity = (await readActivities(conversationId.data)).at(-1);
     if (!activity) return { error: "The attachment was not saved" };
-    await deleteAttachmentFile(input.id).catch(() => undefined);
+    if (!input.image) await deleteAttachmentFile(input.id).catch(() => undefined);
     revalidatePath("/crm/conversations");
     return { success: true, data: activity };
   } catch (error) {

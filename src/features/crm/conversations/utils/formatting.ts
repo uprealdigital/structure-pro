@@ -1,6 +1,7 @@
 import { specValue } from "@/src/features/crm/common/utils/formatting";
 import { copy } from "@/src/features/crm/conversations/locales/en";
 import type { Activity } from "@/src/features/crm/conversations/types";
+import { fileAttachment, imageAttachment } from "@/src/features/crm/conversations/utils/attachments";
 
 export function revisionVersionLabel(status: "draft" | "sent", revisionNumber: number): string {
   const name = status === "sent" ? copy.sentStatus : copy.draftStatus;
@@ -135,6 +136,10 @@ export function activityPreview(activity: Activity | undefined): string {
     const timed = duration ? `${label} (${duration})` : label;
     return note ? `Call Log: ${timed} - ${note}` : `Call Log: ${timed}`;
   }
+  const image = imageAttachment(activity.text);
+  if (image) return messagePreview(image.name);
+  const file = fileAttachment(activity.text);
+  if (file) return messagePreview(file.name);
   return messagePreview(activity.text);
 }
 

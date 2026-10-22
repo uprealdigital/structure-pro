@@ -4,7 +4,7 @@ import { ArrowUpRight, Paperclip, Pencil, Phone, Plus, X } from "lucide-react";
 import { useEffect, useLayoutEffect, useRef, useState, type FormEvent } from "react";
 import { BuildingConfigurator } from "@/src/features/cpq/components/building-configurator";
 import { ComposerAttachments, type ComposerAttachment } from "@/src/features/crm/conversations/components/composer-attachments";
-import { activityChannelLabel, ConversationThread } from "@/src/features/crm/conversations/components/conversation-thread";
+import { activityChannelLabel, ConversationThread, previewFrameHeight, type OutgoingMessage } from "@/src/features/crm/conversations/components/conversation-thread";
 import { CustomerMenu } from "@/src/features/crm/conversations/components/customer-menu";
 import { DealHeading } from "@/src/features/crm/conversations/components/deal-menu";
 import { DealSummary } from "@/src/features/crm/conversations/components/deal-summary";
@@ -229,6 +229,11 @@ export function ConversationDetail({
   const [attachments, setAttachments] = useState<ComposerAttachment[]>([]);
   const attachmentsRef = useRef(attachments);
   attachmentsRef.current = attachments;
+  const [outgoing, setOutgoing] = useState<OutgoingMessage[]>([]);
+  const outgoingRef = useRef<OutgoingMessage[]>([]);
+  const heldPreviews = useRef(new Map<string, string>());
+  const previewFrames = useRef(new Map<string, number>());
+  const imageHeights = useRef(new Map<string, number>());
   const uploads = useRef(new Map<string, { abort: () => void }>());
   const droppedAttachments = useRef(new Set<string>());
   const fileInput = useRef<HTMLInputElement>(null);
@@ -250,7 +255,7 @@ export function ConversationDetail({
   }, [activities, deals, focusedDealId, onFocusDeal]);
   const activitiesRef = useRef(activities);
   activitiesRef.current = activities;
-  const [sending, setSending] = useState(false);
+  const delivering = useRef(false);
   const [sendError, setSendError] = useState("");
   const [reviewOpen, setReviewOpen] = useState(false);
   const [communicationPatches, setCommunicationPatches] = useState<Record<string, QuoteCommunication>>({});
@@ -366,10 +371,12 @@ export function ConversationDetail({
     stickToBottom.current = pane.scrollHeight - pane.scrollTop - pane.clientHeight < 80;
   }
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const pane = thread.current;
-    if (pane && stickToBottom.current) pane.scrollTop = pane.scrollHeight;
-  }, [activities.length]);
+    if (!pane || !stickToBottom.current) return;
+    const distance = pane.scrollHeight - pane.scrollTop - pane.clientHeight;
+    if (distance > 1) pane.scrollTop = pane.scrollHeight;
+  }, [activities.length, outgoing.length]);
 
   useEffect(() => {
     if (!editing) return;
@@ -630,13 +637,18 @@ export function ConversationDetail({
         pendingUploads.get(item.id)?.abort();
         void discardStoredAttachment(item.id);
       }
+      for (const item of outgoingRef.current) {
+        if (item.previewUrl) URL.revokeObjectURL(item.previewUrl);
+      }
+      for (const url of heldPreviews.current.values()) URL.revokeObjectURL(url);
     };
   }, []);
 
   function appendActivity(activity: Activity) {
-    setActivities((current) =>
-      current.some((item) => item.position === activity.position) ? current : [...current, activity],
-    );
+    setActivities((current) => {
+      if (current.some((item) => item.position === activity.position)) return current;
+      return [...current, activity].sort((left, right) => left.position - right.position);
+    });
   }
 
   function addAttachments(list: FileList | null) {
@@ -648,6 +660,16 @@ export function ConversationDetail({
       return { id, file, previewUrl, phase: "uploading" as const, progress: 0 };
     });
     setAttachments((current) => [...current, ...next]);
+    for (const item of next) {
+      if (!item.previewUrl) continue;
+      const img = new Image();
+      img.onload = () => {
+        if (img.naturalWidth > 0 && img.naturalHeight > 0) {
+          previewFrames.current.set(item.id, previewFrameHeight(img.naturalWidth, img.naturalHeight));
+        }
+      };
+      img.src = item.previewUrl;
+    }
     for (const item of next) {
       const upload = uploadComposerAttachment(item.id, item.file, (progress) => {
         setAttachments((current) =>
@@ -693,42 +715,123 @@ export function ConversationDetail({
     });
   }
 
+  function replaceOutgoing(next: OutgoingMessage[]) {
+    outgoingRef.current = next;
+    setOutgoing(next);
+  }
+
+  async function pumpOutgoing() {
+    if (delivering.current || !threadId) return;
+    delivering.current = true;
+    while (true) {
+      const item = outgoingRef.current.find((row) => row.status === "queued");
+      if (!item) break;
+      replaceOutgoing(
+        outgoingRef.current.map((row) => (row.id === item.id ? { ...row, status: "sending", error: "" } : row)),
+      );
+      const result =
+        item.kind === "text"
+          ? await sendManualActivity({ conversationId: threadId, text: item.text, channel: item.channel })
+          : await sendStoredAttachment({
+              conversationId: threadId,
+              channel: item.channel,
+              id: item.id,
+              name: item.name || copy.attachment,
+              image: item.kind === "image",
+            });
+      if ("error" in result) {
+        replaceOutgoing(
+          outgoingRef.current.map((row) => (row.id === item.id ? { ...row, status: "failed", error: result.error } : row)),
+        );
+        delivering.current = false;
+        return;
+      }
+      appendActivity(result.data);
+      if (item.kind === "text") continue;
+      replaceOutgoing(
+        outgoingRef.current.map((row) => (row.id === item.id ? { ...row, status: "sent", error: "" } : row)),
+      );
+    }
+    delivering.current = false;
+  }
+
+  function retryOutgoing(id: string) {
+    const item = outgoingRef.current.find((row) => row.id === id && row.status === "failed");
+    if (!item) return;
+    replaceOutgoing(
+      outgoingRef.current.map((row) => (row.id === id ? { ...row, status: "queued", error: "" } : row)),
+    );
+    void pumpOutgoing();
+  }
+
   async function submitMessage(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const text = draft.trim();
     const pending = attachmentsRef.current.filter((item) => item.phase === "ready");
     const uploading = attachmentsRef.current.some((item) => item.phase === "uploading");
-    if (sending || uploading || !threadId || (!text && pending.length === 0)) return;
-    setSending(true);
-    setSendError("");
+    if (uploading || !threadId || (!text && pending.length === 0)) return;
+    const sentAt = new Date().toISOString();
+    const afterPosition = activitiesRef.current.reduce((max, activity) => Math.max(max, activity.position), -1);
+    const batch: OutgoingMessage[] = [];
     if (text) {
-      const result = await sendManualActivity({ conversationId: threadId, text, channel });
-      if ("error" in result) {
-        setSending(false);
-        setSendError(copy.sendFailed);
-        return;
-      }
-      appendActivity(result.data);
-      setDraft("");
+      batch.push({
+        id: crypto.randomUUID(),
+        kind: "text",
+        channel,
+        text,
+        name: "",
+        sentAt,
+        afterPosition,
+        status: "queued",
+        error: "",
+      });
     }
     for (const item of pending) {
-      const result = await sendStoredAttachment({
-        conversationId: threadId,
-        channel,
+      batch.push({
         id: item.id,
+        kind: item.file.type.startsWith("image/") ? "image" : "file",
+        channel,
+        text: "",
         name: item.file.name || copy.attachment,
+        previewUrl: item.previewUrl,
+        sentAt,
+        afterPosition,
+        status: "queued",
+        error: "",
       });
-      if ("error" in result) {
-        setSending(false);
-        setSendError(result.error);
-        return;
-      }
-      appendActivity(result.data);
-      droppedAttachments.current.add(item.id);
-      if (item.previewUrl) URL.revokeObjectURL(item.previewUrl);
-      setAttachments((current) => current.filter((row) => row.id !== item.id));
     }
-    setSending(false);
+    const measured: Record<string, number> = {};
+    const pendingFrames = batch.filter((item) => {
+      if (item.kind !== "image" || !item.previewUrl) return false;
+      heldPreviews.current.set(item.id, item.previewUrl);
+      const known = previewFrames.current.get(item.id);
+      if (known) measured[item.id] = known;
+      return !known;
+    });
+    await Promise.all(
+      pendingFrames.map(async (item) => {
+        const img = new Image();
+        img.src = item.previewUrl ?? "";
+        try {
+          await img.decode();
+        } catch {
+          return;
+        }
+        if (img.naturalWidth <= 0 || img.naturalHeight <= 0) return;
+        measured[item.id] = previewFrameHeight(img.naturalWidth, img.naturalHeight);
+      }),
+    );
+    for (const item of batch) {
+      if (item.kind !== "image") continue;
+      item.frameHeight = measured[item.id] ?? previewFrameHeight(0, 0);
+      imageHeights.current.set(item.id, item.frameHeight);
+    }
+    const ids = new Set(pending.map((item) => item.id));
+    setAttachments((current) => current.filter((row) => !ids.has(row.id)));
+    setDraft("");
+    replaceOutgoing([...outgoingRef.current, ...batch]);
+    setSendError("");
+    void pumpOutgoing();
   }
 
   async function rename(name: string) {
@@ -788,10 +891,7 @@ export function ConversationDetail({
   }
 
   const uploadingAttachment = attachments.some((item) => item.phase === "uploading");
-  const canSend =
-    !sending &&
-    !uploadingAttachment &&
-    (Boolean(draft.trim()) || attachments.some((item) => item.phase === "ready"));
+  const canSend = !uploadingAttachment && (Boolean(draft.trim()) || attachments.some((item) => item.phase === "ready"));
 
   function composerActions() {
     return (
@@ -803,7 +903,7 @@ export function ConversationDetail({
             aria-expanded={channelOpen}
             aria-label={copy.messageSource}
             onClick={() => setChannelOpen((open) => !open)}
-            className="inline-flex items-center gap-1.5 rounded-md bg-transparent px-2.5 py-1.5 text-xs font-semibold text-gray-800 transition-colors hover:bg-gray-100"
+            className="inline-flex items-center gap-1.5 rounded-md bg-transparent px-2.5 py-1.5 text-xs font-semibold text-gray-800 transition-colors hover:bg-gray-100 disabled:opacity-50"
           >
             <ChannelIcon channel={channel} className="h-3.5 w-3.5 shrink-0 text-gray-900" />
             <span className="font-medium">{activityChannelLabel(channel)}</span>
@@ -843,7 +943,8 @@ export function ConversationDetail({
         <button
           type="submit"
           disabled={!canSend}
-          className={`inline-flex items-center gap-1.5 rounded px-3 py-1.5 text-xs font-medium text-white shadow-sm transition-colors ${
+          aria-label={copy.send}
+          className={`inline-flex min-w-16 items-center justify-center gap-1.5 rounded px-3 py-1.5 text-xs font-medium text-white shadow-sm transition-colors disabled:opacity-100 ${
             canSend ? "bg-gray-900 hover:bg-black" : "bg-gray-300"
           }`}
         >
@@ -987,8 +1088,15 @@ export function ConversationDetail({
       </div>
 
       <div className="relative flex min-h-0 flex-1 flex-col">
-        <div ref={thread} className="min-h-0 flex-1 overflow-y-auto" onScroll={onThreadScroll}>
-          <ConversationThread activities={activities} contactName={workspace.customer.fullName} />
+        <div ref={thread} className="min-h-0 flex-1 overflow-y-auto [overflow-anchor:none]" onScroll={onThreadScroll}>
+          <ConversationThread
+            activities={activities}
+            contactName={workspace.customer.fullName}
+            outgoing={outgoing}
+            onRetry={retryOutgoing}
+            imageHeights={imageHeights.current}
+            previewUrls={heldPreviews.current}
+          />
         </div>
 
       <form
@@ -1025,7 +1133,7 @@ export function ConversationDetail({
               title={copy.attach}
               aria-label={copy.attach}
               onClick={() => fileInput.current?.click()}
-              className="mb-1.5 ml-2 shrink-0 rounded p-1.5 text-gray-400 transition-colors hover:text-gray-700"
+              className="mb-1.5 ml-2 shrink-0 rounded p-1.5 text-gray-400 transition-colors hover:text-gray-700 disabled:opacity-50"
             >
               <Paperclip className="h-4 w-4" aria-hidden="true" />
             </button>
@@ -1048,7 +1156,11 @@ export function ConversationDetail({
           </div>
           {attachments.length > 0 ? (
             <>
-              <ComposerAttachments attachments={attachments} onRemove={removeAttachment} onUploadShown={showUploadFinished} />
+              <ComposerAttachments
+                attachments={attachments}
+                onRemove={removeAttachment}
+                onUploadShown={showUploadFinished}
+              />
               <div className="flex justify-end">{composerActions()}</div>
             </>
           ) : null}
