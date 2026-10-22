@@ -5,15 +5,33 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { copy } from "@/src/features/crm/conversations/locales/en";
 import type { ConversationQuote, ConversationQuoteRevision } from "@/src/features/crm/conversations/types";
 import {
-  formatDealMenuDate,
   formatRevisionDate,
   formatUpdatedAgo,
   quoteMenuName,
   revisionMenuLabel,
 } from "@/src/features/crm/conversations/utils/formatting";
+import type { QuoteRecordStatus } from "@/src/features/crm/quotes/types";
 import { specValue } from "@/src/features/crm/common/utils/formatting";
 
 const sectionTitle = "text-sm font-bold tracking-wider text-gray-900 uppercase";
+
+const statusLabel: Record<QuoteRecordStatus, string> = {
+  draft: copy.quoteStatusDraft,
+  sent: copy.quoteStatusSent,
+  signed: copy.quoteStatusSigned,
+  declined: copy.quoteStatusDeclined,
+  expired: copy.quoteStatusExpired,
+  voided: copy.quoteStatusVoided,
+};
+
+const statusClass: Record<QuoteRecordStatus, string> = {
+  draft: "bg-gray-100 text-gray-600",
+  sent: "bg-blue-50 text-blue-600",
+  signed: "bg-emerald-50 text-emerald-700",
+  declined: "bg-red-50 text-red-600",
+  expired: "bg-gray-100 text-gray-500",
+  voided: "bg-gray-100 text-gray-400",
+};
 
 function activeRevision(quote: ConversationQuote): ConversationQuoteRevision | undefined {
   return (
@@ -36,64 +54,79 @@ function QuoteRow({
   onSelect: () => void;
 }) {
   const current = activeRevision(quote);
-  const dated = current?.createdAt || current?.updatedAt || "";
 
   return (
     <button
       type="button"
       role="menuitem"
       aria-current={viewing ? "true" : undefined}
-      aria-expanded={viewing ? revisionsOpen : undefined}
-      aria-haspopup={viewing ? "menu" : undefined}
+      aria-expanded={revisionsOpen}
+      aria-haspopup="menu"
       onClick={onSelect}
       className={`w-full rounded-lg p-2.5 text-left transition-colors ${
         viewing ? "border border-gray-200/60 bg-gray-50" : "border border-transparent hover:bg-gray-50"
       }`}
     >
-      <span className="flex items-center justify-between gap-3">
-        <span className={`flex min-w-0 items-center gap-1.5 ${viewing ? "" : "pl-5"}`}>
-          {viewing ? (
-            <Check className="h-3.5 w-3.5 shrink-0 text-black" strokeWidth={2.5} aria-hidden="true" />
-          ) : null}
-          <span className={`truncate text-xs ${viewing ? "font-bold text-gray-950" : "font-semibold text-gray-900"}`}>
-            {name}
-          </span>
-          {viewing ? (
-            <span className="shrink-0 rounded-full bg-gray-100 px-1.5 py-0.5 text-[10px] font-medium text-gray-600">
-              {copy.viewing}
+      <span className="flex items-center gap-2">
+        <span className="min-w-0 flex-1">
+          <span className="flex min-h-[19px] items-center justify-between gap-3">
+            <span className={`flex min-w-0 items-center gap-1.5 ${viewing ? "" : "pl-5"}`}>
+              {viewing ? (
+                <Check className="h-3.5 w-3.5 shrink-0 text-black" strokeWidth={2.5} aria-hidden="true" />
+              ) : null}
+              <span className={`truncate text-xs ${viewing ? "font-bold text-gray-950" : "font-semibold text-gray-900"}`}>
+                {name}
+              </span>
+              {viewing ? (
+                <span className="shrink-0 rounded-full bg-gray-100 px-1.5 py-0.5 text-[10px] font-medium text-gray-600">
+                  {copy.active}
+                </span>
+              ) : null}
             </span>
-          ) : null}
-          {viewing ? (
-            <ChevronRight
-              className={`h-3 w-3 shrink-0 text-gray-400 transition-transform ${revisionsOpen ? "rotate-180" : ""}`}
-              aria-hidden="true"
-            />
-          ) : null}
+            <span className={`shrink-0 text-xs font-bold ${viewing ? "text-gray-950" : "text-gray-900"}`}>
+              {current?.totalLabel ?? quote.totalLabel}
+            </span>
+          </span>
+          <span className="mt-1 flex items-center justify-between gap-3 pl-5">
+            <span className={`inline-flex rounded px-1.5 py-0.5 text-[10px] font-medium ${statusClass[quote.status]}`}>
+              {statusLabel[quote.status]}
+            </span>
+            <span className="text-[11px] font-medium text-gray-500">
+              {current ? revisionMenuLabel(current.revisionNumber) : ""}
+            </span>
+          </span>
         </span>
-        <span className={`shrink-0 text-xs font-bold ${viewing ? "text-gray-950" : "text-gray-900"}`}>
-          {current?.totalLabel ?? quote.totalLabel}
-        </span>
-      </span>
-      <span className="mt-1 flex items-center justify-between gap-3 pl-5 text-[11px] font-medium text-gray-500">
-        <span>{current ? revisionMenuLabel(current.revisionNumber) : ""}</span>
-        <span>{formatDealMenuDate(dated)}</span>
+        <ChevronRight className="h-3.5 w-3.5 shrink-0 text-gray-400" aria-hidden="true" />
       </span>
     </button>
   );
 }
 
+function revealRevision(container: HTMLElement, row: HTMLElement) {
+  const containerRect = container.getBoundingClientRect();
+  const rowRect = row.getBoundingClientRect();
+  const above = containerRect.top - rowRect.top;
+  const below = rowRect.bottom - containerRect.bottom;
+  if (above <= 1 && below <= 1) return;
+  container.scrollTop += above > 1 ? -above : below;
+}
+
 function RevisionFlyout({
-  name,
   quote,
   side,
   onSelectRevision,
 }: {
-  name: string;
   quote: ConversationQuote;
   side: "left" | "right";
   onSelectRevision: (id: string) => void;
 }) {
+  const list = useRef<HTMLUListElement>(null);
+  const activeRow = useRef<HTMLButtonElement>(null);
   const revisions = [...quote.revisions].sort((left, right) => right.revisionNumber - left.revisionNumber);
+
+  useLayoutEffect(() => {
+    if (list.current && activeRow.current) revealRevision(list.current, activeRow.current);
+  }, [quote.id, quote.activeRevisionId, revisions.length]);
 
   return (
     <div
@@ -103,19 +136,14 @@ function RevisionFlyout({
         side === "left" ? "right-full mr-2" : "left-full ml-2"
       }`}
     >
-      <div className="flex items-center justify-between gap-3 px-2.5 py-1.5">
-        <span className="truncate text-[11px] font-bold tracking-wider text-gray-900 uppercase">{name}</span>
-        <span className="shrink-0 rounded-full bg-gray-100 px-2 py-0.5 text-[10px] font-medium text-gray-600">
-          {copy.versionCount(revisions.length)}
-        </span>
-      </div>
-      <ul className="max-h-[70vh] space-y-1 overflow-y-auto overscroll-contain">
+      <ul ref={list} className="max-h-[70vh] space-y-1 overflow-y-auto overscroll-contain">
         {revisions.map((revision) => {
           const active = revision.id === quote.activeRevisionId;
           const dated = revision.createdAt || revision.updatedAt;
           return (
             <li key={revision.id}>
               <button
+                ref={active ? activeRow : undefined}
                 type="button"
                 role="menuitem"
                 aria-current={active ? "true" : undefined}
@@ -186,11 +214,10 @@ export function QuoteMenu({
   const viewing = quotes[viewingIndex];
   const current = viewing ? activeRevision(viewing) : undefined;
   const flyout = quotes.find((quote) => quote.id === revisionsQuoteId);
-  const flyoutIndex = flyout ? quotes.findIndex((quote) => quote.id === flyout.id) : -1;
 
   useEffect(() => {
-    setRevisionsQuoteId(null);
-  }, [viewingQuoteId]);
+    if (open) setRevisionsQuoteId(viewingQuoteId);
+  }, [open, viewingQuoteId]);
 
   useEffect(() => {
     function close(event: MouseEvent) {
@@ -200,12 +227,9 @@ export function QuoteMenu({
       }
     }
     function onKey(event: KeyboardEvent) {
-      if (event.key !== "Escape") return;
-      if (revisionsQuoteId) {
-        setRevisionsQuoteId(null);
-        return;
-      }
+      if (event.key !== "Escape" || !open) return;
       setOpen(false);
+      setRevisionsQuoteId(null);
     }
     document.addEventListener("mousedown", close);
     document.addEventListener("keydown", onKey);
@@ -213,7 +237,7 @@ export function QuoteMenu({
       document.removeEventListener("mousedown", close);
       document.removeEventListener("keydown", onKey);
     };
-  }, [revisionsQuoteId]);
+  }, [open]);
 
   useLayoutEffect(() => {
     if (!open || !flyout || !panel.current) return;
@@ -232,17 +256,32 @@ export function QuoteMenu({
         aria-label={copy.quotesMenu}
         onClick={() => {
           setOpen((value) => {
-            if (value) setRevisionsQuoteId(null);
-            return !value;
+            if (value) {
+              setRevisionsQuoteId(null);
+              return false;
+            }
+            setRevisionsQuoteId(viewingQuoteId);
+            return true;
           });
         }}
-        className="inline-flex w-full cursor-pointer items-center justify-between gap-1.5 rounded-full bg-gray-50/90 px-2.5 py-1 text-[11px] font-semibold whitespace-nowrap text-gray-950 shadow-xs transition-colors hover:bg-gray-100"
+        className="flex w-full cursor-pointer items-center gap-1 rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 text-left whitespace-nowrap shadow-xs transition-colors hover:bg-gray-50"
       >
-        <span>
-          {quoteMenuName(viewingIndex)} - {current?.totalLabel ?? viewing.totalLabel}
+        <span className="flex min-w-0 flex-1 flex-col gap-1">
+          <span className="flex items-center justify-between gap-4">
+            <span className="text-xs font-semibold text-gray-950">{quoteMenuName(viewingIndex)}</span>
+            <span className="text-xs font-semibold text-gray-950">{current?.totalLabel ?? viewing.totalLabel}</span>
+          </span>
+          <span className="flex items-center justify-between gap-3">
+            <span className={`inline-flex rounded px-1.5 py-0.5 text-[10px] font-medium ${statusClass[viewing.status]}`}>
+              {statusLabel[viewing.status]}
+            </span>
+            <span className="text-[11px] font-medium text-gray-500">
+              {current ? revisionMenuLabel(current.revisionNumber) : ""}
+            </span>
+          </span>
         </span>
         <ChevronDown
-          className={`h-3 w-3 shrink-0 text-gray-500 transition-transform duration-200 ${open ? "rotate-180" : ""}`}
+          className={`h-3 w-3 shrink-0 text-gray-400 transition-transform duration-200 ${open ? "rotate-180" : ""}`}
           aria-hidden="true"
         />
       </button>
@@ -262,19 +301,19 @@ export function QuoteMenu({
                   revisionsOpen={revisionsQuoteId === quote.id}
                   onSelect={() => {
                     if (quote.id === viewingQuoteId) {
-                      setRevisionsQuoteId((currentId) => (currentId === quote.id ? null : quote.id));
+                      setRevisionsQuoteId(quote.id);
                       return;
                     }
-                    setRevisionsQuoteId(null);
                     onViewQuote(quote.id);
+                    setOpen(false);
+                    setRevisionsQuoteId(null);
                   }}
                 />
               </li>
             ))}
           </ul>
-          {flyout && flyoutIndex >= 0 ? (
+          {flyout ? (
             <RevisionFlyout
-              name={quoteMenuName(flyoutIndex)}
               quote={flyout}
               side={side}
               onSelectRevision={(id) => {

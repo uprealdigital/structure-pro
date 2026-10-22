@@ -3,6 +3,7 @@
 import { ArrowUpRight, Paperclip, Pencil, Phone, Plus, X } from "lucide-react";
 import { useEffect, useLayoutEffect, useRef, useState, type FormEvent } from "react";
 import { BuildingConfigurator } from "@/src/features/cpq/components/building-configurator";
+import type { QuoteRevisionRenderFiles } from "@/src/features/cpq/components/building-scene";
 import { ComposerAttachments, type ComposerAttachment } from "@/src/features/crm/conversations/components/composer-attachments";
 import { DesignPreviewModal } from "@/src/features/crm/conversations/components/design-preview-modal";
 import { activityChannelLabel, ConversationThread, previewFrameHeight, type OutgoingMessage } from "@/src/features/crm/conversations/components/conversation-thread";
@@ -26,7 +27,7 @@ import type {
 } from "@/src/features/crm/conversations/types";
 import { uploadComposerAttachment } from "@/src/features/crm/conversations/utils/upload-attachment";
 import { previousSentRevision } from "@/src/features/crm/conversations/utils/design-preview";
-import { productTitle, revisionMenuLabel, systemEventText } from "@/src/features/crm/conversations/utils/formatting";
+import { productTitle, quoteMenuName, revisionMenuLabel, systemEventText } from "@/src/features/crm/conversations/utils/formatting";
 import {
   conversationQuoteFromSelections,
   conversationQuoteWithActiveRevision,
@@ -440,8 +441,12 @@ export function ConversationDetail({
     await deleteConversationActivity({ conversationId: workspace.id, position: activity.position });
   }
 
-  async function recordNamedActivity(kind: "deal" | "quote", name: string): Promise<Activity | null> {
-    const result = await recordSystemActivity({ conversationId: workspace.id, kind, name });
+  async function recordNamedActivity(
+    kind: "deal" | "quote" | "activeQuote",
+    name: string,
+    previousName?: string,
+  ): Promise<Activity | null> {
+    const result = await recordSystemActivity({ conversationId: workspace.id, kind, name, previousName });
     if ("error" in result) return null;
     return result.data;
   }
@@ -559,7 +564,7 @@ export function ConversationDetail({
     );
   }
 
-  async function selectRevision(revisionId: string) {
+  function selectRevision(revisionId: string) {
     const quote = focused.quote;
     if (!quote) return;
     if (quote.activeRevisionId === revisionId) {
@@ -575,44 +580,62 @@ export function ConversationDetail({
     setRevisionError("");
     setQuotePatches((current) => ({ ...current, [next.id]: next }));
     setSelectedRevisionId(revisionId);
-    const result = await activateQuoteRevision({ quoteId: quote.id, revisionId });
-    if ("error" in result) {
+    const quoteIndex = listedQuotes.findIndex((item) => item.id === quote.id);
+    const revisionName = revisionMenuLabel(revision.revisionNumber);
+    const quoteName = quoteIndex >= 0 ? quoteMenuName(quoteIndex) : "";
+    const restore = () => {
       setQuotePatches((current) => {
+        if (current[quote.id]?.activeRevisionId !== revisionId) return current;
         const restored = { ...current };
         if (previousPatch) restored[quote.id] = previousPatch;
         else delete restored[quote.id];
         return restored;
       });
-      setSelectedRevisionId(previousId);
-      setRevisionError(copy.activateRevisionError);
-      return;
-    }
-    const name = revisionMenuLabel(revision.revisionNumber);
+      setSelectedRevisionId((current) => (current === revisionId ? previousId : current));
+    };
     showNotice(
-      copy.activeQuoteSwitchedToast(name),
+      quoteName ? copy.revisionSwitchedToast(quoteName, revisionName) : copy.activeQuoteSwitchedToast(revisionName),
       async () => {
-        const undone = await activateQuoteRevision({ quoteId: quote.id, revisionId: previousId });
-        if ("error" in undone) return false;
-        setQuotePatches((current) => {
-          const restored = { ...current };
-          if (previousPatch) restored[quote.id] = previousPatch;
-          else delete restored[quote.id];
-          return restored;
-        });
-        setSelectedRevisionId(previousId);
+        restore();
         return true;
       },
-      () => recordNamedActivity("quote", name),
+      async () => {
+        const result = await activateQuoteRevision({ quoteId: quote.id, revisionId });
+        if ("error" in result) {
+          restore();
+          setRevisionError(copy.activateRevisionError);
+          return null;
+        }
+        return recordNamedActivity("quote", revisionName, quoteName || undefined);
+      },
     );
   }
 
   function viewQuote(quoteId: string) {
     const dealId = focusedOption?.id;
-    if (!dealId || quoteId === viewingQuote?.id) return;
+    const previousId = viewingQuote?.id;
+    if (!dealId || !previousId || quoteId === previousId) return;
+    const quoteIndex = listedQuotes.findIndex((item) => item.id === quoteId);
+    const quoteName = quoteIndex >= 0 ? quoteMenuName(quoteIndex) : "";
+    const previousRevisionId = selectedRevisionId;
     setViewingQuoteIds((current) => ({ ...current, [dealId]: quoteId }));
     setSelectedRevisionId(null);
     setRevisionError("");
     setEditing(false);
+    if (!quoteName) return;
+    showNotice(
+      copy.activeQuoteChangedToast(quoteName),
+      async () => {
+        setViewingQuoteIds((current) => {
+          if (current[dealId] !== quoteId) return current;
+          return { ...current, [dealId]: previousId };
+        });
+        setSelectedRevisionId((current) => (current == null ? previousRevisionId : current));
+        setEditing(false);
+        return true;
+      },
+      () => recordNamedActivity("activeQuote", quoteName),
+    );
   }
 
   async function addQuote() {
@@ -628,7 +651,7 @@ export function ConversationDetail({
       return;
     }
     const next = conversationQuoteFromSelections(
-      { ...quote, id: result.data.id, invoiceId: result.data.invoiceId, revisions: [] },
+      { ...quote, id: result.data.id, invoiceId: result.data.invoiceId, revisions: [], status: "draft" },
       quote.selections,
       {
         id: result.data.revisionId,
@@ -655,10 +678,10 @@ export function ConversationDetail({
     setEditing((open) => !open);
   }
 
-  async function saveFocusedQuote(selections: QuoteSelections) {
+  async function saveFocusedQuote(selections: QuoteSelections, renders: QuoteRevisionRenderFiles) {
     const quote = focused.quote;
     if (!quote) throw new Error(copy.saveQuoteError);
-    const result = await saveQuoteSelections({ quoteId: quote.id, selections });
+    const result = await saveQuoteSelections({ quoteId: quote.id, selections, renders });
     if ("error" in result) throw new Error(result.error);
     const next = conversationQuoteFromSelections(quote, selections, result.data);
     if (!next) throw new Error(copy.saveQuoteError);
@@ -667,13 +690,13 @@ export function ConversationDetail({
     setEditing(false);
   }
 
-  async function saveAndShareFocusedQuote(selections: QuoteSelections) {
-    await saveFocusedQuote(selections);
+  async function saveAndShareFocusedQuote(selections: QuoteSelections, renders: QuoteRevisionRenderFiles) {
+    await saveFocusedQuote(selections, renders);
     setDesignPreviewOpen(true);
   }
 
-  async function saveAndReviewFocusedQuote(selections: QuoteSelections) {
-    await saveFocusedQuote(selections);
+  async function saveAndReviewFocusedQuote(selections: QuoteSelections, renders: QuoteRevisionRenderFiles) {
+    await saveFocusedQuote(selections, renders);
     setReviewOpen(true);
   }
 
@@ -1096,7 +1119,7 @@ export function ConversationDetail({
                 <div className="relative flex h-16 w-20 shrink-0 items-center justify-center overflow-hidden rounded-lg">
                   <img
                     alt={title || copy.quote}
-                    src={viewed.imageUrl}
+                    src={viewed.renders?.render_small_url || viewed.imageUrl}
                     className="h-full w-full object-contain p-0.5"
                   />
                 </div>
@@ -1115,10 +1138,10 @@ export function ConversationDetail({
                       type="button"
                       aria-pressed={editing}
                       onClick={toggleEditing}
-                      className={`inline-flex items-center justify-center gap-1 rounded-md border bg-white px-2.5 py-1 text-xs font-medium whitespace-nowrap shadow-xs transition-colors ${
+                      className={`inline-flex items-center justify-center gap-1 rounded-md border bg-white px-2.5 py-1 text-xs font-medium whitespace-nowrap transition-colors ${
                         editing
-                          ? "border-red-500 text-red-600 hover:bg-red-50"
-                          : "border-gray-300 text-gray-700 hover:bg-gray-50"
+                          ? "border-red-500 text-red-600 shadow-xs hover:bg-red-50"
+                          : "border-transparent text-gray-700 hover:bg-gray-50"
                       }`}
                     >
                       {editing ? (
@@ -1291,7 +1314,7 @@ export function ConversationDetail({
           priceLabel={viewed.totalLabel}
           invoiceId={focused.quote.invoiceId}
           quoteId={focused.quote.id}
-          imageUrl={viewed.imageUrl}
+          imageUrl={viewed.renders?.render_small_url || viewed.imageUrl}
           statusLabel={revisionStatusLabel(viewed)}
           communication={communicationPatches[viewed.id] ?? viewed.communication}
           onSave={saveViewedCommunication}

@@ -5,6 +5,9 @@ import { customerSchema } from "@/src/features/crm/common/types";
 export const quoteStatusSchema = z.enum(["draft", "sent", "contract"]);
 export type QuoteStatus = z.infer<typeof quoteStatusSchema>;
 
+export const quoteRecordStatusSchema = z.enum(["draft", "sent", "signed", "declined", "expired", "voided"]);
+export type QuoteRecordStatus = z.infer<typeof quoteRecordStatusSchema>;
+
 export const quoteCustomerSchema = z.object({
   id: z.string(),
   name: z.string(),
@@ -39,6 +42,9 @@ export const quoteCommunicationSchema = z.object({
 
 export type QuoteCommunication = z.infer<typeof quoteCommunicationSchema>;
 
+export const configChangesSchema = quoteSelectionsSchema.partial();
+export type ConfigChanges = z.infer<typeof configChangesSchema>;
+
 export const quoteRevisionWriteSchema = z.object({
   quoteId: z.string().trim().min(1),
   selections: quoteSelectionsSchema,
@@ -64,13 +70,37 @@ export const createDealQuoteSchema = z.object({
   selections: quoteSelectionsSchema,
 });
 
+export const quoteRevisionRendersSchema = z.object({
+  render_full_url: z.string().url(),
+  render_medium_url: z.string().url(),
+  render_small_url: z.string().url(),
+});
+
+export type QuoteRevisionRenders = z.infer<typeof quoteRevisionRendersSchema>;
+
+const maxRenderBytes = 8 * 1024 * 1024;
+
+export const quoteRevisionRenderFileSchema = z
+  .instanceof(Blob)
+  .refine((file) => file.size > 0 && file.size <= maxRenderBytes, "A render image is required");
+
+export const quoteRevisionRenderFilesSchema = z.object({
+  full: quoteRevisionRenderFileSchema,
+  medium: quoteRevisionRenderFileSchema,
+  small: quoteRevisionRenderFileSchema,
+});
+
+export type QuoteRevisionRenderFiles = z.infer<typeof quoteRevisionRenderFilesSchema>;
+
 export const quoteRevisionSchema = z.object({
   id: z.string().min(1),
   quoteId: z.string().min(1),
   revisionNumber: z.number().int().positive(),
   status: quoteRevisionStatusSchema,
   selections: quoteSelectionsSchema,
+  configChanges: configChangesSchema.default({}),
   communication: quoteCommunicationSchema.nullable(),
+  renders: quoteRevisionRendersSchema.nullable().default(null),
   createdAt: z.string(),
   updatedAt: z.string(),
 });
@@ -122,6 +152,7 @@ export const quotePortalSchema = z.object({
   versionLabel: z.string().min(1),
   dateLabel: z.string(),
   imageUrl: z.string().min(1),
+  renders: quoteRevisionRendersSchema.nullable().default(null),
   monthlyLabel: z.string(),
   monthsLabel: z.string(),
   lines: z.array(quotePortalLineSchema),

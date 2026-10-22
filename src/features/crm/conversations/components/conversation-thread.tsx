@@ -1,5 +1,9 @@
-import { ArrowRightLeft, CirclePlus, FileText, Pencil, Phone } from "lucide-react";
+"use client";
+
+import { ArrowRightLeft, CirclePlus, Download, Eye, FileText, Pencil, Phone } from "lucide-react";
+import { useRef, useState } from "react";
 import { UploadProgress } from "@/src/features/crm/conversations/components/composer-attachments";
+import { downloadImage, ImageViewerModal } from "@/src/features/crm/conversations/components/image-viewer-modal";
 import { copy } from "@/src/features/crm/conversations/locales/en";
 import type { Activity, ActivityChannel } from "@/src/features/crm/conversations/types";
 import { attachmentPreviewPath, fileAttachment, imageAttachment } from "@/src/features/crm/conversations/utils/attachments";
@@ -73,6 +77,11 @@ function SystemActivity({ activity }: { activity: Activity }) {
           <span>
             {copy.dealWasRenamedFrom} <strong className="font-medium text-gray-900">{event.previousName}</strong>{" "}
             {copy.dealWasRenamedTo} <strong className="font-medium text-gray-900">{event.name}</strong>
+          </span>
+        ) : event.kind === "quote" && event.previousName ? (
+          <span>
+            <strong className="font-bold text-gray-900">{event.previousName}</strong> {copy.revisionSwitchedTo}{" "}
+            <strong className="font-bold text-gray-900">{event.name}</strong>
           </span>
         ) : (
           <span>
@@ -155,6 +164,7 @@ function ImagePreview({
   error,
   onRetry,
   frameHeight,
+  onView,
 }: {
   src: string;
   name: string;
@@ -162,23 +172,69 @@ function ImagePreview({
   error?: string;
   onRetry?: () => void;
   frameHeight?: number;
+  onView: () => void;
 }) {
   const pending = status === "queued" || status === "sending";
+  const ready = !status;
   const height = frameHeight ?? (status ? previewFrameMaxHeight : undefined);
+  const [downloadError, setDownloadError] = useState(false);
+  const saving = useRef(false);
+  const frame = height ? "absolute inset-0 h-full w-full" : "block max-h-64 w-56";
+
+  async function save(event: { preventDefault: () => void; stopPropagation: () => void }) {
+    event.preventDefault();
+    event.stopPropagation();
+    if (saving.current) return;
+    saving.current = true;
+    setDownloadError(false);
+    try {
+      await downloadImage(src, name);
+    } catch {
+      setDownloadError(true);
+    } finally {
+      saving.current = false;
+    }
+  }
+
   return (
     <div className="shrink-0 text-right">
       <div
-        className="relative shrink-0 overflow-hidden rounded-2xl rounded-tr-sm bg-gray-100"
+        className={`group relative shrink-0 overflow-hidden rounded-2xl rounded-tr-sm bg-gray-100 ${ready ? "focus-within:ring-2 focus-within:ring-gray-900 focus-within:ring-offset-2" : ""}`}
         style={height ? { width: previewFrameWidth, height } : undefined}
       >
-        <img
-          src={src}
-          alt={name}
-          className={`${height ? "absolute inset-0 h-full w-full" : "block max-h-64 w-56"} object-cover ${pending ? "opacity-50" : ""}`}
-        />
+        {ready ? (
+          <button
+            type="button"
+            onClick={onView}
+            aria-label={copy.viewImage(name)}
+            className="relative block h-full w-full cursor-pointer"
+          >
+            <img src={src} alt="" className={`${frame} object-cover`} />
+            <span className="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/20 opacity-0 transition-opacity duration-150 group-hover:opacity-100 group-focus-within:opacity-100">
+              <Eye className="h-6 w-6 text-white drop-shadow-sm" strokeWidth={1.75} aria-hidden="true" />
+            </span>
+          </button>
+        ) : (
+          <img
+            src={src}
+            alt={name}
+            className={`${frame} object-cover ${pending ? "opacity-50" : ""}`}
+          />
+        )}
+        {ready ? (
+          <button
+            type="button"
+            aria-label={copy.downloadImage}
+            onClick={(event) => void save(event)}
+            className="absolute top-2 right-2 z-10 flex h-7 w-7 cursor-pointer items-center justify-center rounded-md border border-white/70 bg-white text-gray-800 shadow-sm opacity-0 transition-opacity duration-150 group-hover:opacity-100 group-focus-within:opacity-100 hover:bg-gray-100"
+          >
+            <Download className="h-3.5 w-3.5" strokeWidth={1.8} aria-hidden="true" />
+          </button>
+        ) : null}
         {status ? <PendingProgress status={status} /> : null}
         {status === "failed" ? <RetryButton onRetry={onRetry} /> : null}
       </div>
+      {downloadError ? <p className="mt-1 text-xs text-red-600">{copy.downloadImageFailed}</p> : null}
       {status === "failed" && error ? <p className="mt-1 text-xs text-red-600">{error}</p> : null}
     </div>
   );
@@ -300,6 +356,8 @@ export function ConversationThread({
   imageHeights?: ReadonlyMap<string, number>;
   previewUrls?: ReadonlyMap<string, string>;
 }) {
+  const [viewing, setViewing] = useState<{ src: string; name: string } | null>(null);
+
   if (activities.length === 0 && outgoing.length === 0) {
     return (
       <div className="flex flex-1 items-center justify-center px-6 py-10 text-xs text-gray-500">
@@ -381,6 +439,7 @@ export function ConversationThread({
   pieces.sort((left, right) => left.at - right.at || left.seq - right.seq);
 
   return (
+    <>
     <ol className="flex flex-col gap-4 px-6 py-5" aria-label={copy.messages}>
       {pieces.map((piece) => {
         if (piece.item) {
@@ -406,6 +465,7 @@ export function ConversationThread({
                         error={item.error}
                         frameHeight={item.frameHeight}
                         onRetry={() => onRetry?.(item.id)}
+                        onView={() => item.previewUrl && setViewing({ src: item.previewUrl, name: item.name })}
                       />
                       <span className="mt-1 block pr-1 text-right text-[10px] text-gray-400">{messageStamp(item.sentAt, item.channel)}</span>
                     </div>
@@ -465,6 +525,12 @@ export function ConversationThread({
                     src={previewUrls?.get(image.id) ?? attachmentPreviewPath(image.id)}
                     name={image.name}
                     frameHeight={imageHeights?.get(image.id)}
+                    onView={() =>
+                      setViewing({
+                        src: previewUrls?.get(image.id) ?? attachmentPreviewPath(image.id),
+                        name: image.name,
+                      })
+                    }
                   />
                   {stamp ? <span className="mt-1 block pr-1 text-right text-[10px] text-gray-400">{stamp}</span> : null}
                 </div>
@@ -482,5 +548,7 @@ export function ConversationThread({
         );
       })}
     </ol>
+    {viewing ? <ImageViewerModal src={viewing.src} name={viewing.name} onClose={() => setViewing(null)} /> : null}
+    </>
   );
 }

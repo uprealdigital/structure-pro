@@ -52,10 +52,11 @@ export function lastMessageAt(activities: Activity[]): string {
 }
 
 const quoteSystemPrefix = "quote:";
+const activeQuotePrefix = "active-quote:";
 const createdDealPrefix = "deal-created:";
 const renamedDealPrefix = "deal-renamed:";
 
-export type SystemEventKind = "deal" | "quote" | "created" | "renamed";
+export type SystemEventKind = "deal" | "quote" | "activeQuote" | "created" | "renamed";
 
 export type SystemEvent = {
   kind: SystemEventKind;
@@ -79,6 +80,10 @@ export function systemEventBody(
   dealId?: string,
   previousName?: string,
 ): string {
+  if (kind === "activeQuote") return `${activeQuotePrefix}${name}`;
+  if (kind === "quote" && previousName) {
+    return `${quoteSystemPrefix}${encodeURIComponent(previousName)}:${encodeURIComponent(name)}`;
+  }
   if (kind === "quote") return `${quoteSystemPrefix}${name}`;
   if (kind === "created" && dealId) return `${createdDealPrefix}${dealId}:${name}`;
   if (kind === "renamed" && previousName) {
@@ -111,8 +116,30 @@ export function systemEventText(text: string): SystemEvent {
       };
     }
   }
+  if (text.startsWith(activeQuotePrefix)) {
+    return {
+      kind: "activeQuote",
+      label: copy.activeQuoteChangedTo,
+      name: text.slice(activeQuotePrefix.length),
+    };
+  }
   if (text.startsWith(quoteSystemPrefix)) {
-    return { kind: "quote", label: copy.activeQuoteSwitchedTo, name: text.slice(quoteSystemPrefix.length) };
+    const rest = text.slice(quoteSystemPrefix.length);
+    const split = rest.indexOf(":");
+    if (split > 0) {
+      const quoteName = decodedName(rest.slice(0, split));
+      const revisionName = decodedName(rest.slice(split + 1));
+      if (quoteName && revisionName) {
+        return { kind: "quote", label: copy.revisionSwitchedTo, previousName: quoteName, name: revisionName };
+      }
+    }
+    const legacy = rest.lastIndexOf(" on ");
+    const quoteName = legacy > 0 ? rest.slice(legacy + 4) : "";
+    const revisionName = legacy > 0 ? rest.slice(0, legacy) : "";
+    if (quoteName.startsWith(`${copy.quote} `) && revisionName.startsWith(`${copy.revision} `)) {
+      return { kind: "quote", label: copy.revisionSwitchedTo, previousName: quoteName, name: revisionName };
+    }
+    return { kind: "quote", label: copy.activeQuoteSwitchedTo, name: rest };
   }
   return { kind: "deal", label: copy.activeDealSwitchedTo, name: text };
 }
@@ -124,6 +151,9 @@ export function activityPreview(activity: Activity | undefined): string {
     const name = messagePreview(event.name);
     if (event.kind === "renamed" && event.previousName) {
       return `${event.label} ${messagePreview(event.previousName)} ${copy.dealWasRenamedTo} ${name}`;
+    }
+    if (event.kind === "quote" && event.previousName) {
+      return `${messagePreview(event.previousName)} ${copy.revisionSwitchedTo} ${name}`;
     }
     return name ? `${event.label} ${name}` : event.label;
   }

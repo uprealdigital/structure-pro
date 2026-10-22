@@ -78,7 +78,7 @@ async function composeDesignPreview(blobs: Blob[]): Promise<File> {
   canvas.height = height;
   const context = canvas.getContext("2d");
   if (!context) throw new Error(copy.designPreviewAttachFailed);
-  context.fillStyle = "#f3f4f6";
+  context.fillStyle = "#ffffff";
   context.fillRect(0, 0, width, height);
   images.forEach((image, index) => {
     const column = index % columns;

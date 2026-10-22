@@ -57,6 +57,7 @@ import {
 } from "@/src/features/crm/conversations/utils/review-message";
 import type { Customer } from "@/src/features/crm/common/types";
 import { dealIdSchema, dealNameSchema, type DealStatus } from "@/src/features/crm/deals/types";
+import { markQuoteSent } from "@/src/features/crm/quotes/db/quote";
 import { readQuoteRevision, updateQuoteRevision } from "@/src/features/crm/quotes/db/quote-revision";
 
 export async function openConversation(input: {
@@ -310,6 +311,7 @@ export async function sendConversationQuote(input: {
 
     const saved =
       revision.status === "sent" ? revision : await updateQuoteRevision(revision.id, { status: "sent" });
+    await markQuoteSent(quoteId);
     const dealStatus = deal.status === "lead" ? "quote_sent" : deal.status;
     if (dealStatus !== deal.status) await updateDeal(deal.id, { status: dealStatus });
 
@@ -507,7 +509,7 @@ export async function markDealViewed(dealId: string): Promise<{ success: true } 
 
 export async function recordSystemActivity(input: {
   conversationId: string;
-  kind: "deal" | "quote" | "created" | "renamed";
+  kind: "deal" | "quote" | "activeQuote" | "created" | "renamed";
   name: string;
   dealId?: string;
   previousName?: string;
@@ -518,7 +520,11 @@ export async function recordSystemActivity(input: {
   const previousName = input.previousName?.trim();
   if (
     !conversationId.success ||
-    (input.kind !== "deal" && input.kind !== "quote" && input.kind !== "created" && input.kind !== "renamed") ||
+    (input.kind !== "deal" &&
+      input.kind !== "quote" &&
+      input.kind !== "activeQuote" &&
+      input.kind !== "created" &&
+      input.kind !== "renamed") ||
     !name ||
     (input.kind === "created" && !dealId) ||
     (input.kind === "renamed" && !previousName)

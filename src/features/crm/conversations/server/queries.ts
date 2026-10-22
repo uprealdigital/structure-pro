@@ -50,7 +50,7 @@ import {
 import { readDeal, readDeals, readDealsByIds } from "@/src/features/crm/deals/db/deal";
 import { readDealQuotes } from "@/src/features/crm/deals/db/deal-quote";
 import type { Deal } from "@/src/features/crm/deals/types";
-import { readActiveRevisionId, readQuotesByIds } from "@/src/features/crm/quotes/db/quote";
+import { readActiveRevisionId, readQuoteStatus, readQuotesByIds } from "@/src/features/crm/quotes/db/quote";
 import { readQuoteRevisions } from "@/src/features/crm/quotes/db/quote-revision";
 import type { ConversationQuoteRevision } from "@/src/features/crm/conversations/types";
 
@@ -112,7 +112,9 @@ async function revisionsForQuote(
         createdAt: row.createdAt,
         updatedAt: row.updatedAt,
         selections: row.selections,
+        configChanges: row.configChanges,
         communication: row.communication,
+        renders: row.renders,
       }),
     )
     .filter((revision): revision is ConversationQuoteRevision => revision != null);
@@ -142,6 +144,7 @@ async function loadConversationQuote(quoteId: string): Promise<ConversationQuote
   const active =
     loaded.revisions.find((revision) => revision.id === loaded.activeRevisionId) ??
     loaded.revisions[loaded.revisions.length - 1];
+  const storedStatus = await readQuoteStatus(quoteRecord.id);
   return toConversationQuote({
     id: quoteRecord.id,
     invoiceId: quoteRecord.invoiceId,
@@ -151,6 +154,7 @@ async function loadConversationQuote(quoteId: string): Promise<ConversationQuote
     imageUrl: active?.imageUrl ?? quoteRecord.summary.imageUrl,
     selections: active?.selections ?? quoteRecord.selections,
     activeRevisionId: active?.id ?? "",
+    status: storedStatus ?? (loaded.revisions.some((revision) => revision.status === "sent") ? "sent" : "draft"),
     revisions: loaded.revisions,
   });
 }

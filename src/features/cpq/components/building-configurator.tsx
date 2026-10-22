@@ -16,7 +16,7 @@ import {
   Square,
   X,
 } from "lucide-react";
-import type { BuildingCapture } from "@/src/features/cpq/components/building-scene";
+import type { BuildingCapture, QuoteRevisionRenderCapture, QuoteRevisionRenderFiles } from "@/src/features/cpq/components/building-scene";
 import { BuildingControls, QuoteActions } from "@/src/features/cpq/components/building-controls";
 import { ShareModal } from "@/src/features/cpq/components/share-modal";
 import { YardModal } from "@/src/features/cpq/components/yard-modal";
@@ -45,9 +45,9 @@ export function BuildingConfigurator({
 }: {
   selections?: QuoteSelections;
   mode?: ConfiguratorMode;
-  onSave?: (selections: QuoteSelections) => Promise<void>;
-  onSaveAndShare?: (selections: QuoteSelections) => Promise<void>;
-  onSaveAndReview?: (selections: QuoteSelections) => Promise<void>;
+  onSave?: (selections: QuoteSelections, renders: QuoteRevisionRenderFiles) => Promise<void>;
+  onSaveAndShare?: (selections: QuoteSelections, renders: QuoteRevisionRenderFiles) => Promise<void>;
+  onSaveAndReview?: (selections: QuoteSelections, renders: QuoteRevisionRenderFiles) => Promise<void>;
 } = {}) {
   const internal = mode === "internal";
   const [yardOpen, setYardOpen] = useState(false);
@@ -56,6 +56,7 @@ export function BuildingConfigurator({
   const [saveError, setSaveError] = useState("");
   const savingRef = useRef(false);
   const captureBuildingRef = useRef<BuildingCapture | null>(null);
+  const renderCaptureRef = useRef<QuoteRevisionRenderCapture | null>(null);
   const {
     assistantNote,
     assistantNoteId,
@@ -82,7 +83,9 @@ export function BuildingConfigurator({
     setSaving(true);
     setSaveError("");
     try {
-      await save(selections);
+      const capture = renderCaptureRef.current;
+      if (!capture) throw new Error(copy.saveQuoteError);
+      await save(selections, await capture());
     } catch (error) {
       setSaveError(error instanceof Error ? error.message : copy.saveQuoteError);
     } finally {
@@ -113,7 +116,7 @@ export function BuildingConfigurator({
         <div className="pointer-events-none absolute inset-0 opacity-60 floor-grid" />
         <div className="relative min-h-0 flex-1">
           {configReady ? (
-            <BuildingScene config={config} captureRef={captureBuildingRef} />
+            <BuildingScene config={config} captureRef={captureBuildingRef} renderCaptureRef={renderCaptureRef} />
           ) : (
             <div className="flex h-full w-full items-center justify-center text-sm text-zinc-500">
               {copy.loadingScene}

@@ -3,6 +3,7 @@ import { throwIfError } from "@/src/common/utils/error-handling";
 import { quoteSelectionsSchema, type ListedQuote, type QuoteRecord } from "@/src/features/cpq/types";
 import { toListedQuote, type QuoteListRow } from "@/src/features/cpq/utils/mappers";
 import { createQuoteRevision, readQuoteRevisionsByIds } from "@/src/features/crm/quotes/db/quote-revision";
+import { quoteRecordStatusSchema, type QuoteRecordStatus } from "@/src/features/crm/quotes/types";
 
 function crm() {
   return db("crm");
@@ -134,15 +135,41 @@ export async function readActiveRevisionId(quoteId: string): Promise<string | un
   return data.active_revision_id;
 }
 
+function missingQuoteStatus(error: { message: string; code?: string } | null): boolean {
+  if (!error) return false;
+  const message = error.message.toLowerCase();
+  return (
+    message.includes("quotes.status") ||
+    (message.includes("status") &&
+      (message.includes("schema cache") || message.includes("could not find") || message.includes("does not exist")))
+  );
+}
+
+export async function readQuoteStatus(id: string): Promise<QuoteRecordStatus | undefined> {
+  const { data, error } = await crm().from("quotes").select("status").eq("id", id).maybeSingle();
+  if (missingQuoteStatus(error)) return undefined;
+  throwIfError(error);
+  if (!data) return undefined;
+  const status = quoteRecordStatusSchema.safeParse(data.status);
+  return status.success ? status.data : "draft";
+}
+
 export async function updateQuote(
   id: string,
-  patch: { invoiceId?: string; activeRevisionId?: string },
+  patch: { invoiceId?: string; activeRevisionId?: string; status?: QuoteRecordStatus },
 ): Promise<void> {
   const row: Record<string, unknown> = { updated_at: new Date().toISOString() };
   if (patch.invoiceId) row.invoice_id = patch.invoiceId;
   if (patch.activeRevisionId) row.active_revision_id = patch.activeRevisionId;
+  if (patch.status) row.status = quoteRecordStatusSchema.parse(patch.status);
   const { error } = await crm().from("quotes").update(row).eq("id", id);
   throwIfError(error);
+}
+
+export async function markQuoteSent(id: string): Promise<void> {
+  const current = await readQuoteStatus(id);
+  if (current !== "draft") return;
+  await updateQuote(id, { status: "sent" });
 }
 
 export async function deleteQuote(id: string): Promise<void> {

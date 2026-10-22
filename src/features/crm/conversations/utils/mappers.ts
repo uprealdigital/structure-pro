@@ -21,8 +21,12 @@ import {
   type ConversationQuoteRevision,
   type ConversationSummary,
 } from "@/src/features/crm/conversations/types";
+import { configChangesSummary } from "@/src/features/crm/conversations/utils/config-changes-summary";
 import { formatDealMenuDate, productTitle, revisionSummary } from "@/src/features/crm/conversations/utils/formatting";
+import { changedConfig } from "@/src/features/crm/quotes/utils/config-changes";
+import type { ConfigChanges, QuoteRevisionRenders } from "@/src/features/crm/quotes/types";
 import type { Deal } from "@/src/features/crm/deals/types";
+import type { QuoteRecordStatus } from "@/src/features/crm/quotes/types";
 
 export type ConversationRow = {
   id: string;
@@ -187,9 +191,12 @@ export function toConversationQuoteRevision(input: {
   createdAt: string;
   updatedAt: string;
   selections: QuoteSelections;
+  configChanges?: ConfigChanges;
   communication?: ConversationQuoteRevision["communication"];
+  renders?: QuoteRevisionRenders | null;
 }): ConversationQuoteRevision | undefined {
   const summary = priceSummary(input.selections);
+  const changes = configChangesSummary(input.configChanges ?? {});
   const revision = conversationQuoteRevisionSchema.safeParse({
     id: input.id,
     revisionNumber: input.revisionNumber,
@@ -197,10 +204,11 @@ export function toConversationQuoteRevision(input: {
     createdAt: input.createdAt,
     updatedAt: input.updatedAt,
     totalLabel: summary.totalLabel,
-    summary: revisionSummary(summary.specs),
+    summary: changes || revisionSummary(summary.specs),
     specs: summary.specs,
     lines: summary.lines,
     imageUrl: summary.imageUrl,
+    renders: input.renders ?? null,
     selections: input.selections,
     communication: input.communication ?? null,
   });
@@ -216,6 +224,7 @@ export function toConversationQuote(input: {
   imageUrl: string;
   selections: QuoteSelections;
   activeRevisionId: string;
+  status: QuoteRecordStatus;
   revisions: ConversationQuoteRevision[];
 }): ConversationQuote | undefined {
   const quote = conversationQuoteSchema.safeParse(input);
@@ -225,8 +234,16 @@ export function toConversationQuote(input: {
 export function conversationQuoteFromSelections(
   quote: ConversationQuote,
   selections: QuoteSelections,
-  saved: { id: string; revisionNumber: number; createdAt: string; updatedAt: string },
+  saved: {
+    id: string;
+    revisionNumber: number;
+    createdAt: string;
+    updatedAt: string;
+    renders?: QuoteRevisionRenders | null;
+  },
 ): ConversationQuote | undefined {
+  const summary = priceSummary(selections);
+  const previous = quote.revisions.find((item) => item.id === quote.activeRevisionId);
   const revision = toConversationQuoteRevision({
     id: saved.id,
     revisionNumber: saved.revisionNumber,
@@ -234,10 +251,11 @@ export function conversationQuoteFromSelections(
     createdAt: saved.createdAt,
     updatedAt: saved.updatedAt,
     selections,
+    configChanges: changedConfig(previous?.selections, selections),
     communication: null,
+    renders: saved.renders ?? null,
   });
   if (!revision) return undefined;
-  const summary = priceSummary(selections);
   return toConversationQuote({
     id: quote.id,
     invoiceId: quote.invoiceId,
@@ -247,6 +265,7 @@ export function conversationQuoteFromSelections(
     imageUrl: summary.imageUrl,
     selections,
     activeRevisionId: revision.id,
+    status: quote.status,
     revisions: [...quote.revisions.filter((item) => item.id !== revision.id), revision],
   });
 }
@@ -266,6 +285,7 @@ export function conversationQuoteWithActiveRevision(
     imageUrl: revision.imageUrl,
     selections: revision.selections,
     activeRevisionId: revision.id,
+    status: quote.status,
     revisions: quote.revisions,
   });
 }
@@ -284,6 +304,7 @@ export function conversationQuoteWithSentRevision(
     imageUrl: quote.imageUrl,
     selections: quote.selections,
     activeRevisionId: quote.activeRevisionId,
+    status: quote.status === "draft" ? "sent" : quote.status,
     revisions: quote.revisions.map((revision) =>
       revision.id === revisionId ? { ...revision, status: "sent", updatedAt } : revision,
     ),

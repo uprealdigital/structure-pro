@@ -1,8 +1,10 @@
 import type { QuoteSelections } from "@/src/features/cpq/types";
 import {
+  configChangesSchema,
   quoteCommunicationSchema,
   quoteListItemSchema,
   quotePortalSchema,
+  quoteRevisionRendersSchema,
   quoteRevisionSchema,
   type QuoteCommunication,
   type QuoteCustomer,
@@ -30,21 +32,28 @@ export type QuoteRevisionRow = {
   quote_id: string;
   revision_number: number;
   status: string;
-  selections: unknown;
+  config?: unknown;
+  selections?: unknown;
+  config_changes?: unknown;
   communication?: unknown;
+  renders?: unknown;
   created_at?: string | null;
   updated_at?: string | null;
 };
 
 export function toQuoteRevision(row: QuoteRevisionRow): QuoteRevision | undefined {
   const communication = quoteCommunicationSchema.safeParse(row.communication);
+  const changes = configChangesSchema.safeParse(row.config_changes ?? {});
+  const renders = quoteRevisionRendersSchema.safeParse(row.renders);
   const revision = quoteRevisionSchema.safeParse({
     id: row.id,
     quoteId: row.quote_id,
     revisionNumber: row.revision_number,
     status: row.status,
-    selections: row.selections,
+    selections: row.config ?? row.selections,
+    configChanges: changes.success ? changes.data : {},
     communication: communication.success ? communication.data : null,
+    renders: renders.success ? renders.data : null,
     createdAt: row.created_at ?? "",
     updatedAt: row.updated_at ?? row.created_at ?? "",
   });
@@ -90,6 +99,7 @@ export function toQuotePortal(input: {
   revisionNumber: number;
   createdAt: string;
   imageUrl: string;
+  renders?: QuotePortal["renders"];
   monthly: number;
   months: number;
   lines: { label: string; amount: number }[];
@@ -112,6 +122,7 @@ export function toQuotePortal(input: {
     versionLabel: quoteVersionLabel(input.revisionNumber),
     dateLabel: formatQuoteDate(input.createdAt),
     imageUrl: input.imageUrl,
+    renders: input.renders ?? null,
     monthlyLabel: `${formatQuoteCash(input.monthly)}/mo`,
     monthsLabel: quoteMonthsLabel(input.months),
     lines: input.lines.map((line) => ({

@@ -9,22 +9,33 @@ import { createQuote, deleteQuote, readActiveRevisionId, updateQuote } from "@/s
 import {
   createQuoteRevision,
   readQuoteRevision,
+  storeQuoteRevisionRender,
   updateQuoteRevisionCommunication,
+  updateQuoteRevisionRenders,
 } from "@/src/features/crm/quotes/db/quote-revision";
 import {
   createDealQuoteSchema,
   payQuoteDepositSchema,
   quoteCommunicationWriteSchema,
   quoteRevisionActivateSchema,
+  quoteRevisionRenderFilesSchema,
+  type QuoteRevisionRenders,
 } from "@/src/features/crm/quotes/types";
 
 export async function saveQuoteSelections(input: {
   quoteId: string;
   selections: unknown;
+  renders?: unknown;
 }): Promise<
   | {
       success: true;
-      data: { id: string; revisionNumber: number; createdAt: string; updatedAt: string };
+      data: {
+        id: string;
+        revisionNumber: number;
+        createdAt: string;
+        updatedAt: string;
+        renders: QuoteRevisionRenders | null;
+      };
     }
   | { error: string }
 > {
@@ -33,6 +44,8 @@ export async function saveQuoteSelections(input: {
   if (!quoteId || !selections.success) {
     return { error: "A quote and configuration are required" };
   }
+  const renders = input.renders == null ? null : quoteRevisionRenderFilesSchema.safeParse(input.renders);
+  if (renders && !renders.success) return { error: "A render of this quote is required" };
 
   try {
     const revision = await createQuoteRevision({
@@ -41,6 +54,9 @@ export async function saveQuoteSelections(input: {
       status: "draft",
     });
     await updateQuote(quoteId, { activeRevisionId: revision.id });
+    const stored = renders
+      ? await storeRevisionRenders(revision.id, renders.data)
+      : null;
     revalidatePath("/crm/conversations");
     revalidatePath("/crm/quotes");
     revalidatePath("/crm/deals");
@@ -52,12 +68,45 @@ export async function saveQuoteSelections(input: {
         revisionNumber: revision.revisionNumber,
         createdAt: revision.createdAt,
         updatedAt: revision.updatedAt,
+        renders: stored,
       },
     };
   } catch (error) {
     const message = error instanceof Error ? error.message : "Could not save quote";
     return { error: message };
   }
+}
+
+async function storeRevisionRenders(
+  revisionId: string,
+  files: {
+    full: Blob;
+    medium: Blob;
+    small: Blob;
+  },
+): Promise<QuoteRevisionRenders> {
+  const [full, medium, small] = await Promise.all([
+    storeQuoteRevisionRender({
+      revisionId,
+      size: "full",
+      bytes: new Uint8Array(await files.full.arrayBuffer()),
+    }),
+    storeQuoteRevisionRender({
+      revisionId,
+      size: "medium",
+      bytes: new Uint8Array(await files.medium.arrayBuffer()),
+    }),
+    storeQuoteRevisionRender({
+      revisionId,
+      size: "small",
+      bytes: new Uint8Array(await files.small.arrayBuffer()),
+    }),
+  ]);
+  return updateQuoteRevisionRenders(revisionId, {
+    render_full_url: full,
+    render_medium_url: medium,
+    render_small_url: small,
+  });
 }
 
 export async function saveQuoteCommunication(input: {

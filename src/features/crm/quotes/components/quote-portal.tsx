@@ -4,6 +4,7 @@ import { ArrowUpRight, Calendar, Check, CreditCard, Download, Eye, Pencil, Share
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { BuildingConfigurator } from "@/src/features/cpq/components/building-configurator";
+import type { QuoteRevisionRenderFiles } from "@/src/features/cpq/components/building-scene";
 import type { QuoteSelections } from "@/src/features/cpq/types";
 import { contactInitials } from "@/src/features/crm/common/utils/formatting";
 import { ReviewSendModal } from "@/src/features/crm/conversations/components/review-send-modal";
@@ -98,8 +99,8 @@ export function QuotePortal({
     customer: recipient.customer,
   }));
 
-  async function saveRevision(selections: QuoteSelections) {
-    await save(selections);
+  async function saveRevision(selections: QuoteSelections, renders: QuoteRevisionRenderFiles) {
+    await save(selections, renders);
     setEditing(false);
   }
 
@@ -270,7 +271,7 @@ export function QuotePortal({
           <section className="mx-auto grid w-full max-w-7xl grid-cols-1 items-start gap-8 px-4 py-6 sm:px-6 lg:grid-cols-12 lg:px-10">
             <div className="flex min-h-[460px] items-center justify-center lg:col-span-7 lg:min-h-[520px]">
               <img
-                src={quote.imageUrl}
+                src={quote.renders?.render_full_url || quote.imageUrl}
                 alt={quote.dealName}
                 className="max-h-[420px] w-auto max-w-full object-contain drop-shadow-2xl select-none"
               />
@@ -377,7 +378,7 @@ export function QuotePortal({
           priceLabel={quote.totalLabel}
           invoiceId={quote.invoiceId}
           quoteId={quote.id}
-          imageUrl={quote.imageUrl}
+          imageUrl={quote.renders?.render_small_url || quote.imageUrl}
           statusLabel={statusLabel[quote.status]}
           communication={quote.communication}
           onSave={saveCommunication}

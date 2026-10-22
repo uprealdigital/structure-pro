@@ -1,6 +1,10 @@
 import { z } from "zod";
 import { quoteSelectionsSchema } from "@/src/features/cpq/types";
-import { quoteCommunicationSchema } from "@/src/features/crm/quotes/types";
+import {
+  quoteCommunicationSchema,
+  quoteRecordStatusSchema,
+  quoteRevisionRendersSchema,
+} from "@/src/features/crm/quotes/types";
 import { customerSchema } from "@/src/features/crm/common/types";
 import {
   dealIdSchema,
@@ -199,6 +203,7 @@ export const conversationQuoteRevisionSchema = z.object({
   specs: z.array(z.object({ label: z.string(), value: z.string() })),
   lines: z.array(z.object({ label: z.string(), amountLabel: z.string() })),
   imageUrl: z.string().min(1),
+  renders: quoteRevisionRendersSchema.nullable().default(null),
   selections: quoteSelectionsSchema,
   communication: quoteCommunicationSchema.nullable(),
 });
@@ -214,6 +219,7 @@ export const conversationQuoteSchema = z.object({
   imageUrl: z.string().min(1),
   selections: quoteSelectionsSchema,
   activeRevisionId: z.string(),
+  status: quoteRecordStatusSchema.default("draft"),
   revisions: z.array(conversationQuoteRevisionSchema),
 });
 

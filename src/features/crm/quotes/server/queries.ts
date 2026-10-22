@@ -158,6 +158,7 @@ export const getQuotePortal = cache(async (id: string): Promise<QuotePortal | un
     revisionNumber: revision.revisionNumber,
     createdAt: revision.createdAt,
     imageUrl: described.style.image,
+    renders: revision.renders,
     monthly: described.estimate.rto,
     months: described.estimate.rtoMonths,
     lines: described.estimate.lines,
