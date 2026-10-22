@@ -3,9 +3,12 @@ import { copy } from "@/src/features/crm/conversations/locales/en";
 import type { Activity } from "@/src/features/crm/conversations/types";
 import { fileAttachment, imageAttachment } from "@/src/features/crm/conversations/utils/attachments";
 
-export function revisionVersionLabel(status: "draft" | "sent", revisionNumber: number): string {
-  const name = status === "sent" ? copy.sentStatus : copy.draftStatus;
-  return `${name} ${copy.revisionVersion}${revisionNumber}`;
+export function quoteMenuName(index: number): string {
+  return `${copy.quote} ${index + 1}`;
+}
+
+export function revisionMenuLabel(revisionNumber: number): string {
+  return `${copy.revision} ${revisionNumber}`;
 }
 
 export function messagePreview(text: string): string {
@@ -231,6 +234,15 @@ export function formatDealMenuDate(iso: string): string {
     month: "short",
     day: "numeric",
     year: "numeric",
+  }).format(date);
+}
+
+export function formatRevisionDate(iso: string): string {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return "";
+  return new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
   }).format(date);
 }
 

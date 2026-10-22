@@ -40,6 +40,8 @@ type BuildingControlsProps = {
   config: BuildingConfig;
   onChange: (next: BuildingConfig) => void;
   onSubmit: () => void;
+  onShare?: () => void;
+  onReview?: () => void;
   pending?: boolean;
   mode?: ConfiguratorMode;
   children?: ReactNode;
@@ -59,6 +61,8 @@ export function BuildingControls({
   config,
   onChange,
   onSubmit,
+  onShare,
+  onReview,
   pending = false,
   mode = "external",
   children,
@@ -519,6 +523,8 @@ export function BuildingControls({
             mode={mode}
             pending={pending}
             onQuote={onSubmit}
+            onShare={onShare}
+            onReview={onReview}
           />
         </Accordion>
       </div>
@@ -532,8 +538,103 @@ export function BuildingControls({
         mode={mode}
         pending={pending}
         onQuote={onSubmit}
+        onShare={onShare}
+        onReview={onReview}
         onPriceClick={() => selectSection("details")}
       />
+    </div>
+  );
+}
+
+function SaveAndShareMenu({
+  variant,
+  pending,
+  onShare,
+  onReview,
+}: {
+  variant: "header" | "panel" | "bar";
+  pending: boolean;
+  onShare?: () => void;
+  onReview?: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    function close(event: MouseEvent) {
+      if (!menuRef.current?.contains(event.target as Node)) setOpen(false);
+    }
+    function onKey(event: KeyboardEvent) {
+      if (event.key === "Escape") setOpen(false);
+    }
+    document.addEventListener("mousedown", close);
+    window.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", close);
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
+
+  useEffect(() => {
+    if (pending) setOpen(false);
+  }, [pending]);
+
+  function choose(action: () => void) {
+    setOpen(false);
+    action();
+  }
+
+  const buttonClass =
+    variant === "panel"
+      ? "flex w-full items-center justify-center gap-1.5 rounded-full border border-transparent bg-black py-3 text-sm font-medium text-white hover:bg-black disabled:opacity-60"
+      : variant === "header"
+        ? "inline-flex shrink-0 items-center justify-center gap-1.5 rounded-full border border-transparent bg-[#1A1A1A] px-5 py-2.5 text-[13px] leading-tight font-medium whitespace-nowrap text-white hover:bg-black disabled:opacity-60"
+        : "inline-flex shrink-0 items-center justify-center gap-1.5 rounded-full border border-transparent bg-black px-5 py-3 text-sm leading-none font-medium whitespace-nowrap text-white disabled:opacity-60";
+
+  return (
+    <div ref={menuRef} className={variant === "panel" ? "relative mt-2" : "relative"}>
+      <button
+        type="button"
+        aria-haspopup="menu"
+        aria-expanded={open}
+        disabled={pending}
+        onClick={() => setOpen((value) => !value)}
+        className={buttonClass}
+      >
+        <span>{pending ? copy.savingQuote : copy.saveAndShare}</span>
+        <ChevronDown
+          className={`h-3.5 w-3.5 shrink-0 transition-transform ${open ? "rotate-180" : ""}`}
+          aria-hidden="true"
+        />
+      </button>
+      {open ? (
+        <div
+          role="menu"
+          className="absolute right-0 z-40 mt-1 w-max min-w-full overflow-hidden rounded-lg border border-gray-200 bg-white py-1 text-left shadow-lg"
+        >
+          {onShare ? (
+            <button
+              type="button"
+              role="menuitem"
+              onClick={() => choose(onShare)}
+              className="block w-full px-3 py-2 text-left text-xs font-medium whitespace-nowrap text-gray-900 hover:bg-gray-50"
+            >
+              {copy.shareDesignPreview}
+            </button>
+          ) : null}
+          {onReview ? (
+            <button
+              type="button"
+              role="menuitem"
+              onClick={() => choose(onReview)}
+              className="block w-full px-3 py-2 text-left text-xs font-medium whitespace-nowrap text-gray-900 hover:bg-gray-50"
+            >
+              {copy.reviewAndSendFormalQuote}
+            </button>
+          ) : null}
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -542,15 +643,20 @@ export function QuoteActions({
   mode,
   variant,
   onPrimary,
+  onShare,
+  onReview,
   pending = false,
 }: {
   mode: ConfiguratorMode;
   variant: "header" | "panel" | "bar";
   onPrimary: () => void;
+  onShare?: () => void;
+  onReview?: () => void;
   pending?: boolean;
 }) {
   const internal = mode === "internal";
-  const label = pending && internal ? copy.savingQuote : internal ? copy.save : copy.submitQuote;
+  const menu = internal && (onShare || onReview);
+  const label = pending && internal ? copy.savingQuote : internal ? copy.saveAndClose : copy.submitQuote;
   function activate() {
     if (pending) return;
     onPrimary();
@@ -559,20 +665,26 @@ export function QuoteActions({
   if (variant === "panel") {
     return (
       <>
-        <button
-          type="button"
-          onClick={activate}
-          disabled={pending}
-          className={`mt-2 block w-full rounded-full py-3 text-center text-sm font-medium text-white disabled:opacity-60 ${internal ? "border border-transparent bg-black" : "bg-black"}`}
-        >
-          {label}
-        </button>
-        {internal ? (
+        {menu ? (
+          <SaveAndShareMenu variant="panel" pending={pending} onShare={onShare} onReview={onReview} />
+        ) : (
           <button
             type="button"
-            className="mt-2 block w-full rounded-full border border-gray-300 bg-white py-3 text-center text-sm font-medium text-gray-900 hover:bg-gray-50"
+            onClick={activate}
+            disabled={pending}
+            className="mt-2 block w-full rounded-full bg-black py-3 text-center text-sm font-medium text-white disabled:opacity-60"
           >
-            {copy.saveAndAttach}
+            {internal ? copy.save : copy.submitQuote}
+          </button>
+        )}
+        {menu ? (
+          <button
+            type="button"
+            onClick={activate}
+            disabled={pending}
+            className="mt-2 block w-full rounded-full border border-gray-300 bg-white py-3 text-center text-sm font-medium text-gray-900 hover:bg-gray-50 disabled:opacity-60"
+          >
+            {copy.saveAndClose}
           </button>
         ) : null}
       </>
@@ -581,27 +693,27 @@ export function QuoteActions({
 
   const primaryClass =
     variant === "header"
-      ? internal
-        ? "shrink-0 rounded-full border border-transparent bg-[#1A1A1A] px-5 py-2.5 text-[13px] leading-tight font-medium whitespace-nowrap text-white hover:bg-black disabled:opacity-60"
-        : "shrink-0 rounded-full bg-[#1A1A1A] px-5 py-3 text-[13px] leading-none font-medium whitespace-nowrap text-white hover:bg-black disabled:opacity-60 lg:px-8 lg:py-3.5 lg:text-sm"
-      : internal
-        ? "shrink-0 rounded-full border border-transparent bg-black px-5 py-3 text-sm leading-none font-medium whitespace-nowrap text-white disabled:opacity-60"
-        : "shrink-0 rounded-full bg-black px-5 py-3 text-sm leading-none font-medium whitespace-nowrap text-white disabled:opacity-60";
+      ? "shrink-0 rounded-full bg-[#1A1A1A] px-5 py-3 text-[13px] leading-none font-medium whitespace-nowrap text-white hover:bg-black disabled:opacity-60 lg:px-8 lg:py-3.5 lg:text-sm"
+      : "shrink-0 rounded-full bg-black px-5 py-3 text-sm leading-none font-medium whitespace-nowrap text-white disabled:opacity-60";
   const secondaryClass =
     variant === "header"
-      ? "max-w-[11rem] rounded-full border border-gray-300 bg-white px-4 py-2.5 text-center text-[13px] leading-tight font-medium text-balance text-gray-900 hover:bg-gray-50"
-      : "shrink-0 rounded-full border border-gray-300 bg-white px-5 py-3 text-center text-sm leading-none font-medium text-gray-900 hover:bg-gray-50";
+      ? "shrink-0 rounded-full border border-gray-300 bg-white px-4 py-2.5 text-center text-[13px] leading-tight font-medium whitespace-nowrap text-gray-900 hover:bg-gray-50 disabled:opacity-60"
+      : "shrink-0 rounded-full border border-gray-300 bg-white px-5 py-3 text-center text-sm leading-none font-medium text-gray-900 hover:bg-gray-50 disabled:opacity-60";
 
-  return (
-    <div className={internal ? "flex shrink-0 flex-col items-end gap-2" : "contents"}>
+  if (!menu) {
+    return (
       <button type="button" onClick={activate} disabled={pending} className={primaryClass}>
         {label}
       </button>
-      {internal ? (
-        <button type="button" className={secondaryClass}>
-          {copy.saveAndAttach}
-        </button>
-      ) : null}
+    );
+  }
+
+  return (
+    <div className="flex shrink-0 flex-col items-end gap-2">
+      <SaveAndShareMenu variant={variant} pending={pending} onShare={onShare} onReview={onReview} />
+      <button type="button" onClick={activate} disabled={pending} className={secondaryClass}>
+        {pending ? copy.savingQuote : copy.saveAndClose}
+      </button>
     </div>
   );
 }
@@ -612,6 +724,8 @@ function MobileQuoteBar({
   mode,
   pending,
   onQuote,
+  onShare,
+  onReview,
   onPriceClick,
 }: {
   visible: boolean;
@@ -619,6 +733,8 @@ function MobileQuoteBar({
   mode: ConfiguratorMode;
   pending: boolean;
   onQuote: () => void;
+  onShare?: () => void;
+  onReview?: () => void;
   onPriceClick: () => void;
 }) {
   return (
@@ -641,7 +757,7 @@ function MobileQuoteBar({
             {copy.seeDetails}
           </button>
         </div>
-        <QuoteActions mode={mode} variant="bar" pending={pending} onPrimary={onQuote} />
+        <QuoteActions mode={mode} variant="bar" pending={pending} onPrimary={onQuote} onShare={onShare} onReview={onReview} />
       </div>
     </div>
   );
@@ -759,6 +875,8 @@ function EstimateBreakdownBody({
   mode,
   pending,
   onQuote,
+  onShare,
+  onReview,
 }: {
   estimate: {
     total: number;
@@ -769,6 +887,8 @@ function EstimateBreakdownBody({
   mode: ConfiguratorMode;
   pending: boolean;
   onQuote: () => void;
+  onShare?: () => void;
+  onReview?: () => void;
 }) {
   return (
     <div className="space-y-2.5">
@@ -816,7 +936,7 @@ function EstimateBreakdownBody({
         {copy.quoteDisclaimer}
       </p>
       <p className="text-[11px] leading-relaxed text-gray-500">{copy.satisfaction}</p>
-      <QuoteActions mode={mode} variant="panel" pending={pending} onPrimary={onQuote} />
+      <QuoteActions mode={mode} variant="panel" pending={pending} onPrimary={onQuote} onShare={onShare} onReview={onReview} />
       <div className="flex items-center space-x-2 pt-3 text-xs text-gray-600">
         <span>
           {copy.deliveryTo}{" "}

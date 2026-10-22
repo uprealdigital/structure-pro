@@ -34,6 +34,7 @@ import {
   type Conversation,
   type ConversationDealOption,
   type ConversationInboxItem,
+  type ConversationQuote,
   type ConversationWorkspace,
 } from "@/src/features/crm/conversations/types";
 import { activityPreview, formatDealMenuDate, lastMessageAt, productTitle, unreadActivityCount } from "@/src/features/crm/conversations/utils/formatting";
@@ -47,6 +48,7 @@ import {
   toConversationQuoteRevision,
 } from "@/src/features/crm/conversations/utils/mappers";
 import { readDeal, readDeals, readDealsByIds } from "@/src/features/crm/deals/db/deal";
+import { readDealQuotes } from "@/src/features/crm/deals/db/deal-quote";
 import type { Deal } from "@/src/features/crm/deals/types";
 import { readActiveRevisionId, readQuotesByIds } from "@/src/features/crm/quotes/db/quote";
 import { readQuoteRevisions } from "@/src/features/crm/quotes/db/quote-revision";
@@ -126,6 +128,33 @@ async function revisionsForQuote(
   return { revisions: fallback ? [fallback] : [], activeRevisionId };
 }
 
+async function quoteIdsForDeal(dealId: string, quoteId: string): Promise<string[]> {
+  const links = await readDealQuotes(dealId);
+  const ids = links.map((link) => link.quoteId);
+  if (quoteId && !ids.includes(quoteId)) ids.unshift(quoteId);
+  return ids.length > 0 ? ids : quoteId ? [quoteId] : [];
+}
+
+async function loadConversationQuote(quoteId: string): Promise<ConversationQuote | undefined> {
+  const quoteRecord = await getQuoteForPage(quoteId);
+  if (!quoteRecord) return undefined;
+  const loaded = await revisionsForQuote(quoteRecord.id, quoteRecord.selections);
+  const active =
+    loaded.revisions.find((revision) => revision.id === loaded.activeRevisionId) ??
+    loaded.revisions[loaded.revisions.length - 1];
+  return toConversationQuote({
+    id: quoteRecord.id,
+    invoiceId: quoteRecord.invoiceId,
+    totalLabel: active?.totalLabel ?? quoteRecord.summary.totalLabel,
+    specs: active?.specs ?? quoteRecord.summary.specs,
+    lines: active?.lines ?? quoteRecord.summary.lines,
+    imageUrl: active?.imageUrl ?? quoteRecord.summary.imageUrl,
+    selections: active?.selections ?? quoteRecord.selections,
+    activeRevisionId: active?.id ?? "",
+    revisions: loaded.revisions,
+  });
+}
+
 export async function getDealTitle(dealId: string): Promise<string | undefined> {
   const deal = await readDeal(dealId);
   if (!deal) return undefined;
@@ -137,35 +166,19 @@ async function dealOption(
   deal: Deal,
   thread?: Conversation,
 ): Promise<ConversationDealOption | undefined> {
-  const quoteRecord = await getQuoteForPage(deal.quoteId);
-  const loaded = quoteRecord
-    ? await revisionsForQuote(quoteRecord.id, quoteRecord.selections)
-    : { revisions: [], activeRevisionId: undefined };
-  const active =
-    loaded.revisions.find((revision) => revision.id === loaded.activeRevisionId) ??
-    loaded.revisions[loaded.revisions.length - 1];
-  const quote = quoteRecord
-    ? toConversationQuote({
-        id: quoteRecord.id,
-        invoiceId: quoteRecord.invoiceId,
-        totalLabel: active?.totalLabel ?? quoteRecord.summary.totalLabel,
-        specs: active?.specs ?? quoteRecord.summary.specs,
-        lines: active?.lines ?? quoteRecord.summary.lines,
-        imageUrl: active?.imageUrl ?? quoteRecord.summary.imageUrl,
-        selections: active?.selections ?? quoteRecord.selections,
-        activeRevisionId: active?.id ?? "",
-        revisions: loaded.revisions,
-      })
-    : undefined;
-  const specs = active?.specs ?? quoteRecord?.summary.specs ?? [];
+  const quotes = (
+    await Promise.all((await quoteIdsForDeal(deal.id, deal.quoteId)).map((id) => loadConversationQuote(id)))
+  ).filter((quote): quote is ConversationQuote => quote != null);
+  const quote = quotes.find((item) => item.id === deal.quoteId) ?? quotes[0];
   const option = conversationDealOptionSchema.safeParse({
     id: deal.id,
-    title: deal.name?.trim() || productTitle(specs) || quoteRecord?.invoiceId || "",
-    priceLabel: active?.totalLabel ?? quoteRecord?.summary.totalLabel ?? "",
+    title: deal.name?.trim() || productTitle(quote?.specs ?? []) || quote?.invoiceId || "",
+    priceLabel: quote?.totalLabel ?? "",
     stage: deal.status,
     dateLabel: formatDealMenuDate(deal.createdAt ?? ""),
     deal,
     quote: quote ?? null,
+    quotes,
     conversationId: thread?.id,
     activities: thread?.activities ?? [],
   });

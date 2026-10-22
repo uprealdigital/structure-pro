@@ -59,6 +59,11 @@ export const quoteRevisionActivateSchema = z.object({
   revisionId: z.string().trim().min(1),
 });
 
+export const createDealQuoteSchema = z.object({
+  dealId: z.string().trim().min(1),
+  selections: quoteSelectionsSchema,
+});
+
 export const quoteRevisionSchema = z.object({
   id: z.string().min(1),
   quoteId: z.string().min(1),

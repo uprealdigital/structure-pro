@@ -6,7 +6,8 @@ import { readCustomers } from "@/src/features/crm/common/db/customer";
 import { readDealCustomers, readDealCustomersForDeals } from "@/src/features/crm/common/db/deal-customer";
 import { readConversations } from "@/src/features/crm/conversations/db/conversation";
 import { canonicalConversationByCustomer } from "@/src/features/crm/conversations/utils/conversations";
-import { readDeals, readDealsByQuoteId } from "@/src/features/crm/deals/db/deal";
+import { readDeals, readDealsByIds, readDealsByQuoteId } from "@/src/features/crm/deals/db/deal";
+import { readAllDealQuotes, readDealQuotesForQuote } from "@/src/features/crm/deals/db/deal-quote";
 import { contractOnDeal, quoteIssued } from "@/src/features/crm/deals/utils/mappers";
 import { readActiveRevisionId, readQuote, readQuotes } from "@/src/features/crm/quotes/db/quote";
 import { readQuoteRevision } from "@/src/features/crm/quotes/db/quote-revision";
@@ -32,13 +33,22 @@ export const getQuoteList = cache(async (): Promise<QuoteListItem[]> => {
     related.push({ customer, isPrimary: link.isPrimary });
     customersByDeal.set(link.dealId, related);
   }
+  const dealLinks = await readAllDealQuotes();
+  const dealById = new Map(deals.map((deal) => [deal.id, deal]));
   const dealsByQuote = new Map<string, typeof deals>();
   for (const deal of deals) {
     const related = dealsByQuote.get(deal.quoteId) ?? [];
     related.push(deal);
     dealsByQuote.set(deal.quoteId, related);
   }
-  const dealById = new Map(deals.map((deal) => [deal.id, deal]));
+  for (const link of dealLinks) {
+    const deal = dealById.get(link.dealId);
+    if (!deal) continue;
+    const related = dealsByQuote.get(link.quoteId) ?? [];
+    if (related.some((item) => item.id === deal.id)) continue;
+    related.push(deal);
+    dealsByQuote.set(link.quoteId, related);
+  }
   const conversationByCustomer = canonicalConversationByCustomer(conversations);
   const primaryDealsByCustomer = new Map<string, number>();
   for (const link of links) {
@@ -53,7 +63,12 @@ export const getQuoteList = cache(async (): Promise<QuoteListItem[]> => {
     const deal = dealById.get(link.dealId);
     if (!deal) continue;
     const primaryDealCount = primaryDealsByCustomer.get(link.customerId) ?? 1;
-    if (contractOnDeal(deal.status, true, primaryDealCount)) contractQuoteIds.add(deal.quoteId);
+    if (contractOnDeal(deal.status, true, primaryDealCount)) {
+      contractQuoteIds.add(deal.quoteId);
+      for (const quoteLink of dealLinks) {
+        if (quoteLink.dealId === deal.id) contractQuoteIds.add(quoteLink.quoteId);
+      }
+    }
   }
 
   const items: QuoteListItem[] = [];
@@ -102,7 +117,15 @@ export const getQuotePortal = cache(async (id: string): Promise<QuotePortal | un
   if (!revisionId) return undefined;
   const revision = await readQuoteRevision(revisionId);
   if (!revision || revision.quoteId !== quoteId) return undefined;
-  const deals = await readDealsByQuoteId(quoteId);
+  const [directDeals, quoteLinks] = await Promise.all([
+    readDealsByQuoteId(quoteId),
+    readDealQuotesForQuote(quoteId),
+  ]);
+  const attachedIds = new Set(directDeals.map((deal) => deal.id));
+  const linkedDeals = await readDealsByIds(
+    quoteLinks.map((link) => link.dealId).filter((id) => !attachedIds.has(id)),
+  );
+  const deals = [...directDeals, ...linkedDeals];
   const [links, customers] = await Promise.all([
     readDealCustomersForDeals(deals.map((deal) => deal.id)),
     readCustomers(),

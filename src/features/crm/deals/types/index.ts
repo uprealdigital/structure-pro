@@ -44,6 +44,13 @@ export const dealPatchSchema = z.object({
   viewedAt: z.string().nullable().optional(),
 });
 
+export const dealQuoteLinkSchema = z.object({
+  dealId: z.string().trim().min(1),
+  quoteId: z.string().trim().min(1),
+});
+
+export type DealQuoteLink = z.infer<typeof dealQuoteLinkSchema>;
+
 export const dealStageSchema = dealStatusSchema;
 
 export type DealStage = DealStatus;

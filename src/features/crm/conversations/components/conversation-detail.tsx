@@ -4,11 +4,12 @@ import { ArrowUpRight, Paperclip, Pencil, Phone, Plus, X } from "lucide-react";
 import { useEffect, useLayoutEffect, useRef, useState, type FormEvent } from "react";
 import { BuildingConfigurator } from "@/src/features/cpq/components/building-configurator";
 import { ComposerAttachments, type ComposerAttachment } from "@/src/features/crm/conversations/components/composer-attachments";
+import { DesignPreviewModal } from "@/src/features/crm/conversations/components/design-preview-modal";
 import { activityChannelLabel, ConversationThread, previewFrameHeight, type OutgoingMessage } from "@/src/features/crm/conversations/components/conversation-thread";
 import { CustomerMenu } from "@/src/features/crm/conversations/components/customer-menu";
 import { DealHeading } from "@/src/features/crm/conversations/components/deal-menu";
 import { DealSummary } from "@/src/features/crm/conversations/components/deal-summary";
-import { QuotePanel, QuoteRevisionMenu } from "@/src/features/crm/conversations/components/quote-panel";
+import { QuoteMenu, QuotePanel } from "@/src/features/crm/conversations/components/quote-panel";
 import { Toast } from "@/src/common/components/toast";
 import { ReviewSendModal } from "@/src/features/crm/conversations/components/review-send-modal";
 import { useConversationActivities } from "@/src/features/crm/conversations/hooks/use-conversation-activities";
@@ -24,13 +25,19 @@ import type {
   ConversationWorkspace,
 } from "@/src/features/crm/conversations/types";
 import { uploadComposerAttachment } from "@/src/features/crm/conversations/utils/upload-attachment";
-import { productTitle, revisionVersionLabel, systemEventText } from "@/src/features/crm/conversations/utils/formatting";
+import { previousSentRevision } from "@/src/features/crm/conversations/utils/design-preview";
+import { productTitle, revisionMenuLabel, systemEventText } from "@/src/features/crm/conversations/utils/formatting";
 import {
   conversationQuoteFromSelections,
   conversationQuoteWithActiveRevision,
   conversationQuoteWithSentRevision,
 } from "@/src/features/crm/conversations/utils/mappers";
-import { activateQuoteRevision, saveQuoteCommunication, saveQuoteSelections } from "@/src/features/crm/quotes/server/actions";
+import {
+  activateQuoteRevision,
+  createDealQuoteAction,
+  saveQuoteCommunication,
+  saveQuoteSelections,
+} from "@/src/features/crm/quotes/server/actions";
 import type { QuoteCommunication } from "@/src/features/crm/quotes/types";
 import type { QuoteSelections } from "@/src/features/cpq/types";
 import { DealStatusBadge } from "@/src/features/crm/deals/components/deal-status-badge";
@@ -96,7 +103,17 @@ type NoticeRecord = {
 };
 
 function revisionStatusLabel(revision: ConversationQuoteRevision): string {
-  return revisionVersionLabel(revision.status, revision.revisionNumber);
+  return revisionMenuLabel(revision.revisionNumber);
+}
+
+function quotesForDeal(
+  option: ConversationWorkspace["deals"][number],
+  patches: Record<string, ConversationQuote>,
+  added: ConversationQuote[],
+): ConversationQuote[] {
+  const base = option.quotes.length > 0 ? option.quotes : option.quote ? [option.quote] : [];
+  const known = new Set(base.map((quote) => quote.id));
+  return [...base, ...added.filter((quote) => !known.has(quote.id))].map((quote) => patches[quote.id] ?? quote);
 }
 
 function viewedRevision(
@@ -178,6 +195,9 @@ export function ConversationDetail({
   const [detailsSettled, setDetailsSettled] = useState(false);
   const [focusedDealId, setFocusedDealId] = useState(workspace.deal.id);
   const [selectedRevisionId, setSelectedRevisionId] = useState<string | null>(null);
+  const [viewingQuoteIds, setViewingQuoteIds] = useState<Record<string, string>>({});
+  const [addedQuotes, setAddedQuotes] = useState<Record<string, ConversationQuote[]>>({});
+  const [addingQuote, setAddingQuote] = useState(false);
   const [quotePatches, setQuotePatches] = useState<Record<string, ConversationQuote>>({});
   const [dealStatusPatches, setDealStatusPatches] = useState<Record<string, DealStatus>>({});
   const [dealNamePatches, setDealNamePatches] = useState<Record<string, string>>({});
@@ -203,19 +223,30 @@ export function ConversationDetail({
         : {}),
       ...(renamed ? { name: renamed } : {}),
     };
-    const patch = option.quote ? quotePatches[option.quote.id] : undefined;
+    const quotes = quotesForDeal(option, quotePatches, addedQuotes[option.id] ?? []);
+    const primary = quotes.find((quote) => quote.id === option.deal.quoteId) ?? quotes[0];
+    const patchedPrimary = primary && quotePatches[primary.id]?.id === option.deal.quoteId ? primary : undefined;
     const customName = deal.name?.trim();
-    if (!patch && !status && !renamed && !seen) return option;
+    const quotesChanged =
+      quotes.length !== (option.quotes.length > 0 ? option.quotes.length : option.quote ? 1 : 0) ||
+      quotes.some((quote, index) => quote !== (option.quotes[index] ?? option.quote));
+    if (!patchedPrimary && !quotesChanged && !status && !renamed && !seen) {
+      return option.quotes.length > 0 ? option : { ...option, quotes };
+    }
     return {
       ...option,
-      title: customName || (patch ? productTitle(patch.specs) || option.title : option.title),
-      priceLabel: patch?.totalLabel ?? option.priceLabel,
+      title: customName || (patchedPrimary ? productTitle(patchedPrimary.specs) || option.title : option.title),
+      priceLabel: patchedPrimary?.totalLabel ?? primary?.totalLabel ?? option.priceLabel,
       stage: deal.status,
       deal,
-      quote: patch ?? option.quote,
+      quote: primary ?? option.quote,
+      quotes,
     };
   });
   const focusedOption = deals.find((deal) => deal.id === focusedDealId) ?? deals[0];
+  const listedQuotes = focusedOption ? quotesForDeal(focusedOption, {}, []) : [];
+  const viewingQuote =
+    listedQuotes.find((quote) => quote.id === viewingQuoteIds[focusedOption?.id ?? ""]) ?? listedQuotes[0] ?? null;
   const participants = participantsForDeal(workspace.participants, focusedOption?.id ?? workspace.deal.id, {
     dealId: focusedOption?.id ?? workspace.deal.id,
     isPrimary: true,
@@ -223,7 +254,7 @@ export function ConversationDetail({
     customer: workspace.customer,
   });
   const focused = focusedOption
-    ? { ...workspace, deal: focusedOption.deal, quote: focusedOption.quote }
+    ? { ...workspace, deal: focusedOption.deal, quote: viewingQuote }
     : workspace;
   const [draft, setDraft] = useState("");
   const [attachments, setAttachments] = useState<ComposerAttachment[]>([]);
@@ -258,6 +289,7 @@ export function ConversationDetail({
   const delivering = useRef(false);
   const [sendError, setSendError] = useState("");
   const [reviewOpen, setReviewOpen] = useState(false);
+  const [designPreviewOpen, setDesignPreviewOpen] = useState(false);
   const [communicationPatches, setCommunicationPatches] = useState<Record<string, QuoteCommunication>>({});
   const [editing, setEditing] = useState(false);
   const composerRef = useRef<HTMLTextAreaElement>(null);
@@ -555,7 +587,7 @@ export function ConversationDetail({
       setRevisionError(copy.activateRevisionError);
       return;
     }
-    const name = revisionVersionLabel(revision.status, revision.revisionNumber);
+    const name = revisionMenuLabel(revision.revisionNumber);
     showNotice(
       copy.activeQuoteSwitchedToast(name),
       async () => {
@@ -574,6 +606,50 @@ export function ConversationDetail({
     );
   }
 
+  function viewQuote(quoteId: string) {
+    const dealId = focusedOption?.id;
+    if (!dealId || quoteId === viewingQuote?.id) return;
+    setViewingQuoteIds((current) => ({ ...current, [dealId]: quoteId }));
+    setSelectedRevisionId(null);
+    setRevisionError("");
+    setEditing(false);
+  }
+
+  async function addQuote() {
+    const quote = focused.quote;
+    const dealId = focusedOption?.id;
+    if (!quote || !dealId || addingQuote) return;
+    setAddingQuote(true);
+    setRevisionError("");
+    const result = await createDealQuoteAction({ dealId, selections: quote.selections });
+    setAddingQuote(false);
+    if ("error" in result) {
+      setRevisionError(copy.addQuoteError);
+      return;
+    }
+    const next = conversationQuoteFromSelections(
+      { ...quote, id: result.data.id, invoiceId: result.data.invoiceId, revisions: [] },
+      quote.selections,
+      {
+        id: result.data.revisionId,
+        revisionNumber: result.data.revisionNumber,
+        createdAt: result.data.createdAt,
+        updatedAt: result.data.updatedAt,
+      },
+    );
+    if (!next) {
+      setRevisionError(copy.addQuoteError);
+      return;
+    }
+    setAddedQuotes((current) => ({
+      ...current,
+      [dealId]: [...(current[dealId] ?? []), next],
+    }));
+    setViewingQuoteIds((current) => ({ ...current, [dealId]: next.id }));
+    setSelectedRevisionId(next.activeRevisionId);
+    setEditing(false);
+  }
+
   function toggleEditing() {
     if (!editing) setDetailsOpen(false);
     setEditing((open) => !open);
@@ -589,6 +665,16 @@ export function ConversationDetail({
     setQuotePatches((current) => ({ ...current, [next.id]: next }));
     setSelectedRevisionId(result.data.id);
     setEditing(false);
+  }
+
+  async function saveAndShareFocusedQuote(selections: QuoteSelections) {
+    await saveFocusedQuote(selections);
+    setDesignPreviewOpen(true);
+  }
+
+  async function saveAndReviewFocusedQuote(selections: QuoteSelections) {
+    await saveFocusedQuote(selections);
+    setReviewOpen(true);
   }
 
   async function saveViewedCommunication(communication: QuoteCommunication) {
@@ -651,8 +737,7 @@ export function ConversationDetail({
     });
   }
 
-  function addAttachments(list: FileList | null) {
-    const files = Array.from(list ?? []);
+  function addAttachmentFiles(files: File[]) {
     if (files.length === 0) return;
     const next = files.map((file) => {
       const id = crypto.randomUUID();
@@ -695,6 +780,10 @@ export function ConversationDetail({
         );
       });
     }
+  }
+
+  function addAttachments(list: FileList | null) {
+    addAttachmentFiles(Array.from(list ?? []));
   }
 
   function showUploadFinished(id: string) {
@@ -1012,12 +1101,14 @@ export function ConversationDetail({
                   />
                 </div>
                 <div className="flex shrink-0 flex-col gap-1.5">
-                  <QuoteRevisionMenu
-                    revisions={focused.quote.revisions}
-                    activeRevisionId={focused.quote.activeRevisionId}
-                    revision={viewed}
+                  <QuoteMenu
+                    quotes={listedQuotes}
+                    viewingQuoteId={viewingQuote?.id ?? focused.quote.id}
                     error={revisionError}
+                    adding={addingQuote}
+                    onViewQuote={viewQuote}
                     onSelectRevision={(id) => void selectRevision(id)}
+                    onAddQuote={() => void addQuote()}
                   />
                   <div className="flex items-center gap-1.5">
                     <button
@@ -1106,7 +1197,9 @@ export function ConversationDetail({
         <div className="mb-2.5 flex items-center">
           <button
             type="button"
-            className="inline-flex items-center gap-1.5 rounded-full border border-gray-200 bg-white px-3 py-1.5 text-xs font-medium text-gray-800 shadow-xs transition-colors hover:bg-gray-50"
+            disabled={!viewed}
+            onClick={() => setDesignPreviewOpen(true)}
+            className="inline-flex items-center gap-1.5 rounded-full border border-gray-200 bg-white px-3 py-1.5 text-xs font-medium text-gray-800 shadow-xs transition-colors hover:bg-gray-50 disabled:opacity-40"
           >
             <Plus className="h-3.5 w-3.5 shrink-0 text-gray-500" strokeWidth={2} aria-hidden="true" />
             <span>{copy.attachDesignPreview}</span>
@@ -1174,10 +1267,23 @@ export function ConversationDetail({
               mode="internal"
               selections={viewed.selections}
               onSave={saveFocusedQuote}
+              onSaveAndShare={saveAndShareFocusedQuote}
+              onSaveAndReview={saveAndReviewFocusedQuote}
             />
           </div>
         ) : null}
       </div>
+      {designPreviewOpen && focused.quote && viewed ? (
+        <DesignPreviewModal
+          current={viewed}
+          previous={previousSentRevision(focused.quote.revisions, viewed)}
+          onClose={() => setDesignPreviewOpen(false)}
+          onAttach={(file) => {
+            addAttachmentFiles([file]);
+            setDesignPreviewOpen(false);
+          }}
+        />
+      ) : null}
       {reviewOpen && focused.quote && viewed ? (
         <ReviewSendModal
           participants={participants}

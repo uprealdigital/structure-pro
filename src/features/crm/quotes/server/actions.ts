@@ -2,14 +2,17 @@
 
 import { revalidatePath } from "next/cache";
 import { quoteSelectionsSchema } from "@/src/features/cpq/types";
-import { readDealsByQuoteId, updateDeal } from "@/src/features/crm/deals/db/deal";
-import { readActiveRevisionId, updateQuote } from "@/src/features/crm/quotes/db/quote";
+import { readDeal, readDealsByIds, readDealsByQuoteId, updateDeal } from "@/src/features/crm/deals/db/deal";
+import { createDealQuote, readDealQuotesForQuote } from "@/src/features/crm/deals/db/deal-quote";
+import { newInvoiceId } from "@/src/features/cpq/utils/id";
+import { createQuote, deleteQuote, readActiveRevisionId, updateQuote } from "@/src/features/crm/quotes/db/quote";
 import {
   createQuoteRevision,
   readQuoteRevision,
   updateQuoteRevisionCommunication,
 } from "@/src/features/crm/quotes/db/quote-revision";
 import {
+  createDealQuoteSchema,
   payQuoteDepositSchema,
   quoteCommunicationWriteSchema,
   quoteRevisionActivateSchema,
@@ -75,6 +78,70 @@ export async function saveQuoteCommunication(input: {
   }
 }
 
+function missingDealQuotes(error: unknown): boolean {
+  const message = error instanceof Error ? error.message.toLowerCase() : "";
+  return (
+    message.includes("permission denied") ||
+    message.includes("42501") ||
+    (message.includes("deal_quotes") &&
+      (message.includes("does not exist") ||
+        message.includes("schema cache") ||
+        message.includes("could not find")))
+  );
+}
+
+export async function createDealQuoteAction(input: {
+  dealId: string;
+  selections: unknown;
+}): Promise<
+  | {
+      success: true;
+      data: {
+        id: string;
+        invoiceId: string;
+        revisionId: string;
+        revisionNumber: number;
+        createdAt: string;
+        updatedAt: string;
+      };
+    }
+  | { error: string }
+> {
+  const parsed = createDealQuoteSchema.safeParse(input);
+  if (!parsed.success) return { error: "A deal and configuration are required" };
+
+  let quoteId = "";
+  try {
+    const deal = await readDeal(parsed.data.dealId);
+    if (!deal) return { error: "Deal was not found" };
+    const invoiceId = newInvoiceId();
+    quoteId = await createQuote({ invoiceId, selections: parsed.data.selections });
+    await createDealQuote({ dealId: deal.id, quoteId });
+    const revisionId = await readActiveRevisionId(quoteId);
+    const revision = revisionId ? await readQuoteRevision(revisionId) : undefined;
+    if (!revision) return { error: "Could not add a quote" };
+    revalidatePath("/crm/conversations");
+    revalidatePath("/crm/quotes");
+    revalidatePath("/crm/deals");
+    return {
+      success: true,
+      data: {
+        id: quoteId,
+        invoiceId,
+        revisionId: revision.id,
+        revisionNumber: revision.revisionNumber,
+        createdAt: revision.createdAt,
+        updatedAt: revision.updatedAt,
+      },
+    };
+  } catch (error) {
+    if (quoteId) await deleteQuote(quoteId).catch(() => undefined);
+    if (missingDealQuotes(error)) return { error: "Could not add a quote yet" };
+    const message = error instanceof Error ? error.message : "Could not add a quote";
+    return { error: message };
+  }
+}
+
 export async function activateQuoteRevision(input: {
   quoteId: string;
   revisionId: string;
@@ -107,7 +174,13 @@ export async function payQuoteDeposit(
   try {
     const revisionId = await readActiveRevisionId(parsed.data.quoteId);
     if (!revisionId) return { error: "Quote was not found" };
-    const deals = await readDealsByQuoteId(parsed.data.quoteId);
+    const [direct, linked] = await Promise.all([
+      readDealsByQuoteId(parsed.data.quoteId),
+      readDealQuotesForQuote(parsed.data.quoteId),
+    ]);
+    const seen = new Set(direct.map((deal) => deal.id));
+    const extra = await readDealsByIds(linked.map((link) => link.dealId).filter((id) => !seen.has(id)));
+    const deals = [...direct, ...extra];
     if (deals.length === 0) return { error: "This quote is not attached to a deal" };
     for (const deal of deals) {
       if (deal.status === "deal_won") continue;

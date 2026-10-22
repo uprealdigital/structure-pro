@@ -1,11 +1,31 @@
 import {
   dealBoardItemSchema,
+  dealQuoteLinkSchema,
   dealSchema,
   dealStatusSchema,
   type Deal,
   type DealBoardItem,
+  type DealQuoteLink,
   type DealStatus,
 } from "@/src/features/crm/deals/types";
+
+export type DealQuoteRow = {
+  deal_id?: unknown;
+  quote_id?: unknown;
+  created_at?: unknown;
+};
+
+export function toDealQuoteLink(row: DealQuoteRow): (DealQuoteLink & { createdAt: string }) | undefined {
+  const link = dealQuoteLinkSchema.safeParse({
+    dealId: row.deal_id,
+    quoteId: row.quote_id,
+  });
+  if (!link.success) return undefined;
+  return {
+    ...link.data,
+    createdAt: typeof row.created_at === "string" ? row.created_at : "",
+  };
+}
 
 export type DealRow = {
   id: string;

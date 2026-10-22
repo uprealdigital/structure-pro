@@ -227,6 +227,7 @@ export const conversationDealOptionSchema = z.object({
   dateLabel: z.string(),
   deal: dealSchema,
   quote: conversationQuoteSchema.nullable(),
+  quotes: z.array(conversationQuoteSchema).default([]),
   conversationId: z.string().optional(),
   activities: z.array(activitySchema).default([]),
 });

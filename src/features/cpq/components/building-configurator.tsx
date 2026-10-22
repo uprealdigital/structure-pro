@@ -40,10 +40,14 @@ export function BuildingConfigurator({
   selections: initialSelections,
   mode = "external",
   onSave,
+  onSaveAndShare,
+  onSaveAndReview,
 }: {
   selections?: QuoteSelections;
   mode?: ConfiguratorMode;
   onSave?: (selections: QuoteSelections) => Promise<void>;
+  onSaveAndShare?: (selections: QuoteSelections) => Promise<void>;
+  onSaveAndReview?: (selections: QuoteSelections) => Promise<void>;
 } = {}) {
   const internal = mode === "internal";
   const [yardOpen, setYardOpen] = useState(false);
@@ -71,13 +75,14 @@ export function BuildingConfigurator({
     zip,
   } = useBuildingSelection(initialSelections);
 
-  async function saveInternalQuote() {
-    if (!onSave || savingRef.current) return;
+  async function saveInternalQuote(next: "close" | "share" | "review" = "close") {
+    const save = next === "share" ? onSaveAndShare : next === "review" ? onSaveAndReview : onSave;
+    if (!save || savingRef.current) return;
     savingRef.current = true;
     setSaving(true);
     setSaveError("");
     try {
-      await onSave(selections);
+      await save(selections);
     } catch (error) {
       setSaveError(error instanceof Error ? error.message : copy.saveQuoteError);
     } finally {
@@ -92,6 +97,14 @@ export function BuildingConfigurator({
       return;
     }
     setQuoteOpen(true);
+  }
+
+  function shareQuote() {
+    void saveInternalQuote("share");
+  }
+
+  function reviewQuote() {
+    void saveInternalQuote("review");
   }
 
   return (
@@ -203,6 +216,8 @@ export function BuildingConfigurator({
           config={config}
           onChange={setConfig}
           onSubmit={submitQuote}
+          onShare={onSaveAndShare ? shareQuote : undefined}
+          onReview={onSaveAndReview ? reviewQuote : undefined}
           pending={saving}
           mode={mode}
           estimate={estimate}
@@ -232,6 +247,8 @@ export function BuildingConfigurator({
                 variant="header"
                 pending={saving}
                 onPrimary={submitQuote}
+                onShare={onSaveAndShare ? shareQuote : undefined}
+                onReview={onSaveAndReview ? reviewQuote : undefined}
               />
             </div>
             {saveError ? <p className="mt-3 text-right text-xs text-red-600">{saveError}</p> : null}
@@ -288,7 +305,14 @@ export function BuildingConfigurator({
             <p className="text-[11px] leading-relaxed text-gray-500">
               {copy.satisfaction}
             </p>
-            <QuoteActions mode={mode} variant="panel" pending={saving} onPrimary={submitQuote} />
+            <QuoteActions
+              mode={mode}
+              variant="panel"
+              pending={saving}
+              onPrimary={submitQuote}
+              onShare={onSaveAndShare ? shareQuote : undefined}
+              onReview={onSaveAndReview ? reviewQuote : undefined}
+            />
             <div className="flex items-center space-x-2 pt-3 text-xs text-gray-600">
               <span>
                 {copy.deliveryTo}{" "}

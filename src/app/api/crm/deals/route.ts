@@ -1,5 +1,6 @@
 import { assertInternal } from "@/src/common/utils/internal-call";
 import { createDeal } from "@/src/features/crm/deals/db/deal";
+import { createDealQuote } from "@/src/features/crm/deals/db/deal-quote";
 import type { DealSource } from "@/src/features/crm/deals/types";
 
 export const runtime = "nodejs";
@@ -34,6 +35,19 @@ export async function POST(request: Request) {
   }
   try {
     const deal = await createDeal({ quoteId, source });
+    try {
+      await createDealQuote({ dealId: deal.id, quoteId: deal.quoteId });
+    } catch (error) {
+      const message = error instanceof Error ? error.message.toLowerCase() : "";
+      const missing =
+        message.includes("permission denied") ||
+        message.includes("42501") ||
+        (message.includes("deal_quotes") &&
+          (message.includes("does not exist") ||
+            message.includes("schema cache") ||
+            message.includes("could not find")));
+      if (!missing) throw error;
+    }
     return Response.json(deal);
   } catch (error) {
     const message = error instanceof Error ? error.message : "Could not save deal";
