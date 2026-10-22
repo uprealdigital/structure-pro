@@ -245,6 +245,9 @@ const messageTokens = [
   { id: "dealName", token: reviewMessageToken.dealName, label: copy.dealNameToken, group: "deal" },
   { id: "dealPrice", token: reviewMessageToken.dealPrice, label: copy.dealPriceToken, group: "deal" },
   { id: "quoteLink", token: reviewMessageToken.quoteLink, label: copy.quoteLinkToken, group: "quote" },
+  { id: "companyName", token: reviewMessageToken.companyName, label: copy.companyNameToken, group: "company" },
+  { id: "userFirstName", token: reviewMessageToken.userFirstName, label: copy.userFirstNameToken, group: "user" },
+  { id: "userLastName", token: reviewMessageToken.userLastName, label: copy.userLastNameToken, group: "user" },
 ] as const;
 
 type MessageTokenId = (typeof messageTokens)[number]["id"];
@@ -562,13 +565,15 @@ const RichMessageEditor = memo(function RichMessageEditor({
           anchorRef={variableRef}
           align="end"
           onClose={() => setVariableOpen(false)}
-          className="w-44 overflow-hidden rounded-lg border border-gray-200 bg-white py-1 shadow-lg"
+          className="w-48 overflow-hidden rounded-lg border border-gray-200 bg-white py-1 shadow-lg"
         >
           {(
             [
               { label: copy.variableCustomer, group: "customer" },
               { label: copy.variableDeal, group: "deal" },
               { label: copy.variableQuote, group: "quote" },
+              { label: copy.variableCompany, group: "company" },
+              { label: copy.variableUser, group: "user" },
             ] as const
           ).map((section) => (
             <div key={section.group}>
@@ -597,17 +602,12 @@ const RichMessageEditor = memo(function RichMessageEditor({
   );
 });
 
-function defaultCommunication(
-  people: ConversationParticipant[],
-  invoiceId: string,
-  title: string,
-  priceLabel: string,
-): QuoteCommunication {
+function defaultCommunication(people: ConversationParticipant[]): QuoteCommunication {
   const ids = people.map((person) => person.customer.id);
   return {
-    subject: reviewQuoteSubject(invoiceId, title),
-    emailBody: reviewEmailBody(title, priceLabel),
-    smsBody: reviewSmsBody(copy.operatorName.split(" ")[0] || copy.operatorName, title, priceLabel),
+    subject: reviewQuoteSubject(),
+    emailBody: reviewEmailBody(),
+    smsBody: reviewSmsBody(),
     emailRecipientIds: ids,
     smsRecipientIds: ids,
   };
@@ -634,7 +634,6 @@ export function ReviewSendModal({
   participants,
   title,
   priceLabel,
-  invoiceId,
   quoteId,
   revisionId,
   imageUrl,
@@ -647,7 +646,6 @@ export function ReviewSendModal({
   participants: ConversationParticipant[];
   title: string;
   priceLabel: string;
-  invoiceId: string;
   quoteId: string;
   revisionId: string;
   imageUrl: string;
@@ -659,13 +657,13 @@ export function ReviewSendModal({
 }) {
   const people = dealRecipients(participants);
   const [draft, setDraft] = useState(() =>
-    savedCommunication(communication, people, defaultCommunication(people, invoiceId, title, priceLabel)),
+    savedCommunication(communication, people, defaultCommunication(people)),
   );
   const [sending, setSending] = useState(false);
   const [sendError, setSendError] = useState("");
   const draftRef = useRef(draft);
   const savedKey = useRef(communication ? JSON.stringify(draft) : "");
-  const defaultKey = useRef(JSON.stringify(defaultCommunication(people, invoiceId, title, priceLabel)));
+  const defaultKey = useRef(JSON.stringify(defaultCommunication(people)));
   const saveChain = useRef(Promise.resolve());
   const onSaveRef = useRef(onSave);
   const onCloseRef = useRef(onClose);

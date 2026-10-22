@@ -2,6 +2,7 @@ import { specValue } from "@/src/features/crm/common/utils/formatting";
 import { copy } from "@/src/features/crm/conversations/locales/en";
 import type { Activity } from "@/src/features/crm/conversations/types";
 import { fileAttachment, imageAttachment } from "@/src/features/crm/conversations/utils/attachments";
+import { parseEmailActivity } from "@/src/features/crm/conversations/utils/email-message";
 
 export function quoteMenuName(index: number): string {
   return `${copy.quote} ${index + 1}`;
@@ -9,6 +10,13 @@ export function quoteMenuName(index: number): string {
 
 export function revisionMenuLabel(revisionNumber: number): string {
   return `${copy.revision} ${revisionNumber}`;
+}
+
+function savedRevisionName(name: string): string {
+  const trimmed = name.trim();
+  const prefix = `${copy.revision} `;
+  if (trimmed.startsWith(prefix)) return trimmed;
+  return `${prefix}${trimmed}`;
 }
 
 export function messagePreview(text: string): string {
@@ -134,7 +142,12 @@ export function systemEventText(text: string): SystemEvent {
       const quoteName = decodedName(rest.slice(0, split));
       const revisionName = decodedName(rest.slice(split + 1));
       if (quoteName && revisionName) {
-        return { kind: "savedRevision", label: copy.newRevision, previousName: quoteName, name: revisionName };
+        return {
+          kind: "savedRevision",
+          label: copy.newRevision,
+          previousName: quoteName,
+          name: savedRevisionName(revisionName),
+        };
       }
     }
   }
@@ -187,6 +200,13 @@ export function activityPreview(activity: Activity | undefined): string {
     const timed = duration ? `${label} (${duration})` : label;
     return note ? `Call Log: ${timed} - ${note}` : `Call Log: ${timed}`;
   }
+  if (activity.channel === "email") {
+    const email = parseEmailActivity(activity.text);
+    const body = messagePreview(email.body);
+    if (body) return body;
+    if (email.subject) return messagePreview(email.subject);
+    if (email.attachments.length > 0) return copy.attachmentsPreview(email.attachments.length);
+  }
   const image = imageAttachment(activity.text);
   if (image) return messagePreview(image.name);
   const file = fileAttachment(activity.text);
@@ -226,26 +246,44 @@ export function productTitle(specs: { label: string; value: string }[]): string 
   return style || size;
 }
 
-export function reviewQuoteSubject(invoiceId: string, title: string): string {
-  return `TimberCraft Quote #${invoiceId} • ${title}`;
-}
-
 export const reviewMessageToken = {
   firstName: "{{firstName}}",
   lastName: "{{lastName}}",
   dealName: "{{dealName}}",
   dealPrice: "{{dealPrice}}",
   quoteLink: "{{quoteLink}}",
+  companyName: "{{companyName}}",
+  userFirstName: "{{userFirstName}}",
+  userLastName: "{{userLastName}}",
 } as const;
 
-export const reviewFirstNameToken = reviewMessageToken.firstName;
-
-export function reviewEmailBody(title: string, priceLabel: string): string {
-  return `Hi ${reviewFirstNameToken}, ${copy.reviewEmailLead} ${title} (${priceLabel}). ${copy.reviewEmailClose}`;
+export function reviewQuoteSubject(): string {
+  const token = reviewMessageToken;
+  return copy.reviewQuoteSubject(token.companyName, token.firstName, token.lastName, token.dealName);
 }
 
-export function reviewSmsBody(operatorFirst: string, title: string, priceLabel: string): string {
-  return `Hi ${reviewFirstNameToken}! ${operatorFirst} ${copy.reviewSmsLead} ${title} ${copy.reviewSmsQuote} (${priceLabel}). ${copy.reviewSmsClose}`;
+export function reviewEmailBody(): string {
+  const token = reviewMessageToken;
+  return copy.reviewEmailBody(
+    token.firstName,
+    token.dealName,
+    token.dealPrice,
+    token.quoteLink,
+    token.userFirstName,
+    token.companyName,
+  );
+}
+
+export function reviewSmsBody(): string {
+  const token = reviewMessageToken;
+  return copy.reviewSmsBody(
+    token.firstName,
+    token.userFirstName,
+    token.companyName,
+    token.dealName,
+    token.dealPrice,
+    token.quoteLink,
+  );
 }
 
 export function dealSummarySentence(input: {

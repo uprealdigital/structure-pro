@@ -15,12 +15,16 @@ export type ComposerAttachment = {
 
 export function UploadProgress({
   progress,
+  label = copy.attachmentUploading,
   onFilled,
   idle = false,
+  speed = 1,
 }: {
   progress: number;
+  label?: (progress: number) => string;
   onFilled: () => void;
   idle?: boolean;
+  speed?: number;
 }) {
   const radius = 11;
   const circumference = 2 * Math.PI * radius;
@@ -28,9 +32,11 @@ export function UploadProgress({
   const shownRef = useRef(0);
   const filledRef = useRef(onFilled);
   const settledRef = useRef(false);
+  const speedRef = useRef(speed);
   const [shown, setShown] = useState(0);
   targetRef.current = progress;
   filledRef.current = onFilled;
+  speedRef.current = speed;
 
   useEffect(() => {
     if (idle) return;
@@ -42,7 +48,7 @@ export function UploadProgress({
       const target = reported >= 100 ? 100 : Math.max(reported, creep);
       const current = shownRef.current;
       const delta = target - current;
-      const next = Math.abs(delta) < 0.4 ? target : current + Math.sign(delta) * Math.min(Math.abs(delta), 1.6);
+      const next = Math.abs(delta) < 0.4 ? target : current + Math.sign(delta) * Math.min(Math.abs(delta), 1.6 * speedRef.current);
       if (next !== current) {
         shownRef.current = next;
         setShown(next);
@@ -78,7 +84,7 @@ export function UploadProgress({
           strokeDashoffset={offset}
         />
       </svg>
-      <span className="sr-only">{copy.attachmentUploading(Math.round(shown))}</span>
+      <span className="sr-only">{label(Math.round(shown))}</span>
     </div>
   );
 }

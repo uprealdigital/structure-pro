@@ -25,6 +25,7 @@ import type {
   ConversationQuoteRevision,
   ConversationWorkspace,
 } from "@/src/features/crm/conversations/types";
+import { emailActivityText } from "@/src/features/crm/conversations/utils/email-message";
 import { uploadComposerAttachment } from "@/src/features/crm/conversations/utils/upload-attachment";
 import { productTitle, quoteMenuName, revisionMenuLabel, systemEventText } from "@/src/features/crm/conversations/utils/formatting";
 import {
@@ -259,6 +260,7 @@ export function ConversationDetail({
     ? { ...workspace, deal: focusedOption.deal, quote: viewingQuote }
     : workspace;
   const [draft, setDraft] = useState("");
+  const [emailSubject, setEmailSubject] = useState("");
   const [attachments, setAttachments] = useState<ComposerAttachment[]>([]);
   const attachmentsRef = useRef(attachments);
   attachmentsRef.current = attachments;
@@ -696,7 +698,7 @@ export function ConversationDetail({
     const saved = await recordSystemActivity({
       conversationId: workspace.id,
       kind: "savedRevision",
-      name: String(result.data.revisionNumber),
+      name: revisionMenuLabel(result.data.revisionNumber),
       previousName: quoteName,
     });
     if (!("error" in saved)) publishActivity(saved.data);
@@ -884,10 +886,6 @@ export function ConversationDetail({
         return;
       }
       appendActivity(result.data);
-      if (item.kind === "text") continue;
-      replaceOutgoing(
-        outgoingRef.current.map((row) => (row.id === item.id ? { ...row, status: "sent", error: "" } : row)),
-      );
       if (item.quoteId && item.revisionId) {
         const shared = await shareQuoteRevisionPhotos(item.revisionId);
         if ("error" in shared) {
@@ -900,6 +898,10 @@ export function ConversationDetail({
           if (next) setQuotePatches((current) => ({ ...current, [next.id]: next }));
         }
       }
+      if (item.kind === "text") continue;
+      replaceOutgoing(
+        outgoingRef.current.map((row) => (row.id === item.id ? { ...row, status: "sent", error: "" } : row)),
+      );
     }
     delivering.current = false;
   }
@@ -916,13 +918,38 @@ export function ConversationDetail({
   async function submitMessage(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const text = draft.trim();
+    const subject = channel === "email" ? emailSubject.trim() : "";
     const pending = attachmentsRef.current.filter((item) => item.phase === "ready");
     const uploading = attachmentsRef.current.some((item) => item.phase === "uploading");
-    if (uploading || !threadId || (!text && pending.length === 0)) return;
+    if (uploading || !threadId || (!text && !subject && pending.length === 0)) return;
     const sentAt = new Date().toISOString();
     const afterPosition = activitiesRef.current.reduce((max, activity) => Math.max(max, activity.position), -1);
     const batch: OutgoingMessage[] = [];
-    if (text) {
+    if (channel === "email") {
+      const quoted = pending.find((item) => item.quoteId && item.revisionId);
+      batch.push({
+        id: crypto.randomUUID(),
+        kind: "text",
+        channel,
+        text: emailActivityText({
+          subject,
+          body: text,
+          attachments: pending.map((item) => ({
+            id: item.id,
+            name: item.file.name || copy.attachment,
+            bytes: item.file.size,
+            kind: item.file.type.startsWith("image/") ? "image" : "file",
+          })),
+        }),
+        name: "",
+        sentAt,
+        afterPosition,
+        status: "queued",
+        error: "",
+        quoteId: quoted?.quoteId,
+        revisionId: quoted?.revisionId,
+      });
+    } else if (text) {
       batch.push({
         id: crypto.randomUUID(),
         kind: "text",
@@ -935,21 +962,23 @@ export function ConversationDetail({
         error: "",
       });
     }
-    for (const item of pending) {
-      batch.push({
-        id: item.id,
-        kind: item.file.type.startsWith("image/") ? "image" : "file",
-        channel,
-        text: "",
-        name: item.file.name || copy.attachment,
-        previewUrl: item.previewUrl,
-        quoteId: item.quoteId,
-        revisionId: item.revisionId,
-        sentAt,
-        afterPosition,
-        status: "queued",
-        error: "",
-      });
+    if (channel !== "email") {
+      for (const item of pending) {
+        batch.push({
+          id: item.id,
+          kind: item.file.type.startsWith("image/") ? "image" : "file",
+          channel,
+          text: "",
+          name: item.file.name || copy.attachment,
+          previewUrl: item.previewUrl,
+          quoteId: item.quoteId,
+          revisionId: item.revisionId,
+          sentAt,
+          afterPosition,
+          status: "queued",
+          error: "",
+        });
+      }
     }
     const measured: Record<string, number> = {};
     const pendingFrames = batch.filter((item) => {
@@ -980,6 +1009,7 @@ export function ConversationDetail({
     const ids = new Set(pending.map((item) => item.id));
     setAttachments((current) => current.filter((row) => !ids.has(row.id)));
     setDraft("");
+    if (channel === "email") setEmailSubject("");
     replaceOutgoing([...outgoingRef.current, ...batch]);
     setSendError("");
     void pumpOutgoing();
@@ -1042,7 +1072,11 @@ export function ConversationDetail({
   }
 
   const uploadingAttachment = attachments.some((item) => item.phase === "uploading");
-  const canSend = !uploadingAttachment && (Boolean(draft.trim()) || attachments.some((item) => item.phase === "ready"));
+  const canSend =
+    !uploadingAttachment &&
+    (Boolean(draft.trim()) ||
+      (channel === "email" && Boolean(emailSubject.trim())) ||
+      attachments.some((item) => item.phase === "ready"));
 
   function composerActions() {
     return (
@@ -1269,9 +1303,24 @@ export function ConversationDetail({
         </div>
         <div
           className={`relative rounded-lg border border-gray-300 bg-white shadow-xs focus-within:border-gray-600 ${
-            attachments.length > 0 ? "flex flex-col" : "flex items-end"
+            attachments.length > 0 || channel === "email" ? "flex flex-col" : "flex items-end"
           }`}
         >
+          {channel === "email" ? (
+            <input
+              value={emailSubject}
+              onChange={(event) => setEmailSubject(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") {
+                  event.preventDefault();
+                  composerRef.current?.focus();
+                }
+              }}
+              aria-label={copy.subject}
+              placeholder={copy.subject}
+              className="w-full border-b border-gray-200 bg-transparent px-3 py-2 text-xs font-medium text-gray-900 outline-none placeholder:text-gray-400"
+            />
+          ) : null}
           <input
             ref={fileInput}
             type="file"
@@ -1352,7 +1401,6 @@ export function ConversationDetail({
           participants={participants}
           title={title || copy.quote}
           priceLabel={viewed.totalLabel}
-          invoiceId={focused.quote.invoiceId}
           quoteId={focused.quote.id}
           revisionId={viewed.id}
           imageUrl={viewed.renders?.render_small_url || viewed.imageUrl}

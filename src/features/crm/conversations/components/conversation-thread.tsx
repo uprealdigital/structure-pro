@@ -3,10 +3,13 @@
 import { ArrowRightLeft, CirclePlus, Download, Eye, FileText, Pencil, Phone } from "lucide-react";
 import { useRef, useState } from "react";
 import { UploadProgress } from "@/src/features/crm/conversations/components/composer-attachments";
+import { EmailCard } from "@/src/features/crm/conversations/components/email-message";
 import { downloadImage, ImageViewerModal } from "@/src/features/crm/conversations/components/image-viewer-modal";
+import { MessageText } from "@/src/features/crm/conversations/components/message-text";
 import { copy } from "@/src/features/crm/conversations/locales/en";
 import type { Activity, ActivityChannel } from "@/src/features/crm/conversations/types";
 import { attachmentPreviewPath, fileAttachment, imageAttachment } from "@/src/features/crm/conversations/utils/attachments";
+import { parseEmailActivity, type EmailMessage } from "@/src/features/crm/conversations/utils/email-message";
 import { formatCallDuration, formatMessageClock, formatMessageDay, systemEventText } from "@/src/features/crm/conversations/utils/formatting";
 import { contactInitials } from "@/src/features/crm/common/utils/formatting";
 
@@ -277,10 +280,67 @@ function FilePreview({
   );
 }
 
-function messageStamp(sentAt: string | undefined, channel: ActivityChannel): string {
+function messageStamp(sentAt: string | undefined, channel: ActivityChannel, received = false): string {
   const clock = sentAt ? formatMessageClock(sentAt) : "";
   if (!clock) return "";
-  return `${clock} • ${copy.viaChannel} ${activityChannelLabel(channel)}`;
+  const via = received ? copy.receivedVia : copy.viaChannel;
+  return `${clock} • ${via} ${activityChannelLabel(channel)}`;
+}
+
+function EmailActivity({
+  message,
+  sent,
+  clock,
+  stamp,
+  initials,
+  ai = false,
+  error,
+  onRetry,
+}: {
+  message: EmailMessage;
+  sent: boolean;
+  clock: string;
+  stamp: string;
+  initials: string;
+  ai?: boolean;
+  error?: string;
+  onRetry?: () => void;
+}) {
+  return (
+    <div className={sent ? "ml-auto flex max-w-xl items-start justify-end" : "flex max-w-xl items-start"}>
+      {sent ? null : (
+        <span className="mr-2.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-gray-200 font-serif text-[10px] font-bold text-gray-700">
+          {initials}
+        </span>
+      )}
+      <div className="min-w-0 flex-1">
+        <EmailCard message={message} clock={clock} sent={sent} />
+        {stamp ? (
+          <span className={`mt-1 block text-[10px] text-gray-400 ${sent ? "pr-1 text-right" : "pl-1"}`}>{stamp}</span>
+        ) : null}
+        {error ? <p className={`mt-1 text-xs text-red-600 ${sent ? "text-right" : ""}`}>{error}</p> : null}
+        {error && onRetry ? (
+          <button type="button" onClick={onRetry} className={`mt-1 text-xs font-medium text-gray-900 ${sent ? "ml-auto block" : ""}`}>
+            {copy.retry}
+          </button>
+        ) : null}
+      </div>
+      {sent ? (
+        <div className="ml-2.5 flex shrink-0 flex-col items-center">
+          <div className="relative">
+            <div className="flex h-7 w-7 items-center justify-center rounded-full bg-gray-900 font-serif text-[10px] font-bold text-white">
+              {initials}
+            </div>
+            {ai ? (
+              <span className="absolute -right-0.5 -bottom-0.5 flex h-3 w-3 items-center justify-center rounded-full border border-white bg-purple-50 text-purple-700">
+                <AiStar />
+              </span>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
 }
 
 function StaffText({
@@ -302,7 +362,7 @@ function StaffText({
     <div className="ml-auto flex max-w-xl items-start justify-end">
       <div className="min-w-0 text-right">
         <div className="rounded-2xl rounded-tr-sm bg-[#121314] p-3.5 text-left text-xs text-white shadow-xs">
-          <p className="leading-relaxed whitespace-pre-wrap">{text}</p>
+          <MessageText text={text} className="leading-relaxed break-words whitespace-pre-wrap" />
         </div>
         {stamp ? (
           <div className="mt-1 flex items-center justify-end gap-2 pr-1">
@@ -453,7 +513,17 @@ export function ConversationThread({
           const item = piece.item;
           return (
             <li key={piece.key} className="flex flex-col gap-4">
-              {item.kind === "text" ? (
+              {item.channel === "email" ? (
+                <EmailActivity
+                  message={parseEmailActivity(item.text)}
+                  sent
+                  clock={item.sentAt ? formatMessageClock(item.sentAt) : ""}
+                  stamp={messageStamp(item.sentAt, "email")}
+                  initials={operatorInitials}
+                  error={item.status === "failed" ? item.error : ""}
+                  onRetry={() => onRetry?.(item.id)}
+                />
+              ) : item.kind === "text" ? (
                 <StaffText
                   text={item.text}
                   stamp={messageStamp(item.sentAt, item.channel)}
@@ -508,6 +578,15 @@ export function ConversationThread({
               <SystemActivity activity={activity} />
             ) : isCall(activity.channel) ? (
               <CallActivity activity={activity} />
+            ) : activity.channel === "email" ? (
+              <EmailActivity
+                message={parseEmailActivity(activity.text)}
+                sent={!fromCustomer}
+                clock={activity.createdAt ? formatMessageClock(activity.createdAt) : ""}
+                stamp={messageStamp(activity.createdAt, "email", fromCustomer)}
+                initials={fromCustomer ? contactInitials(contactName) : operatorInitials}
+                ai={!fromCustomer && activity.generatedBy === "ai"}
+              />
             ) : fromCustomer ? (
               <div className="flex max-w-xl items-start">
                 <span className="mr-2.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-gray-200 font-serif text-[10px] font-bold text-gray-700">
@@ -515,7 +594,7 @@ export function ConversationThread({
                 </span>
                 <div>
                   <div className="rounded-2xl rounded-tl-sm border border-gray-200 bg-white p-3.5 text-xs text-gray-800 shadow-xs">
-                    <p className="leading-relaxed whitespace-pre-wrap">{activity.text}</p>
+                    <MessageText text={activity.text} className="leading-relaxed break-words whitespace-pre-wrap" />
                   </div>
                   {stamp ? <span className="mt-1 block pl-1 text-[10px] text-gray-400">{stamp}</span> : null}
                 </div>

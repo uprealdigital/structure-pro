@@ -2,10 +2,10 @@
 
 import dynamic from "next/dynamic";
 import { ArrowLeftRight, Check, DollarSign, Plus, RotateCw, X } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
-import type { BuildingCapture } from "@/src/features/cpq/components/building-scene";
-import type { DesignAngle } from "@/src/features/cpq/components/building-view";
+import { useEffect, useRef, useState, type Ref } from "react";
+import type { DesignAngle, DesignAngleView } from "@/src/features/cpq/components/building-view";
 import { toBuildingConfig } from "@/src/features/cpq/utils/mappers";
+import { UploadProgress } from "@/src/features/crm/conversations/components/composer-attachments";
 import { copy } from "@/src/features/crm/conversations/locales/en";
 import type { ConversationQuoteRevision } from "@/src/features/crm/conversations/types";
 import {
@@ -14,7 +14,7 @@ import {
   type DesignPreviewChange,
 } from "@/src/features/crm/conversations/utils/design-preview";
 
-const BuildingView = dynamic(() => import("@/src/features/cpq/components/building-view"), {
+const BuildingViews = dynamic(() => import("@/src/features/cpq/components/building-view"), {
   ssr: false,
 });
 
@@ -109,29 +109,22 @@ async function composeDesignPreview(blobs: Blob[]): Promise<File> {
 }
 
 function DesignAngleCard({
-  view,
-  config,
-  captures,
+  label,
+  track,
   placement,
   removable,
+  modelReady,
   onRemove,
 }: {
-  view: DesignView;
-  config: ReturnType<typeof toBuildingConfig>;
-  captures: Map<string, () => BuildingCapture | null>;
+  label: string;
+  track: DesignAngleView["track"];
   placement: "cell" | "full" | "center";
   removable: boolean;
-  onRemove: (id: string) => void;
+  modelReady: boolean;
+  onRemove: () => void;
 }) {
-  const captureRef = useRef<BuildingCapture | null>(null);
-
-  useEffect(() => {
-    captures.set(view.id, () => captureRef.current);
-    return () => {
-      captures.delete(view.id);
-    };
-  }, [captures, view.id]);
-
+  const waitsForModel = useRef(!modelReady);
+  const [filled, setFilled] = useState(false);
   const placementClass =
     placement === "full"
       ? "col-span-2 aspect-[4/3]"
@@ -141,16 +134,23 @@ function DesignAngleCard({
 
   return (
     <li
-      className={`relative overflow-hidden rounded-xl border border-gray-200 bg-white ${placementClass}`}
+      ref={track as Ref<HTMLLIElement>}
+      aria-label={label}
+      className={`relative z-10 overflow-hidden rounded-xl border border-gray-200 bg-transparent ${placementClass}`}
       onWheel={(event) => event.stopPropagation()}
     >
-      <BuildingView config={config} angle={view.angle} label={angleLabel[view.angle]} captureRef={captureRef} />
+      {waitsForModel.current && !filled ? (
+        <div className="absolute inset-0 z-10 bg-white" onPointerDownCapture={(event) => event.stopPropagation()}>
+          <UploadProgress progress={modelReady ? 100 : 0} speed={2} label={copy.designViewLoading} onFilled={() => setFilled(true)} />
+        </div>
+      ) : null}
       {removable ? (
         <button
           type="button"
           aria-label={copy.removeDesignView}
-          onClick={() => onRemove(view.id)}
-          className="absolute top-2.5 left-2.5 z-10 flex h-6 w-6 items-center justify-center rounded-full border border-gray-200 bg-white text-gray-500 shadow-sm transition-colors hover:bg-gray-50 hover:text-gray-800"
+          onPointerDownCapture={(event) => event.stopPropagation()}
+          onClick={onRemove}
+          className="absolute top-2.5 left-2.5 z-20 flex h-6 w-6 items-center justify-center rounded-full border border-gray-200 bg-white text-gray-500 shadow-sm transition-colors hover:bg-gray-50 hover:text-gray-800"
         >
           <X className="h-3 w-3" strokeWidth={2.2} aria-hidden="true" />
         </button>
@@ -161,15 +161,31 @@ function DesignAngleCard({
 
 export function DesignPreviewModal({ current, revisions, onClose, onAttach }: DesignPreviewModalProps) {
   const [views, setViews] = useState<DesignView[]>(() => defaultAngles.map(createView));
+  const [modelReady, setModelReady] = useState(false);
   const [attaching, setAttaching] = useState(false);
   const [error, setError] = useState("");
-  const captures = useRef(new Map<string, () => BuildingCapture | null>());
+  const stageRef = useRef<HTMLDivElement>(null);
+  const trackRefs = useRef(new Map<string, DesignAngleView["track"]>());
+  const captureRefs = useRef(new Map<string, DesignAngleView["captureRef"]>());
   const viewCount = useRef(views.length);
   const listEnd = useRef<HTMLDivElement>(null);
   const config = toBuildingConfig(current.selections);
   const baseline = previousSharedPhotosRevision(revisions, current);
   const changes = changesSinceSharedPhotos(revisions, current);
   const changesScroll = changes.length > visibleChangeCount;
+  const angleViews: DesignAngleView[] = views.map((view) => {
+    let track = trackRefs.current.get(view.id);
+    if (!track) {
+      track = { current: null };
+      trackRefs.current.set(view.id, track);
+    }
+    let captureRef = captureRefs.current.get(view.id);
+    if (!captureRef) {
+      captureRef = { current: null };
+      captureRefs.current.set(view.id, captureRef);
+    }
+    return { id: view.id, angle: view.angle, label: angleLabel[view.angle], track, captureRef };
+  });
 
   useEffect(() => {
     function onKey(event: KeyboardEvent) {
@@ -201,7 +217,7 @@ export function DesignPreviewModal({ current, revisions, onClose, onAttach }: De
     try {
       const blobs: Blob[] = [];
       for (const view of views) {
-        const capture = captures.current.get(view.id)?.();
+        const capture = captureRefs.current.get(view.id)?.current;
         if (!capture) throw new Error(copy.designPreviewViewsLoading);
         blobs.push(await capture());
       }
@@ -272,19 +288,22 @@ export function DesignPreviewModal({ current, revisions, onClose, onAttach }: De
               {copy.designPreviewRotate}
             </span>
           </div>
-          <ul className="grid grid-cols-2 gap-3">
-            {views.map((view, index) => (
-              <DesignAngleCard
-                key={view.id}
-                view={view}
-                config={config}
-                captures={captures.current}
-                placement={views.length === 1 ? "full" : views.length === 3 && index === 2 ? "center" : "cell"}
-                removable={views.length > 1}
-                onRemove={removeView}
-              />
-            ))}
-          </ul>
+          <div ref={stageRef} className="relative">
+            <BuildingViews config={config} views={angleViews} stageRef={stageRef} onReady={() => setModelReady(true)} />
+            <ul className="relative z-10 grid grid-cols-2 gap-3">
+              {angleViews.map((view, index) => (
+                <DesignAngleCard
+                  key={view.id}
+                  label={view.label}
+                  track={view.track}
+                  placement={views.length === 1 ? "full" : views.length === 3 && index === 2 ? "center" : "cell"}
+                  removable={views.length > 1}
+                  modelReady={modelReady}
+                  onRemove={() => removeView(view.id)}
+                />
+              ))}
+            </ul>
+          </div>
           <div ref={listEnd} />
         </div>
 

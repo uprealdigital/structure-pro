@@ -14,6 +14,14 @@ export function formatFileSize(bytes: number): string {
   return `${Math.round(megabytes)} MB`;
 }
 
+export function formatAttachmentTotal(bytes: number): string {
+  if (!Number.isFinite(bytes) || bytes <= 0) return "";
+  if (bytes < 1024 * 1024) return formatFileSize(bytes);
+  const megabytes = bytes / (1024 * 1024);
+  if (megabytes < 100) return `${(Math.round(megabytes * 100) / 100).toFixed(2)} MB`;
+  return formatFileSize(bytes);
+}
+
 export function attachmentDetail(name: string, bytes: number): string {
   return `${fileExtensionLabel(name)} · ${formatFileSize(bytes)}`;
 }

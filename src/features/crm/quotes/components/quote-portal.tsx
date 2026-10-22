@@ -376,7 +376,6 @@ export function QuotePortal({
           participants={participants}
           title={quote.dealName}
           priceLabel={quote.totalLabel}
-          invoiceId={quote.invoiceId}
           quoteId={quote.id}
           revisionId={quote.revisionId}
           imageUrl={quote.renders?.render_small_url || quote.imageUrl}

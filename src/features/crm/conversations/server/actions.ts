@@ -50,6 +50,7 @@ import { readCustomer, updateCustomer } from "@/src/features/crm/common/db/custo
 import { readDealCustomersForCustomer } from "@/src/features/crm/common/db/deal-customer";
 import { readDeal, updateDeal } from "@/src/features/crm/deals/db/deal";
 import { fileActivityText, imageActivityText } from "@/src/features/crm/conversations/utils/attachments";
+import { emailActivityText } from "@/src/features/crm/conversations/utils/email-message";
 import { systemEventBody } from "@/src/features/crm/conversations/utils/formatting";
 import {
   emailHtml,
@@ -449,8 +450,7 @@ export async function sendQuoteMessages(
         html: emailHtml(body),
       });
       const conversationId = await conversationForCustomer(customer);
-      const text = subject ? `${subject}\n\n${body}` : body;
-      await recordOutbound(conversationId, "email", text);
+      await recordOutbound(conversationId, "email", emailActivityText({ subject, body, attachments: [] }));
     }
 
     for (const customer of textRecipients) {

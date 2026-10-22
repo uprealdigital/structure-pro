@@ -1,3 +1,4 @@
+import { copy } from "@/src/features/crm/conversations/locales/en";
 import { reviewMessageToken } from "@/src/features/crm/conversations/utils/formatting";
 
 export type ReviewMessageValues = {
@@ -6,6 +7,9 @@ export type ReviewMessageValues = {
   dealName: string;
   dealPrice: string;
   quoteLink: string;
+  companyName: string;
+  userFirstName: string;
+  userLastName: string;
 };
 
 export function customerNameParts(fullName: string): { firstName: string; lastName: string } {
@@ -18,6 +22,9 @@ export function customerNameParts(fullName: string): { firstName: string; lastNa
 
 export function fillReviewMessage(template: string, values: ReviewMessageValues): string {
   return template
+    .replaceAll(reviewMessageToken.userFirstName, values.userFirstName)
+    .replaceAll(reviewMessageToken.userLastName, values.userLastName)
+    .replaceAll(reviewMessageToken.companyName, values.companyName)
     .replaceAll(reviewMessageToken.firstName, values.firstName)
     .replaceAll(reviewMessageToken.lastName, values.lastName)
     .replaceAll(reviewMessageToken.dealName, values.dealName)
@@ -32,12 +39,16 @@ export function reviewMessageValues(
   quoteLink: string,
 ): ReviewMessageValues {
   const name = customerNameParts(fullName);
+  const user = customerNameParts(copy.operatorName);
   return {
     firstName: name.firstName,
     lastName: name.lastName,
     dealName,
     dealPrice,
     quoteLink,
+    companyName: copy.companyName,
+    userFirstName: user.firstName,
+    userLastName: user.lastName,
   };
 }
 
