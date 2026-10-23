@@ -74,5 +74,10 @@ export function useConversationSuggestions(dealId: string, conversationId: strin
       hiddenIds.current.delete(id);
       setSuggestions(previous);
     },
+    rememberPreview: (id: string, previewImageUrl: string) => {
+      setSuggestions((current) =>
+        current.map((suggestion) => (suggestion.id === id ? { ...suggestion, previewImageUrl } : suggestion)),
+      );
+    },
   };
 }

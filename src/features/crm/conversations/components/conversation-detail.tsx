@@ -1479,7 +1479,13 @@ export function ConversationDetail({
               priceDelta: estimateDelta(totals.before.total, totals.after.total),
               imageAlt: title || copy.quote,
               image: (
-                <ProposedShedRender selections={proposed} alt={title || copy.quote} />
+                <ProposedShedRender
+                  selections={proposed}
+                  alt={title || copy.quote}
+                  suggestionId={revisionSuggestion.id}
+                  previewImageUrl={revisionSuggestion.previewImageUrl}
+                  onPreviewSaved={detectedSuggestions.rememberPreview}
+                />
               ),
             }}
             changes={suggestedChanges.map((change) => ({

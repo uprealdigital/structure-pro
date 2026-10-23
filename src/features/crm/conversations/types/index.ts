@@ -311,6 +311,7 @@ export const conversationSuggestionSchema = z.object({
   id: z.string().trim().min(1),
   intent: suggestionIntentSchema,
   configChanges: configChangesSchema.default({}),
+  previewImageUrl: z.string().nullable().default(null),
   summary: z.string().default(""),
   messages: z.array(z.string()),
 });

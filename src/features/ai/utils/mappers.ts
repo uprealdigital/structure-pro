@@ -26,6 +26,7 @@ export type SuggestionRow = {
   intent: string;
   status: string;
   config_changes: unknown;
+  preview_image_url?: unknown;
   created_at: string;
 };
 
@@ -58,6 +59,7 @@ export function toSuggestion(row: SuggestionRow): Suggestion | undefined {
     intent: row.intent,
     status: row.status,
     configChanges: configChanges(row.config_changes),
+    previewImageUrl: typeof row.preview_image_url === "string" && row.preview_image_url ? row.preview_image_url : null,
     createdAt: row.created_at,
   });
   return suggestion.success ? suggestion.data : undefined;

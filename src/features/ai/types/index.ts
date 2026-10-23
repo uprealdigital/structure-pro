@@ -120,6 +120,7 @@ export const suggestionSchema = z.object({
   intent: suggestionIntentSchema,
   status: suggestionStatusSchema,
   configChanges: suggestionConfigChangesSchema,
+  previewImageUrl: z.string().nullable(),
   createdAt: z.string(),
 });
 
@@ -135,6 +136,7 @@ export const suggestionWriteSchema = z.object({
 export const suggestionPatchSchema = z.object({
   messageIds: z.array(z.number().int().positive()).min(1).max(40).optional(),
   configChanges: suggestionConfigChangesSchema.optional(),
+  previewImageUrl: z.string().nullable().optional(),
   status: z.enum(["applied", "dismissed"]).optional(),
 });
 

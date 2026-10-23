@@ -5,7 +5,7 @@ import { headers } from "next/headers";
 import { sendMail } from "@/src/common/utils/mail";
 import { demoChatId, sendTelegramFile, sendTelegramMessage } from "@/src/common/lib/telegram/telegram.service";
 import { sendSms } from "@/src/common/lib/twilio/twilio.service";
-import { createSuggestion, readSuggestions, updateSuggestion } from "@/src/features/ai/db/suggestion";
+import { createSuggestion, readSuggestions, storeSuggestionPreview, updateSuggestion } from "@/src/features/ai/db/suggestion";
 import { analyzeInboundIntent } from "@/src/features/ai/services/inbound-intent-analyzer.service";
 import type { SuggestionIntent } from "@/src/features/ai/types";
 import { configChangesFromAnalysis } from "@/src/features/crm/conversations/utils/config-changes-from-text";
@@ -730,6 +730,7 @@ async function pendingSuggestions(dealId: string): Promise<ConversationSuggestio
         id: row.id,
         intent: row.intent,
         configChanges: row.configChanges,
+        previewImageUrl: row.previewImageUrl,
         summary: row.intent === "new_quote" ? messages.join(" ") : "",
         messages,
       });
@@ -821,6 +822,30 @@ export async function syncConversationSuggestions(
   } catch (error) {
     console.error(error);
     const message = error instanceof Error ? error.message : "Could not read these messages";
+    return { error: message };
+  }
+}
+
+export async function saveSuggestionPreview(
+  formData: FormData,
+): Promise<{ success: true; data: { previewImageUrl: string } } | { error: string }> {
+  const id = formData.get("id");
+  const file = formData.get("file");
+  const parsed = suggestionIdSchema.safeParse({ id });
+  if (!parsed.success || !(file instanceof Blob) || file.size <= 0 || file.size > 2 * 1024 * 1024) {
+    return { error: "A preview image is required" };
+  }
+  try {
+    const bytes = new Uint8Array(await file.arrayBuffer());
+    const png =
+      bytes.length > 8 && bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4e && bytes[3] === 0x47;
+    if (!png) return { error: "A preview image is required" };
+    const saved = await storeSuggestionPreview(parsed.data.id, bytes);
+    if (!saved?.previewImageUrl) return { error: "Could not save the preview" };
+    return { success: true, data: { previewImageUrl: saved.previewImageUrl } };
+  } catch (error) {
+    console.error(error);
+    const message = error instanceof Error ? error.message : "Could not save the preview";
     return { error: message };
   }
 }

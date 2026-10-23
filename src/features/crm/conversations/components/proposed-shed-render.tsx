@@ -8,6 +8,7 @@ import type { BuildingCapture, QuoteRevisionRenderCapture } from "@/src/features
 import type { QuoteSelections } from "@/src/features/cpq/types";
 import { toBuildingConfig } from "@/src/features/cpq/utils/mappers";
 import { copy } from "@/src/features/crm/conversations/locales/en";
+import { saveSuggestionPreview } from "@/src/features/crm/conversations/server/actions";
 
 const BuildingScene = dynamic(() => import("@/src/features/cpq/components/building-scene"), { ssr: false });
 
@@ -17,15 +18,25 @@ const RING_CIRCUMFERENCE = 2 * Math.PI * RING_RADIUS;
 export function ProposedShedRender({
   selections,
   alt,
+  suggestionId,
+  previewImageUrl,
+  onPreviewSaved,
 }: {
   selections: QuoteSelections;
   alt: string;
+  suggestionId?: string;
+  previewImageUrl?: string | null;
+  onPreviewSaved?: (id: string, previewImageUrl: string) => void;
 }) {
   const selectionKey = JSON.stringify(selections);
   const config = useMemo(() => toBuildingConfig(JSON.parse(selectionKey) as QuoteSelections), [selectionKey]);
   const renderCaptureRef = useRef<QuoteRevisionRenderCapture | null>(null);
   const captureBuildingRef = useRef<BuildingCapture | null>(null);
   const urlRef = useRef<string | null>(null);
+  const pngRef = useRef<{ key: string; file: Blob } | null>(null);
+  const savedKey = useRef("");
+  const saveRef = useRef({ suggestionId, previewImageUrl, onPreviewSaved });
+  saveRef.current = { suggestionId, previewImageUrl, onPreviewSaved };
   const meterRef = useRef(0);
   const [url, setUrl] = useState<string | null>(null);
   const [failed, setFailed] = useState(false);
@@ -80,10 +91,14 @@ export function ProposedShedRender({
       window.setTimeout(() => {
         if (cancelled) return;
         void capture()
-          .then((files) => {
+          .then(async (files) => {
             if (cancelled) return;
+            const png = await pngFile(files.small);
+            if (cancelled) return;
+            pngRef.current = { key: selectionKey, file: png };
             window.clearInterval(timer);
-            pendingUrl = URL.createObjectURL(files.small);
+            pendingUrl = URL.createObjectURL(png);
+            void persistPreview(png, selectionKey, saveRef, savedKey);
           })
           .catch(() => {
             if (cancelled) return;
@@ -106,6 +121,12 @@ export function ProposedShedRender({
     };
   }, [selectionKey]);
 
+  useEffect(() => {
+    if (previewImageUrl) return;
+    savedKey.current = "";
+    if (pngRef.current?.key === selectionKey) void persistPreview(pngRef.current.file, selectionKey, saveRef, savedKey);
+  }, [previewImageUrl, selectionKey]);
+
   const scene =
     url || failed || typeof document === "undefined" ? null : (
       <div className="pointer-events-none fixed top-0 -left-[2000px] size-[150px]" aria-hidden="true">
@@ -123,6 +144,55 @@ export function ProposedShedRender({
       {scene ? createPortal(scene, document.body) : null}
     </>
   );
+}
+
+async function persistPreview(
+  png: Blob,
+  selectionKey: string,
+  saveRef: {
+    current: {
+      suggestionId?: string;
+      previewImageUrl?: string | null;
+      onPreviewSaved?: (id: string, previewImageUrl: string) => void;
+    };
+  },
+  savedKey: { current: string },
+) {
+  const save = saveRef.current;
+  if (!save.suggestionId || save.previewImageUrl) return;
+  const key = `${save.suggestionId}:${selectionKey}`;
+  if (savedKey.current === key) return;
+  savedKey.current = key;
+  const suggestionId = save.suggestionId;
+  const body = new FormData();
+  body.set("id", suggestionId);
+  body.set("file", png, "preview.png");
+  const result = await saveSuggestionPreview(body);
+  if (savedKey.current !== key) return;
+  if ("error" in result) {
+    savedKey.current = "";
+    return;
+  }
+  const latest = saveRef.current;
+  if (latest.suggestionId !== suggestionId || latest.previewImageUrl) return;
+  latest.onPreviewSaved?.(suggestionId, result.data.previewImageUrl);
+}
+
+async function pngFile(source: Blob): Promise<Blob> {
+  const bitmap = await createImageBitmap(source);
+  const canvas = document.createElement("canvas");
+  canvas.width = bitmap.width;
+  canvas.height = bitmap.height;
+  const context = canvas.getContext("2d");
+  if (!context) {
+    bitmap.close();
+    throw new Error("Could not save the preview");
+  }
+  context.drawImage(bitmap, 0, 0);
+  bitmap.close();
+  const png = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/png"));
+  if (!png) throw new Error("Could not save the preview");
+  return png;
 }
 
 function RenderMeter({ value }: { value: number }) {
