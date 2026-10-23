@@ -53,6 +53,91 @@ export const yardPreviewWriteSchema = z.object({
   events: z.array(yardPreviewEventSchema),
 });
 
+export const inboundIntentKindSchema = z.enum(["configuration", "quote_request"]);
+
+export type InboundIntentKind = z.infer<typeof inboundIntentKindSchema>;
+
+export const suggestionConfigValueSchema = z.union([z.string(), z.number(), z.boolean()]);
+
+export type SuggestionConfigValue = z.infer<typeof suggestionConfigValueSchema>;
+
+export const suggestionConfigChangesSchema = z.object({
+  styleId: z.string().optional(),
+  width: z.number().optional(),
+  length: z.number().optional(),
+  height: z.number().optional(),
+  sidingTypeId: z.string().optional(),
+  roofTypeId: z.string().optional(),
+  sidingColorId: z.string().optional(),
+  trimColorId: z.string().optional(),
+  roofColorId: z.string().optional(),
+  shutterColorId: z.string().optional(),
+  flooringId: z.string().optional(),
+  hasLoft: z.boolean().optional(),
+  hasWindow: z.boolean().optional(),
+  hasVent: z.boolean().optional(),
+  doorStyle: z.enum(["single", "double", "none"]).optional(),
+  wallFace: z.enum(["front", "left", "back", "right"]).optional(),
+  zip: z.string().optional(),
+});
+
+export type SuggestionConfigChanges = z.infer<typeof suggestionConfigChangesSchema>;
+
+export const inboundIntentSchema = z.object({
+  kind: inboundIntentKindSchema,
+  summary: z.string(),
+  configChanges: z.record(z.string(), suggestionConfigValueSchema),
+  messageIndexes: z.array(z.number().int().nonnegative()),
+});
+
+export type InboundIntent = z.infer<typeof inboundIntentSchema>;
+
+export const inboundIntentResultSchema = z.object({
+  intents: z
+    .array(
+      z.object({
+        kind: z.enum(["configuration", "quote_request", "none"]),
+        summary: z.string().optional(),
+        configChanges: z.record(z.string(), suggestionConfigValueSchema).optional(),
+        messageIndexes: z.array(z.number()).optional(),
+      }),
+    )
+    .optional(),
+});
+
+export const suggestionIntentSchema = z.enum(["revision", "new_quote"]);
+
+export type SuggestionIntent = z.infer<typeof suggestionIntentSchema>;
+
+export const suggestionStatusSchema = z.enum(["pending", "applied", "dismissed"]);
+
+export type SuggestionStatus = z.infer<typeof suggestionStatusSchema>;
+
+export const suggestionSchema = z.object({
+  id: z.string(),
+  dealId: z.string(),
+  messageIds: z.array(z.number().int().positive()),
+  intent: suggestionIntentSchema,
+  status: suggestionStatusSchema,
+  configChanges: suggestionConfigChangesSchema,
+  createdAt: z.string(),
+});
+
+export type Suggestion = z.infer<typeof suggestionSchema>;
+
+export const suggestionWriteSchema = z.object({
+  dealId: z.string().trim().min(1),
+  messageIds: z.array(z.number().int().positive()).min(1).max(40),
+  intent: suggestionIntentSchema,
+  configChanges: suggestionConfigChangesSchema,
+});
+
+export const suggestionPatchSchema = z.object({
+  messageIds: z.array(z.number().int().positive()).min(1).max(40).optional(),
+  configChanges: suggestionConfigChangesSchema.optional(),
+  status: z.enum(["applied", "dismissed"]).optional(),
+});
+
 export const yardPreviewPatchSchema = z.object({
   status: yardPreviewStatusSchema.optional(),
   error: z.string().nullable().optional(),

@@ -5,6 +5,11 @@ import { headers } from "next/headers";
 import { sendMail } from "@/src/common/utils/mail";
 import { demoChatId, sendTelegramFile, sendTelegramMessage } from "@/src/common/lib/telegram/telegram.service";
 import { sendSms } from "@/src/common/lib/twilio/twilio.service";
+import { createSuggestion, readSuggestions, updateSuggestion } from "@/src/features/ai/db/suggestion";
+import { analyzeInboundIntent } from "@/src/features/ai/services/inbound-intent-analyzer.service";
+import type { SuggestionIntent } from "@/src/features/ai/types";
+import { configChangesFromAnalysis } from "@/src/features/crm/conversations/utils/config-changes-from-text";
+import type { ConfigChanges } from "@/src/features/crm/quotes/types";
 import { outboundTextTransport } from "@/src/features/crm/conversations/config/outbound-text";
 import { copy } from "@/src/features/crm/conversations/locales/en";
 import {
@@ -14,6 +19,8 @@ import {
   deleteLatestActivity,
   markActivitiesReadAt,
   readActivities,
+  readActivityRefs,
+  readActivityRefsByIds,
   updateActivitiesRead,
 } from "@/src/features/crm/conversations/db/activity";
 import { deleteAttachmentFile, readAttachmentFile, storeAttachmentFile } from "@/src/features/crm/conversations/db/attachment";
@@ -37,13 +44,17 @@ import {
   composerChannelSchema,
   conversationIdSchema,
   conversationReadUpdateSchema,
+  conversationSuggestionSchema,
   sendQuoteMessagesSchema,
+  suggestionIdSchema,
+  syncSuggestionsSchema,
   visibleActivityReadSchema,
   customerDealsRequestSchema,
   type Activity,
   type ActivityInsert,
   type ConversationDealListItem,
   type ConversationInboxItem,
+  type ConversationSuggestion,
   type ConversationWorkspace,
 } from "@/src/features/crm/conversations/types";
 import { readCustomer, updateCustomer } from "@/src/features/crm/common/db/customer";
@@ -696,6 +707,152 @@ export async function loadConversationWorkspace(
     return { success: true, data: workspace ?? null };
   } catch (error) {
     const message = error instanceof Error ? error.message : "Could not load conversation";
+    return { error: message };
+  }
+}
+
+const suggestionChannels = new Set(["sms", "telegram", "facebook", "email"]);
+
+function hasConfigChanges(changes: ConfigChanges): boolean {
+  return Object.keys(changes).length > 0;
+}
+
+async function pendingSuggestions(dealId: string): Promise<ConversationSuggestion[]> {
+  const pending = (await readSuggestions(dealId)).filter((row) => row.status === "pending");
+  const activities = await readActivityRefsByIds([...new Set(pending.flatMap((row) => row.messageIds))]);
+  const textById = new Map(activities.map((row) => [row.id, row.body.trim()]));
+  const order = new Map(activities.map((row) => [row.id, row.position]));
+  return pending
+    .flatMap((row) => {
+      const messageIds = [...row.messageIds].sort((left, right) => (order.get(left) ?? 0) - (order.get(right) ?? 0));
+      const messages = messageIds.map((id) => textById.get(id) ?? "").filter(Boolean);
+      const suggestion = conversationSuggestionSchema.safeParse({
+        id: row.id,
+        intent: row.intent,
+        configChanges: row.configChanges,
+        summary: row.intent === "new_quote" ? messages.join(" ") : "",
+        messages,
+      });
+      return suggestion.success ? [suggestion.data] : [];
+    })
+    .sort((left, right) => Number(left.intent === "new_quote") - Number(right.intent === "new_quote"));
+}
+
+export async function syncConversationSuggestions(
+  input: unknown,
+): Promise<{ success: true; data: ConversationSuggestion[] } | { error: string }> {
+  const parsed = syncSuggestionsSchema.safeParse(input);
+  if (!parsed.success) return { error: "A deal and its messages are required" };
+
+  try {
+    const refs = await readActivityRefs(parsed.data.conversationId, parsed.data.positions);
+    const inbound = refs
+      .filter((row) => row.role === "user" && suggestionChannels.has(row.channel) && row.body.trim())
+      .sort((left, right) => left.position - right.position);
+    const existing = await readSuggestions(parsed.data.dealId);
+    const frozen = new Set(existing.filter((row) => row.status !== "pending").flatMap((row) => row.messageIds));
+    const pending = existing.filter((row) => row.status === "pending");
+    const covered = new Set(pending.flatMap((row) => row.messageIds));
+    const candidates = inbound.filter((row) => !frozen.has(row.id));
+    const uncovered = candidates.filter((row) => !covered.has(row.id));
+    const staleRevision = pending.some(
+      (row) => row.intent === "revision" && !hasConfigChanges(row.configChanges) && row.messageIds.some((id) => !frozen.has(id)),
+    );
+    if (uncovered.length > 0 || staleRevision) {
+      const pendingIds = pending.flatMap((row) => row.messageIds).filter((id) => !frozen.has(id));
+      const known = new Set(candidates.map((row) => row.id));
+      const older = await readActivityRefsByIds(pendingIds.filter((id) => !known.has(id)));
+      const analyzed = [...older, ...candidates]
+        .filter((row) => row.body.trim())
+        .sort((left, right) => left.position - right.position)
+        .slice(-40);
+      const hits = await analyzeInboundIntent(analyzed.map((row) => row.body.trim()));
+      const textById = new Map(analyzed.map((row) => [row.id, row.body.trim()]));
+      const order = new Map(analyzed.map((row) => [row.id, row.position]));
+      for (const hit of hits) {
+        const intent: SuggestionIntent = hit.kind === "configuration" ? "revision" : "new_quote";
+        const messageIds = [
+          ...new Set(
+            hit.messageIndexes.flatMap((index) => {
+              const id = analyzed[index]?.id;
+              return typeof id === "number" && !frozen.has(id) ? [id] : [];
+            }),
+          ),
+        ];
+        if (messageIds.length === 0) continue;
+        const current = pending.find((row) => row.intent === intent);
+        const combined = [...new Set([...(current?.messageIds ?? []).filter((id) => !frozen.has(id)), ...messageIds])];
+        combined.sort((left, right) => (order.get(left) ?? 0) - (order.get(right) ?? 0));
+        if (combined.length > 40) combined.splice(0, combined.length - 40);
+        const texts = combined.map((id) => textById.get(id) ?? "").filter(Boolean);
+        const configChanges = intent === "revision" ? configChangesFromAnalysis(texts, hit.configChanges) : {};
+        if (intent === "revision" && !hasConfigChanges(configChanges)) {
+          if (!current) continue;
+          const saved = await updateSuggestion(current.id, { messageIds: combined });
+          if (!saved) continue;
+          current.messageIds = combined;
+          continue;
+        }
+        if (current) {
+          const saved = await updateSuggestion(current.id, { messageIds: combined, configChanges });
+          if (!saved) continue;
+          current.messageIds = combined;
+          current.configChanges = saved.configChanges;
+          continue;
+        }
+        const created = await createSuggestion({
+          dealId: parsed.data.dealId,
+          messageIds: combined,
+          intent,
+          configChanges,
+        });
+        pending.push(created);
+      }
+      for (const row of pending) {
+        if (row.intent !== "revision" || hasConfigChanges(row.configChanges)) continue;
+        const texts = row.messageIds.map((id) => textById.get(id) ?? "").filter(Boolean);
+        const configChanges = configChangesFromAnalysis(texts);
+        if (!hasConfigChanges(configChanges)) continue;
+        const saved = await updateSuggestion(row.id, { configChanges });
+        if (saved) row.configChanges = saved.configChanges;
+      }
+    }
+    return { success: true, data: await pendingSuggestions(parsed.data.dealId) };
+  } catch (error) {
+    console.error(error);
+    const message = error instanceof Error ? error.message : "Could not read these messages";
+    return { error: message };
+  }
+}
+
+export async function dismissConversationSuggestion(
+  input: unknown,
+): Promise<{ success: true; data: { id: string } } | { error: string }> {
+  const parsed = suggestionIdSchema.safeParse(input);
+  if (!parsed.success) return { error: "A suggestion is required" };
+  try {
+    await updateSuggestion(parsed.data.id, { status: "dismissed" });
+    revalidatePath("/crm/conversations");
+    return { success: true, data: { id: parsed.data.id } };
+  } catch (error) {
+    console.error(error);
+    const message = error instanceof Error ? error.message : "Could not dismiss this suggestion";
+    return { error: message };
+  }
+}
+
+export async function applyConversationSuggestion(
+  input: unknown,
+): Promise<{ success: true; data: { id: string } } | { error: string }> {
+  const parsed = suggestionIdSchema.safeParse(input);
+  if (!parsed.success) return { error: "A suggestion is required" };
+  try {
+    await updateSuggestion(parsed.data.id, { status: "applied" });
+    revalidatePath("/crm/conversations");
+    return { success: true, data: { id: parsed.data.id } };
+  } catch (error) {
+    console.error(error);
+    const message = error instanceof Error ? error.message : "Could not apply this suggestion";
     return { error: message };
   }
 }

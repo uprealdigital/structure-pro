@@ -1,7 +1,7 @@
 "use client";
 
 import { ArrowUpRight, Camera, Paperclip, Pencil, Phone, X } from "lucide-react";
-import { useEffect, useLayoutEffect, useRef, useState, type FormEvent } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { BuildingConfigurator } from "@/src/features/cpq/components/building-configurator";
 import type { QuoteRevisionRenderFiles } from "@/src/features/cpq/components/building-scene";
 import { ComposerAttachments, type ComposerAttachment } from "@/src/features/crm/conversations/components/composer-attachments";
@@ -12,8 +12,11 @@ import { DealHeading } from "@/src/features/crm/conversations/components/deal-me
 import { DealSummary } from "@/src/features/crm/conversations/components/deal-summary";
 import { QuoteMenu, QuotePanel } from "@/src/features/crm/conversations/components/quote-panel";
 import { Toast } from "@/src/common/components/toast";
+import { InboundIntentCard } from "@/src/features/crm/conversations/components/inbound-intent-card";
+import { ProposedShedRender } from "@/src/features/crm/conversations/components/proposed-shed-render";
 import { ReviewSendModal } from "@/src/features/crm/conversations/components/review-send-modal";
 import { useConversationActivities } from "@/src/features/crm/conversations/hooks/use-conversation-activities";
+import { useConversationSuggestions } from "@/src/features/crm/conversations/hooks/use-conversation-suggestions";
 import { useVisibleActivityReads } from "@/src/features/crm/conversations/hooks/use-visible-activity-reads";
 import { copy } from "@/src/features/crm/conversations/locales/en";
 import { sendQuoteMessages, sendManualActivity, sendStoredAttachment, discardStoredAttachment, recordSystemActivity, deleteConversationActivity, markDealViewed } from "@/src/features/crm/conversations/server/actions";
@@ -28,6 +31,8 @@ import type {
 import { emailActivityText } from "@/src/features/crm/conversations/utils/email-message";
 import { uploadComposerAttachment } from "@/src/features/crm/conversations/utils/upload-attachment";
 import { productTitle, quoteMenuName, revisionMenuLabel, systemEventText } from "@/src/features/crm/conversations/utils/formatting";
+import { quoteDisplayName } from "@/src/features/crm/quotes/utils/formatting";
+import { latestShareAt, suggestionQuoteTargets } from "@/src/features/crm/conversations/utils/suggestion-quotes";
 import {
   conversationQuoteFromSelections,
   conversationQuoteWithActiveRevision,
@@ -45,6 +50,14 @@ import type { QuoteCommunication } from "@/src/features/crm/quotes/types";
 import type { QuoteSelections } from "@/src/features/cpq/types";
 import { DealStatusBadge } from "@/src/features/crm/deals/components/deal-status-badge";
 import { dealNameMaxLength, type DealStatus } from "@/src/features/crm/deals/types";
+import { selectionsWithConfigChanges } from "@/src/features/crm/conversations/utils/config-changes-from-text";
+import { designPreviewChanges } from "@/src/features/crm/conversations/utils/design-preview";
+import {
+  customerInboundMessages,
+  estimateDelta,
+  sameSelections,
+  selectionTotals,
+} from "@/src/features/crm/conversations/utils/inbound-intent";
 import { participantsForDeal } from "@/src/features/crm/conversations/utils/participants";
 
 function ChannelIcon({ channel, className }: { channel: ComposerChannel; className?: string }) {
@@ -163,6 +176,11 @@ function DetailsToggle({
   );
 }
 
+function quoteLabel(quote: ConversationQuote | undefined, index: number): string {
+  if (quote?.quoteNumber) return quoteDisplayName(quote.quoteNumber, quote.specs);
+  return index >= 0 ? quoteMenuName(index) : copy.quote;
+}
+
 export function ConversationDetail({
   workspace,
   incoming = [],
@@ -279,6 +297,13 @@ export function ConversationDetail({
   const threadId = workspace.id;
   const threadActivities = workspace.activities;
   const { activities, setActivities } = useConversationActivities(threadId, threadActivities, incoming);
+  const inboundMessages = useMemo(() => customerInboundMessages(activities), [activities]);
+  const detectedSuggestions = useConversationSuggestions(focused.deal.id, workspace.id, inboundMessages);
+  const applySuggestionRef = useRef(detectedSuggestions.apply);
+  applySuggestionRef.current = detectedSuggestions.apply;
+  const armedPhotoSuggestionId = useRef<string | null>(null);
+  const armedQuoteSuggestionId = useRef<string | null>(null);
+  const [applyingIntent, setApplyingIntent] = useState(false);
   useEffect(() => {
     for (const activity of activities) {
       if (activity.channel !== "system") continue;
@@ -298,6 +323,8 @@ export function ConversationDetail({
   const [designPreviewOpen, setDesignPreviewOpen] = useState(false);
   const [communicationPatches, setCommunicationPatches] = useState<Record<string, QuoteCommunication>>({});
   const [editing, setEditing] = useState(false);
+  const [suggestedSelections, setSuggestedSelections] = useState<QuoteSelections | null>(null);
+  const [intentQuoteChoice, setIntentQuoteChoice] = useState<{ suggestionId: string; quoteId: string } | null>(null);
   const composerRef = useRef<HTMLTextAreaElement>(null);
   const headerRef = useRef<HTMLElement>(null);
   const statusRef = useRef<HTMLDivElement>(null);
@@ -324,6 +351,7 @@ export function ConversationDetail({
   const [revisionError, setRevisionError] = useState("");
   const channelMenu = useRef<HTMLDivElement>(null);
   const thread = useRef<HTMLDivElement>(null);
+  const composerPane = useRef<HTMLFormElement>(null);
   const stickToBottom = useRef(true);
   const appliedReadToken = useRef(0);
   const suppressUntilHidden = useVisibleActivityReads({
@@ -415,6 +443,32 @@ export function ConversationDetail({
     const distance = pane.scrollHeight - pane.scrollTop - pane.clientHeight;
     if (distance > 1) pane.scrollTop = pane.scrollHeight;
   }, [activities.length, outgoing.length]);
+
+  useLayoutEffect(() => {
+    const form = composerPane.current;
+    const pane = thread.current;
+    if (!form || !pane) return;
+    let height = form.offsetHeight;
+    const observer = new ResizeObserver(() => {
+      const next = form.offsetHeight;
+      const growth = next - height;
+      height = next;
+      if (growth === 0) return;
+      if (growth > 0) {
+        pane.scrollTop += growth;
+        return;
+      }
+      const distance = pane.scrollHeight - pane.scrollTop - pane.clientHeight;
+      if (distance > 1) pane.scrollTop += growth;
+    });
+    observer.observe(form);
+    return () => observer.disconnect();
+  }, []);
+
+  useEffect(() => {
+    if (editing) return;
+    setSuggestedSelections(null);
+  }, [editing]);
 
   useEffect(() => {
     if (!editing) return;
@@ -587,7 +641,7 @@ export function ConversationDetail({
     setSelectedRevisionId(revisionId);
     const quoteIndex = listedQuotes.findIndex((item) => item.id === quote.id);
     const revisionName = revisionMenuLabel(revision.revisionNumber);
-    const quoteName = quoteIndex >= 0 ? quoteMenuName(quoteIndex) : "";
+    const quoteName = quoteLabel(next, quoteIndex);
     const restore = () => {
       setQuotePatches((current) => {
         if (current[quote.id]?.activeRevisionId !== revisionId) return current;
@@ -621,7 +675,7 @@ export function ConversationDetail({
     const previousId = viewingQuote?.id;
     if (!dealId || !previousId || quoteId === previousId) return;
     const quoteIndex = listedQuotes.findIndex((item) => item.id === quoteId);
-    const quoteName = quoteIndex >= 0 ? quoteMenuName(quoteIndex) : "";
+    const quoteName = quoteLabel(listedQuotes[quoteIndex], quoteIndex);
     const previousRevisionId = selectedRevisionId;
     setViewingQuoteIds((current) => ({ ...current, [dealId]: quoteId }));
     setSelectedRevisionId(null);
@@ -656,7 +710,14 @@ export function ConversationDetail({
       return;
     }
     const next = conversationQuoteFromSelections(
-      { ...quote, id: result.data.id, invoiceId: result.data.invoiceId, revisions: [], status: "draft" },
+      {
+        ...quote,
+        id: result.data.id,
+        invoiceId: result.data.invoiceId,
+        quoteNumber: result.data.quoteNumber,
+        revisions: [],
+        status: "draft",
+      },
       quote.selections,
       {
         id: result.data.revisionId,
@@ -694,7 +755,7 @@ export function ConversationDetail({
     setSelectedRevisionId(result.data.id);
     setEditing(false);
     const quoteIndex = listedQuotes.findIndex((item) => item.id === quote.id);
-    const quoteName = quoteIndex >= 0 ? quoteMenuName(quoteIndex) : copy.quote;
+    const quoteName = quoteLabel(next, quoteIndex);
     const saved = await recordSystemActivity({
       conversationId: workspace.id,
       kind: "savedRevision",
@@ -722,6 +783,7 @@ export function ConversationDetail({
   }
 
   async function sendViewedQuote(communication: QuoteCommunication) {
+    const suggestionId = armedQuoteSuggestionId.current;
     const quote = focused.quote;
     if (!quote || !viewed) throw new Error(copy.sendQuoteError);
     const result = await sendQuoteMessages({
@@ -742,6 +804,8 @@ export function ConversationDetail({
     if (!next) throw new Error(copy.sendQuoteError);
     setQuotePatches((current) => ({ ...current, [next.id]: next }));
     setDealStatusPatches((current) => ({ ...current, [focused.deal.id]: result.data.dealStatus }));
+    if (armedQuoteSuggestionId.current === suggestionId) armedQuoteSuggestionId.current = null;
+    if (suggestionId) await applySuggestionRef.current(suggestionId);
   }
 
   useLayoutEffect(() => {
@@ -779,7 +843,7 @@ export function ConversationDetail({
     });
   }
 
-  function addAttachmentFiles(files: File[], source?: { quoteId: string; revisionId: string }) {
+  function addAttachmentFiles(files: File[], source?: { quoteId: string; revisionId: string; suggestionId?: string }) {
     if (files.length === 0) return;
     const next = files.map((file) => {
       const id = crypto.randomUUID();
@@ -792,6 +856,7 @@ export function ConversationDetail({
         progress: 0,
         quoteId: source?.quoteId,
         revisionId: source?.revisionId,
+        suggestionId: source?.suggestionId,
       };
     });
     setAttachments((current) => [...current, ...next]);
@@ -886,6 +951,7 @@ export function ConversationDetail({
         return;
       }
       appendActivity(result.data);
+      if (item.suggestionId) void applySuggestionRef.current(item.suggestionId);
       if (item.quoteId && item.revisionId) {
         const shared = await shareQuoteRevisionPhotos(item.revisionId);
         if ("error" in shared) {
@@ -927,6 +993,7 @@ export function ConversationDetail({
     const batch: OutgoingMessage[] = [];
     if (channel === "email") {
       const quoted = pending.find((item) => item.quoteId && item.revisionId);
+      const suggested = pending.find((item) => item.suggestionId);
       batch.push({
         id: crypto.randomUUID(),
         kind: "text",
@@ -948,6 +1015,7 @@ export function ConversationDetail({
         error: "",
         quoteId: quoted?.quoteId,
         revisionId: quoted?.revisionId,
+        suggestionId: suggested?.suggestionId,
       });
     } else if (text) {
       batch.push({
@@ -973,6 +1041,7 @@ export function ConversationDetail({
           previewUrl: item.previewUrl,
           quoteId: item.quoteId,
           revisionId: item.revisionId,
+          suggestionId: item.suggestionId,
           sentAt,
           afterPosition,
           status: "queued",
@@ -1077,6 +1146,105 @@ export function ConversationDetail({
     (Boolean(draft.trim()) ||
       (channel === "email" && Boolean(emailSubject.trim())) ||
       attachments.some((item) => item.phase === "ready"));
+
+  const revisionSuggestion = detectedSuggestions.suggestions.find((suggestion) => suggestion.intent === "revision") ?? null;
+  const quoteSuggestion = detectedSuggestions.suggestions.find((suggestion) => suggestion.intent === "new_quote") ?? null;
+  const suggestionQuotes = listedQuotes.map((quote, index) => ({
+    id: quote.id,
+    name: quoteLabel(quote, index),
+    number: quote.quoteNumber ?? index + 1,
+    title: productTitle(quote.specs),
+    sharedAt: latestShareAt(quote.revisions.flatMap((revision) => [revision.sharedPhotosAt, revision.sharedQuoteAt])),
+  }));
+  const quoteTargets = suggestionQuoteTargets(
+    suggestionQuotes,
+    revisionSuggestion?.messages ?? [],
+    viewingQuote?.id ?? focused.quote?.id ?? null,
+  );
+  const selectedIntentQuoteId =
+    intentQuoteChoice &&
+    intentQuoteChoice.suggestionId === revisionSuggestion?.id &&
+    quoteTargets.quotes.some((quote) => quote.id === intentQuoteChoice.quoteId)
+      ? intentQuoteChoice.quoteId
+      : quoteTargets.selectedId;
+  const intentQuote = listedQuotes.find((quote) => quote.id === selectedIntentQuoteId) ?? viewingQuote ?? focused.quote;
+  const intentRevision = intentQuote
+    ? intentQuote.id === (viewingQuote?.id ?? focused.quote?.id)
+      ? viewed
+      : viewedRevision(intentQuote, null)
+    : null;
+  const proposed =
+    intentRevision && revisionSuggestion
+      ? selectionsWithConfigChanges(intentRevision.selections, revisionSuggestion.configChanges)
+      : null;
+  const suggestedChanges =
+    intentRevision && proposed
+      ? designPreviewChanges(intentRevision.selections, proposed).filter((change) => change.kind !== "price")
+      : [];
+  const totals = intentRevision && proposed ? selectionTotals(intentRevision.selections, proposed) : null;
+  const nextRevision = intentQuote
+    ? Math.max(0, ...intentQuote.revisions.map((revision) => revision.revisionNumber)) + 1
+    : 1;
+
+  function showIntentQuote(quoteId: string, revisionId: string | null) {
+    const dealId = focusedOption?.id;
+    if (!dealId) return;
+    setViewingQuoteIds((current) => ({ ...current, [dealId]: quoteId }));
+    setSelectedRevisionId(revisionId);
+  }
+
+  async function saveDetectedConfiguration() {
+    const quote = intentQuote;
+    const suggestionId = revisionSuggestion?.id;
+    if (!quote || !intentRevision || !proposed || !suggestionId || applyingIntent) return;
+    setApplyingIntent(true);
+    try {
+      if (!sameSelections(intentRevision.selections, proposed)) {
+        const result = await saveQuoteSelections({ quoteId: quote.id, selections: proposed });
+        if ("error" in result) throw new Error(result.error);
+        const next = conversationQuoteFromSelections(quote, proposed, result.data);
+        if (!next) throw new Error(copy.saveQuoteError);
+        setQuotePatches((current) => ({ ...current, [next.id]: next }));
+        showIntentQuote(quote.id, result.data.id);
+      } else {
+        showIntentQuote(quote.id, intentRevision.id);
+      }
+      await detectedSuggestions.apply(suggestionId);
+    } catch {
+      setSendError(copy.saveQuoteError);
+    } finally {
+      setApplyingIntent(false);
+    }
+  }
+
+  async function applyDetectedConfiguration(mode: "photos" | "quote") {
+    const quote = intentQuote;
+    if (!quote || !intentRevision || !proposed || applyingIntent) return;
+    setApplyingIntent(true);
+    try {
+      if (!sameSelections(intentRevision.selections, proposed)) {
+        const result = await saveQuoteSelections({ quoteId: quote.id, selections: proposed });
+        if ("error" in result) throw new Error(result.error);
+        const next = conversationQuoteFromSelections(quote, proposed, result.data);
+        if (!next) throw new Error(copy.saveQuoteError);
+        setQuotePatches((current) => ({ ...current, [next.id]: next }));
+        showIntentQuote(quote.id, result.data.id);
+      } else {
+        showIntentQuote(quote.id, intentRevision.id);
+      }
+      if (mode === "photos") {
+        armedPhotoSuggestionId.current = revisionSuggestion?.id ?? null;
+        setDesignPreviewOpen(true);
+      } else {
+        armedQuoteSuggestionId.current = revisionSuggestion?.id ?? null;
+        setReviewOpen(true);
+      }
+    } catch {
+      setSendError(copy.saveQuoteError);
+    } finally {
+      setApplyingIntent(false);
+    }
+  }
 
   function composerActions() {
     return (
@@ -1226,7 +1394,10 @@ export function ConversationDetail({
                     </button>
                     <button
                       type="button"
-                      onClick={() => setReviewOpen(true)}
+                      onClick={() => {
+                        armedQuoteSuggestionId.current = null;
+                        setReviewOpen(true);
+                      }}
                       className="inline-flex items-center justify-center gap-1.5 rounded-md bg-black px-2.5 py-1 text-xs font-medium whitespace-nowrap text-white shadow-xs transition-colors hover:bg-gray-800"
                     >
                       <ArrowUpRight className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
@@ -1287,14 +1458,71 @@ export function ConversationDetail({
         </div>
 
       <form
+        ref={composerPane}
         className="shrink-0 border-t border-gray-200 bg-white p-4"
         onSubmit={submitMessage}
       >
+        {revisionSuggestion &&
+        intentRevision &&
+        proposed &&
+        totals &&
+        Object.keys(revisionSuggestion.configChanges).length > 0 ? (
+          <InboundIntentCard
+            title={copy.configurationDetected}
+            assistant
+            quotes={quoteTargets.quotes.map((quote) => ({ id: quote.id, name: quote.name }))}
+            selectedQuoteId={intentQuote?.id}
+            onSelectQuote={(quoteId) => setIntentQuoteChoice({ suggestionId: revisionSuggestion.id, quoteId })}
+            draft={{
+              title: revisionMenuLabel(nextRevision),
+              price: totals.after.totalLabel,
+              priceDelta: estimateDelta(totals.before.total, totals.after.total),
+              imageAlt: title || copy.quote,
+              image: (
+                <ProposedShedRender selections={proposed} alt={title || copy.quote} />
+              ),
+            }}
+            changes={suggestedChanges.map((change) => ({
+              id: change.id,
+              label: change.text,
+              tone: change.kind === "added" ? ("add" as const) : ("change" as const),
+            }))}
+            actionLabel={copy.applyIntentAndShare(revisionMenuLabel(nextRevision))}
+            pending={applyingIntent}
+            onDismiss={() => detectedSuggestions.dismiss(revisionSuggestion.id)}
+            onApply={() => void saveDetectedConfiguration()}
+            onReview={() => {
+              if (!proposed || !intentQuote || !intentRevision) return;
+              showIntentQuote(intentQuote.id, intentRevision.id);
+              setDetailsOpen(false);
+              setSuggestedSelections(proposed);
+              setEditing(true);
+            }}
+            onSharePhotos={() => void applyDetectedConfiguration("photos")}
+            onShareQuote={() => void applyDetectedConfiguration("quote")}
+          />
+        ) : null}
+        {quoteSuggestion && viewed ? (
+          <InboundIntentCard
+            title={copy.quoteRequested}
+            summary={quoteSuggestion.summary}
+            actionLabel={copy.shareQuote}
+            onDismiss={() => detectedSuggestions.dismiss(quoteSuggestion.id)}
+            onShareQuote={() => {
+              armedQuoteSuggestionId.current = quoteSuggestion.id;
+              setReviewOpen(true);
+            }}
+            changes={[]}
+          />
+        ) : null}
         <div className="mb-2.5 flex items-center">
           <button
             type="button"
             disabled={!viewed}
-            onClick={() => setDesignPreviewOpen(true)}
+            onClick={() => {
+              armedPhotoSuggestionId.current = null;
+              setDesignPreviewOpen(true);
+            }}
             className="inline-flex items-center gap-1.5 rounded-full border border-gray-200 bg-white px-3 py-1.5 text-xs font-medium text-gray-800 shadow-xs transition-colors hover:bg-gray-50 disabled:opacity-40"
           >
             <Camera className="h-3.5 w-3.5 shrink-0 text-gray-500" strokeWidth={2} aria-hidden="true" />
@@ -1374,9 +1602,9 @@ export function ConversationDetail({
         {editing && focused.quote && viewed ? (
           <div className="absolute inset-0 z-30 flex min-h-0 flex-col overflow-hidden">
             <BuildingConfigurator
-              key={`${focused.quote.id}:${viewed.id}`}
+              key={`${focused.quote.id}:${viewed.id}:${suggestedSelections ? "suggestion" : "saved"}`}
               mode="internal"
-              selections={viewed.selections}
+              selections={suggestedSelections ?? viewed.selections}
               onSave={saveFocusedQuote}
               onSaveAndShare={saveAndShareFocusedQuote}
               onSaveAndReview={saveAndReviewFocusedQuote}
@@ -1388,10 +1616,15 @@ export function ConversationDetail({
         <DesignPreviewModal
           current={viewed}
           revisions={focused.quote.revisions}
-          onClose={() => setDesignPreviewOpen(false)}
+          onClose={() => {
+            armedPhotoSuggestionId.current = null;
+            setDesignPreviewOpen(false);
+          }}
           onAttach={(file) => {
             if (!focused.quote) return;
-            addAttachmentFiles([file], { quoteId: focused.quote.id, revisionId: viewed.id });
+            const suggestionId = armedPhotoSuggestionId.current ?? undefined;
+            armedPhotoSuggestionId.current = null;
+            addAttachmentFiles([file], { quoteId: focused.quote.id, revisionId: viewed.id, suggestionId });
             setDesignPreviewOpen(false);
           }}
         />
@@ -1408,7 +1641,10 @@ export function ConversationDetail({
           communication={communicationPatches[viewed.id] ?? viewed.communication}
           onSave={saveViewedCommunication}
           onSend={sendViewedQuote}
-          onClose={() => setReviewOpen(false)}
+          onClose={() => {
+            armedQuoteSuggestionId.current = null;
+            setReviewOpen(false);
+          }}
         />
       ) : null}
     </div>

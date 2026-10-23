@@ -2,6 +2,7 @@ import { db } from "@/src/common/lib/supabase/supabase.service";
 import { throwIfError } from "@/src/common/utils/error-handling";
 import { dealPatchSchema, dealWriteSchema, type Deal } from "@/src/features/crm/deals/types";
 import { toDeal, type DealRow } from "@/src/features/crm/deals/utils/mappers";
+import { defaultDealName } from "@/src/features/crm/deals/utils/naming";
 
 function crm() {
   return db("crm");
@@ -55,7 +56,17 @@ export async function createDeal(input: {
   throwIfError(inserted.error);
   const saved = inserted.data ? toDeal(inserted.data as unknown as DealRow) : undefined;
   if (!saved) throw new Error("Deal was not saved");
-  return saved;
+  const name = defaultDealName(saved.source, saved.createdAt ?? new Date().toISOString());
+  try {
+    await updateDeal(saved.id, { name });
+  } catch (error) {
+    const message = error instanceof Error ? error.message.toLowerCase() : "";
+    const missingName =
+      message.includes("name") && (message.includes("does not exist") || message.includes("schema cache"));
+    if (!missingName) throw error;
+    return saved;
+  }
+  return { ...saved, name };
 }
 
 export async function readDeals(): Promise<Deal[]> {

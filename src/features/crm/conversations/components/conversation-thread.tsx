@@ -27,6 +27,7 @@ export type OutgoingMessage = {
   error: string;
   quoteId?: string;
   revisionId?: string;
+  suggestionId?: string;
 };
 
 function AiStar() {

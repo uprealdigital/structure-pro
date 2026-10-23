@@ -4,6 +4,7 @@ import { quoteSelectionsSchema, type ListedQuote, type QuoteRecord } from "@/src
 import { toListedQuote, type QuoteListRow } from "@/src/features/cpq/utils/mappers";
 import { createQuoteRevision, readQuoteRevisionsByIds } from "@/src/features/crm/quotes/db/quote-revision";
 import { quoteRecordStatusSchema, type QuoteRecordStatus } from "@/src/features/crm/quotes/types";
+import { quoteNumberValue } from "@/src/features/crm/quotes/utils/formatting";
 
 function crm() {
   return db("crm");
@@ -14,13 +15,17 @@ export async function createQuote(input: {
   selections: unknown;
 }): Promise<string> {
   const selections = quoteSelectionsSchema.parse(input.selections);
-  const { data, error } = await crm()
-    .from("quotes")
-    .insert({
-      invoice_id: input.invoiceId,
-    })
-    .select("id")
-    .single();
+  const { data, error } = await quoteQuery(
+    (columns) =>
+      crm()
+        .from("quotes")
+        .insert({
+          invoice_id: input.invoiceId,
+        })
+        .select(columns)
+        .single(),
+    "id, quote_number",
+  );
 
   throwIfError(error);
   if (!data?.id || typeof data.id !== "string") {
@@ -36,20 +41,54 @@ export async function createQuote(input: {
   return data.id;
 }
 
+function missingQuoteNumber(error: { message: string } | null): boolean {
+  if (!error) return false;
+  const message = error.message.toLowerCase();
+  return (
+    message.includes("quote_number") &&
+    (message.includes("does not exist") || message.includes("schema cache") || message.includes("could not find"))
+  );
+}
+
+function withoutQuoteNumber(columns: string): string {
+  return columns
+    .split(",")
+    .map((column) => column.trim())
+    .filter((column) => column !== "quote_number")
+    .join(", ");
+}
+
+async function quoteQuery<T>(
+  run: (columns: string) => PromiseLike<{ data: T; error: { message: string } | null }>,
+  columns: string,
+): Promise<{ data: T; error: { message: string } | null }> {
+  const result = await run(columns);
+  if (!missingQuoteNumber(result.error)) return result;
+  return run(withoutQuoteNumber(columns));
+}
+
 function quoteRecord(row: {
   id?: unknown;
   invoice_id?: unknown;
+  quote_number?: unknown;
   selections?: unknown;
 }): QuoteRecord | undefined {
   if (typeof row.id !== "string" || typeof row.invoice_id !== "string") return undefined;
   const selections = quoteSelectionsSchema.safeParse(row.selections);
   if (!selections.success) return undefined;
-  return { id: row.id, invoiceId: row.invoice_id, selections: selections.data };
+  const quoteNumber = quoteNumberValue(row.quote_number);
+  return {
+    id: row.id,
+    invoiceId: row.invoice_id,
+    ...(quoteNumber ? { quoteNumber } : {}),
+    selections: selections.data,
+  };
 }
 
 type QuoteRow = {
   id?: unknown;
   invoice_id?: unknown;
+  quote_number?: unknown;
   active_revision_id?: unknown;
   created_at?: string | null;
 };
@@ -69,15 +108,14 @@ function quoteFromRow(
   const selections =
     typeof row.active_revision_id === "string" ? selectionsById.get(row.active_revision_id) : undefined;
   if (!selections) return undefined;
-  return quoteRecord({ id: row.id, invoice_id: row.invoice_id, selections });
+  return quoteRecord({ id: row.id, invoice_id: row.invoice_id, quote_number: row.quote_number, selections });
 }
 
 export async function readQuote(id: string): Promise<QuoteRecord | undefined> {
-  const { data, error } = await crm()
-    .from("quotes")
-    .select("id, invoice_id, active_revision_id")
-    .eq("id", id)
-    .maybeSingle();
+  const { data, error } = await quoteQuery(
+    (columns) => crm().from("quotes").select(columns).eq("id", id).maybeSingle(),
+    "id, invoice_id, quote_number, active_revision_id",
+  );
 
   throwIfError(error);
   if (!data) return undefined;
@@ -87,10 +125,10 @@ export async function readQuote(id: string): Promise<QuoteRecord | undefined> {
 
 export async function readQuotesByIds(ids: string[]): Promise<QuoteRecord[]> {
   if (ids.length === 0) return [];
-  const { data, error } = await crm()
-    .from("quotes")
-    .select("id, invoice_id, active_revision_id")
-    .in("id", ids);
+  const { data, error } = await quoteQuery(
+    (columns) => crm().from("quotes").select(columns).in("id", ids),
+    "id, invoice_id, quote_number, active_revision_id",
+  );
   throwIfError(error);
   const rows = (data ?? []) as QuoteRow[];
   const selectionsById = await selectionsByRevision(rows);
@@ -100,10 +138,10 @@ export async function readQuotesByIds(ids: string[]): Promise<QuoteRecord[]> {
 }
 
 export async function readQuotes(): Promise<ListedQuote[]> {
-  const { data, error } = await crm()
-    .from("quotes")
-    .select("id, invoice_id, active_revision_id, created_at")
-    .order("created_at", { ascending: false });
+  const { data, error } = await quoteQuery(
+    (columns) => crm().from("quotes").select(columns).order("created_at", { ascending: false }),
+    "id, invoice_id, quote_number, active_revision_id, created_at",
+  );
 
   throwIfError(error);
   const rows = (data ?? []) as QuoteRow[];
@@ -117,6 +155,7 @@ export async function readQuotes(): Promise<ListedQuote[]> {
       const listed = toListedQuote({
         id: row.id,
         invoice_id: row.invoice_id,
+        quote_number: row.quote_number,
         selections,
         created_at: row.created_at,
       });

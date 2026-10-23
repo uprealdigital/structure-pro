@@ -24,6 +24,9 @@ const RETRY_BUDGET_MS = 90_000;
 const ATTEMPT_MS = 45_000;
 const STOP_RE = /^(stop|stopall|unsubscribe|cancel|end|quit)$/i;
 
+// The quote submission still sends the opening message. Follow-up replies stay off until this is true.
+export const AUTOMATIC_REPLIES_ENABLED = false;
+
 type InboundMessageParams = {
   channelKey: string;
   channel: Extract<ActivityChannel, "sms" | "telegram">;
@@ -271,6 +274,7 @@ function wantsInvoiceAgain(text: string): boolean {
 }
 
 export async function replyToSms(session: AgentSession, incoming: string): Promise<string> {
+  if (!AUTOMATIC_REPLIES_ENABLED) return "";
   if (session.contractSent && wantsInvoiceAgain(incoming)) {
     return remember(session, incoming, await deliverInvoice(session));
   }
@@ -399,6 +403,7 @@ export async function processInboundMessage({
   if (STOP_RE.test(text)) {
     await optOutCustomer(channelKey).catch(console.error);
     await removeConversation(channelKey);
+    if (!AUTOMATIC_REPLIES_ENABLED) return undefined;
     return "You're unsubscribed. Submit a new quote on the website if you want to chat again.";
   }
 
@@ -407,10 +412,12 @@ export async function processInboundMessage({
     loaded = await getAgentSession(channelKey);
   } catch (error) {
     console.error(error);
+    if (!AUTOMATIC_REPLIES_ENABLED) return undefined;
     return "Sorry, I had trouble loading your quote. Reply again in a moment.";
   }
 
   if (!loaded) {
+    if (!AUTOMATIC_REPLIES_ENABLED) return undefined;
     return "We don't have an open quote for this channel. Submit for quote on the website first.";
   }
 
@@ -430,16 +437,21 @@ export async function processInboundMessage({
     }
   }
 
+  if (!AUTOMATIC_REPLIES_ENABLED) return undefined;
+
   after(async () => {
+    if (!AUTOMATIC_REPLIES_ENABLED) return;
     let reply: string;
     try {
       reply = await replyToSms(session, incoming || "Hi");
+      if (!reply.trim()) return;
       await saveAgentSession(conversationId, session).catch(console.error);
     } catch (error) {
       console.error(error);
       reply = replyFailureMessage(error);
     }
 
+    if (!reply.trim()) return;
     await appendActivity(conversationId, {
       role: "model",
       channel,

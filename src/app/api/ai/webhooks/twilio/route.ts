@@ -4,7 +4,10 @@ import {
   sendSms,
   twimlMessage,
 } from "@/src/common/lib/twilio/twilio.service";
-import { processInboundMessage } from "@/src/features/ai/services/messaging-agent.service";
+import {
+  AUTOMATIC_REPLIES_ENABLED,
+  processInboundMessage,
+} from "@/src/features/ai/services/messaging-agent.service";
 
 export const runtime = "nodejs";
 export const maxDuration = 120;
@@ -32,8 +35,12 @@ export async function POST(request: Request) {
     channelKey: from,
     channel: "sms",
     text: body,
-    sendMessage: (message) => sendSms(from, message),
+    sendMessage: async (message) => {
+      if (!AUTOMATIC_REPLIES_ENABLED || !message.trim()) return;
+      await sendSms(from, message);
+    },
   });
 
-  return xml(syncReply ? twimlMessage(syncReply) : emptyTwiml());
+  if (!AUTOMATIC_REPLIES_ENABLED || !syncReply?.trim()) return xml(emptyTwiml());
+  return xml(twimlMessage(syncReply));
 }

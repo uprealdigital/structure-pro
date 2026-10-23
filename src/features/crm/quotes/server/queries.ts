@@ -12,7 +12,7 @@ import { contractOnDeal, quoteIssued } from "@/src/features/crm/deals/utils/mapp
 import { readActiveRevisionId, readQuote, readQuotes } from "@/src/features/crm/quotes/db/quote";
 import { readQuoteRevision } from "@/src/features/crm/quotes/db/quote-revision";
 import type { QuoteCustomer, QuoteListItem, QuotePortal, QuotePortalCustomer, QuotePortalRecipient } from "@/src/features/crm/quotes/types";
-import { quotePortalDealName, quotePortalStatus } from "@/src/features/crm/quotes/utils/formatting";
+import { quoteDisplayName, quotePortalDealName, quotePortalStatus } from "@/src/features/crm/quotes/utils/formatting";
 import { toQuoteListItem, toQuotePortal } from "@/src/features/crm/quotes/utils/mappers";
 
 export const getQuoteList = cache(async (): Promise<QuoteListItem[]> => {
@@ -90,6 +90,7 @@ export const getQuoteList = cache(async (): Promise<QuoteListItem[]> => {
     const item = toQuoteListItem({
       id: quote.id,
       invoiceId: quote.invoiceId,
+      quoteNumber: quote.quoteNumber,
       createdAt: quote.createdAt,
       specs: described.specs,
       total: described.estimate.total,
@@ -156,7 +157,9 @@ export const getQuotePortal = cache(async (id: string, revisionId?: string): Pro
     id: quote.id,
     invoiceId: quote.invoiceId,
     revisionId: revision.id,
-    dealName: quotePortalDealName(deals, described.specs, quote.invoiceId),
+    dealName: quote.quoteNumber
+      ? quoteDisplayName(quote.quoteNumber, described.specs)
+      : quotePortalDealName(deals, described.specs, quote.invoiceId),
     revisionNumber: revision.revisionNumber,
     createdAt: revision.createdAt,
     imageUrl: described.style.image,

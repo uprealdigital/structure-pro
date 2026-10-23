@@ -196,6 +196,55 @@ export async function deleteActivityAt(conversationId: string, position: number)
   throwIfError(error);
 }
 
+export type ActivityRef = {
+  id: number;
+  position: number;
+  role: string;
+  channel: string;
+  body: string;
+};
+
+function activityRef(row: {
+  id?: unknown;
+  position?: unknown;
+  role?: unknown;
+  channel?: unknown;
+  body?: unknown;
+}): ActivityRef | undefined {
+  const id = typeof row.id === "number" ? row.id : typeof row.id === "string" ? Number(row.id) : Number.NaN;
+  const position = typeof row.position === "number" ? row.position : Number(row.position);
+  if (!Number.isInteger(id) || id <= 0 || !Number.isInteger(position)) return undefined;
+  if (typeof row.role !== "string" || typeof row.channel !== "string" || typeof row.body !== "string") return undefined;
+  return { id, position, role: row.role, channel: row.channel, body: row.body };
+}
+
+export async function readActivityRefs(conversationId: string, positions: number[]): Promise<ActivityRef[]> {
+  if (positions.length === 0) return [];
+  const { data, error } = await crm()
+    .from("activities")
+    .select("id, position, role, channel, body")
+    .eq("conversation_id", conversationId)
+    .in("position", positions);
+  throwIfError(error);
+  return (data ?? []).flatMap((row) => {
+    const activity = activityRef(row);
+    return activity ? [activity] : [];
+  });
+}
+
+export async function readActivityRefsByIds(ids: number[]): Promise<ActivityRef[]> {
+  if (ids.length === 0) return [];
+  const { data, error } = await crm()
+    .from("activities")
+    .select("id, position, role, channel, body")
+    .in("id", ids);
+  throwIfError(error);
+  return (data ?? []).flatMap((row) => {
+    const activity = activityRef(row);
+    return activity ? [activity] : [];
+  });
+}
+
 export async function deleteLatestActivity(conversationId: string): Promise<void> {
   const existing = await crm()
     .from("activities")

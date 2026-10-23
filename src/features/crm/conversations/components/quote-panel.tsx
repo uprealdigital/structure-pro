@@ -10,10 +10,15 @@ import {
   quoteMenuName,
   revisionMenuLabel,
 } from "@/src/features/crm/conversations/utils/formatting";
+import { quoteDisplayName } from "@/src/features/crm/quotes/utils/formatting";
 import type { QuoteRecordStatus } from "@/src/features/crm/quotes/types";
 import { specValue } from "@/src/features/crm/common/utils/formatting";
 
 const sectionTitle = "text-sm font-bold tracking-wider text-gray-900 uppercase";
+
+function quoteLabel(quote: ConversationQuote, index: number): string {
+  return quote.quoteNumber ? quoteDisplayName(quote.quoteNumber, quote.specs) : quoteMenuName(index);
+}
 
 const statusLabel: Record<QuoteRecordStatus, string> = {
   draft: copy.quoteStatusDraft,
@@ -275,8 +280,10 @@ export function QuoteMenu({
       >
         <span className="flex min-w-0 flex-1 flex-col gap-1">
           <span className="flex items-center justify-between gap-4">
-            <span className="text-xs font-semibold text-gray-950">{quoteMenuName(viewingIndex)}</span>
-            <span className="text-xs font-semibold text-gray-950">{current?.totalLabel ?? viewing.totalLabel}</span>
+            <span className="min-w-0 truncate text-xs font-semibold text-gray-950" title={quoteLabel(viewing, viewingIndex)}>
+              {quoteLabel(viewing, viewingIndex)}
+            </span>
+            <span className="shrink-0 text-xs font-semibold text-gray-950">{current?.totalLabel ?? viewing.totalLabel}</span>
           </span>
           <span className="flex items-center justify-between gap-3">
             <span className={`inline-flex rounded px-1.5 py-0.5 text-[10px] font-medium ${statusClass[viewing.status]}`}>
@@ -302,7 +309,7 @@ export function QuoteMenu({
             {quotes.map((quote, index) => (
               <li key={quote.id}>
                 <QuoteRow
-                  name={quoteMenuName(index)}
+                  name={quoteLabel(quote, index)}
                   quote={quote}
                   viewing={quote.id === viewingQuoteId}
                   revisionsOpen={revisionsQuoteId === quote.id}

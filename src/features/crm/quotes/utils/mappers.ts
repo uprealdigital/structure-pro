@@ -22,6 +22,7 @@ import {
   formatQuoteMonthly,
   formatQuotePrice,
   quoteDealLabel,
+  quoteDisplayName,
   quoteMonthsLabel,
   quoteVersionLabel,
   quoteZip,
@@ -77,6 +78,7 @@ function quoteStatus(contractSent: boolean, invoiceSent: boolean): QuoteStatus {
 export function toQuoteListItem(input: {
   id: string;
   invoiceId: string;
+  quoteNumber?: number;
   createdAt: string;
   specs: { label: string; value: string }[];
   total: number;
@@ -89,7 +91,7 @@ export function toQuoteListItem(input: {
     id: input.id,
     invoiceId: input.invoiceId,
     createdAt: input.createdAt,
-    dealLabel: quoteDealLabel(input.specs),
+    dealLabel: input.quoteNumber ? quoteDisplayName(input.quoteNumber, input.specs) : quoteDealLabel(input.specs),
     zip: quoteZip(input.specs),
     customers: input.customers,
     priceLabel: formatQuotePrice(input.total),

@@ -11,6 +11,7 @@ export type ComposerAttachment = {
   progress: number;
   quoteId?: string;
   revisionId?: string;
+  suggestionId?: string;
 };
 
 export function UploadProgress({

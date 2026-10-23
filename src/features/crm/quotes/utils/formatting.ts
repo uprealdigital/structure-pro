@@ -1,6 +1,7 @@
 import { specValue } from "@/src/features/crm/common/utils/formatting";
 import type { DealStatus } from "@/src/features/crm/deals/types";
 import { dealAdvancement } from "@/src/features/crm/deals/utils/status";
+import { portalCopy } from "@/src/features/crm/quotes/locales/en";
 import type { QuotePortalMode, QuotePortalStatus } from "@/src/features/crm/quotes/types";
 
 const dateFormat = new Intl.DateTimeFormat("en-US", {
@@ -86,6 +87,19 @@ export function quotePortalDealName(
 ): string {
   const name = deals.find((deal) => deal.name?.trim())?.name?.trim();
   return name || quoteDealLabel(specs) || invoiceId;
+}
+
+export function quoteNumberValue(value: unknown): number | undefined {
+  const number = typeof value === "number" ? value : typeof value === "string" ? Number(value) : Number.NaN;
+  return Number.isInteger(number) && number > 0 ? number : undefined;
+}
+
+export function quoteDisplayName(quoteNumber: number, specs: { label: string; value: string }[]): string {
+  const style = specValue(specs, "Style");
+  const size = specValue(specs, "Size");
+  const detail = [style, size].filter(Boolean).join(" — ");
+  const prefix = `${portalCopy.quote} #${quoteNumber}`;
+  return detail ? `${prefix} (${detail})` : prefix;
 }
 
 export function quoteDealLabel(specs: { label: string; value: string }[]): string {

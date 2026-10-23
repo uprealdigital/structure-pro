@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { suggestionIntentSchema } from "@/src/features/ai/types";
 import { quoteSelectionsSchema } from "@/src/features/cpq/types";
 import {
   configChangesSchema,
@@ -217,6 +218,7 @@ export type ConversationQuoteRevision = z.infer<typeof conversationQuoteRevision
 export const conversationQuoteSchema = z.object({
   id: z.string(),
   invoiceId: z.string(),
+  quoteNumber: z.number().int().positive().optional(),
   totalLabel: z.string(),
   specs: z.array(z.object({ label: z.string(), value: z.string() })),
   lines: z.array(z.object({ label: z.string(), amountLabel: z.string() })),
@@ -294,3 +296,23 @@ export const sendQuoteMessagesSchema = z.object({
 });
 
 export type SendQuoteMessages = z.infer<typeof sendQuoteMessagesSchema>;
+
+export const syncSuggestionsSchema = z.object({
+  dealId: dealIdSchema,
+  conversationId: conversationIdSchema,
+  positions: z.array(z.number().int().nonnegative()).max(40),
+});
+
+export const suggestionIdSchema = z.object({
+  id: z.string().uuid(),
+});
+
+export const conversationSuggestionSchema = z.object({
+  id: z.string().trim().min(1),
+  intent: suggestionIntentSchema,
+  configChanges: configChangesSchema.default({}),
+  summary: z.string().default(""),
+  messages: z.array(z.string()),
+});
+
+export type ConversationSuggestion = z.infer<typeof conversationSuggestionSchema>;

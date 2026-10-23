@@ -51,6 +51,7 @@ export type QuoteContact = z.infer<typeof quoteContactSchema>;
 export const quoteRecordSchema = z.object({
   id: z.string().min(1),
   invoiceId: z.string().min(1),
+  quoteNumber: z.number().int().positive().optional(),
   selections: quoteSelectionsSchema,
 });
 

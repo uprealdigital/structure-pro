@@ -150,6 +150,7 @@ async function loadConversationQuote(quoteId: string): Promise<ConversationQuote
   return toConversationQuote({
     id: quoteRecord.id,
     invoiceId: quoteRecord.invoiceId,
+    quoteNumber: quoteRecord.quoteNumber,
     totalLabel: active?.totalLabel ?? quoteRecord.summary.totalLabel,
     specs: active?.specs ?? quoteRecord.summary.specs,
     lines: active?.lines ?? quoteRecord.summary.lines,

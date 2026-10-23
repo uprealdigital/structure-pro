@@ -223,6 +223,7 @@ export function toConversationQuoteRevision(input: {
 export function toConversationQuote(input: {
   id: string;
   invoiceId: string;
+  quoteNumber?: number;
   totalLabel: string;
   specs: { label: string; value: string }[];
   lines: { label: string; amountLabel: string }[];
@@ -266,6 +267,7 @@ export function conversationQuoteFromSelections(
   return toConversationQuote({
     id: quote.id,
     invoiceId: quote.invoiceId,
+    quoteNumber: quote.quoteNumber,
     totalLabel: summary.totalLabel,
     specs: summary.specs,
     lines: summary.lines,
@@ -286,6 +288,7 @@ export function conversationQuoteWithActiveRevision(
   return toConversationQuote({
     id: quote.id,
     invoiceId: quote.invoiceId,
+    quoteNumber: quote.quoteNumber,
     totalLabel: revision.totalLabel,
     specs: revision.specs,
     lines: revision.lines,
@@ -306,6 +309,7 @@ export function conversationQuoteWithSentRevision(
   return toConversationQuote({
     id: quote.id,
     invoiceId: quote.invoiceId,
+    quoteNumber: quote.quoteNumber,
     totalLabel: quote.totalLabel,
     specs: quote.specs,
     lines: quote.lines,
@@ -327,6 +331,7 @@ export function conversationQuoteWithSharedPhotos(
   return toConversationQuote({
     id: quote.id,
     invoiceId: quote.invoiceId,
+    quoteNumber: quote.quoteNumber,
     totalLabel: quote.totalLabel,
     specs: quote.specs,
     lines: quote.lines,

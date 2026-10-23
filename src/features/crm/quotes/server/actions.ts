@@ -5,7 +5,7 @@ import { quoteSelectionsSchema } from "@/src/features/cpq/types";
 import { readDeal, readDealsByIds, readDealsByQuoteId, updateDeal } from "@/src/features/crm/deals/db/deal";
 import { createDealQuote, readDealQuotesForQuote } from "@/src/features/crm/deals/db/deal-quote";
 import { newInvoiceId } from "@/src/features/cpq/utils/id";
-import { createQuote, deleteQuote, readActiveRevisionId, updateQuote } from "@/src/features/crm/quotes/db/quote";
+import { createQuote, deleteQuote, readActiveRevisionId, readQuote, updateQuote } from "@/src/features/crm/quotes/db/quote";
 import {
   createQuoteRevision,
   readQuoteRevision,
@@ -170,6 +170,7 @@ export async function createDealQuoteAction(input: {
       data: {
         id: string;
         invoiceId: string;
+        quoteNumber?: number;
         revisionId: string;
         revisionNumber: number;
         createdAt: string;
@@ -188,6 +189,7 @@ export async function createDealQuoteAction(input: {
     const invoiceId = newInvoiceId();
     quoteId = await createQuote({ invoiceId, selections: parsed.data.selections });
     await createDealQuote({ dealId: deal.id, quoteId });
+    const savedQuote = await readQuote(quoteId);
     const revisionId = await readActiveRevisionId(quoteId);
     const revision = revisionId ? await readQuoteRevision(revisionId) : undefined;
     if (!revision) return { error: "Could not add a quote" };
@@ -199,6 +201,7 @@ export async function createDealQuoteAction(input: {
       data: {
         id: quoteId,
         invoiceId,
+        quoteNumber: savedQuote?.quoteNumber,
         revisionId: revision.id,
         revisionNumber: revision.revisionNumber,
         createdAt: revision.createdAt,

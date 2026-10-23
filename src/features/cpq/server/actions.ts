@@ -3,10 +3,9 @@
 import { revalidatePath } from "next/cache";
 import { callRouter, readJson } from "@/src/common/utils/internal-call";
 import { toE164 } from "@/src/common/utils/phone";
-import { priceSummary } from "@/src/features/cpq/utils/pricing";
 import { openingSms } from "@/src/features/cpq/utils/system";
 import { recordSystemActivity } from "@/src/features/crm/conversations/server/actions";
-import { productTitle } from "@/src/features/crm/conversations/utils/formatting";
+import { defaultDealName } from "@/src/features/crm/deals/utils/naming";
 import { createConfiguration } from "@/src/features/cpq/db/configuration";
 import { createQuote, deleteQuote } from "@/src/features/crm/quotes/db/quote";
 import { getConfiguration } from "@/src/features/cpq/server/queries";
@@ -87,7 +86,7 @@ export async function createQuoteAction(input: {
     quoteId = await createQuote({ invoiceId, selections: selections.data });
 
     const { POST: createDealRoute } = await import("@/src/app/api/crm/deals/route");
-    const deal = await readJson<{ id: string }>(
+    const deal = await readJson<{ id: string; name?: string | null }>(
       await callRouter(createDealRoute, "/api/crm/deals", {
         body: { quoteId, source: "quote" },
       }),
@@ -127,7 +126,7 @@ export async function createQuoteAction(input: {
     createdConversation = started.created === true;
 
     if (conversationId && dealId) {
-      const dealName = productTitle(priceSummary(selections.data).specs) || invoiceId;
+      const dealName = deal.name?.trim() || defaultDealName("quote", new Date().toISOString());
       await recordSystemActivity({
         conversationId,
         kind: "created",

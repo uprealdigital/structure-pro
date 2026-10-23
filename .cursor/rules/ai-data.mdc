@@ -1,0 +1,29 @@
+---
+description: The AI feature stores and returns data, with no UI and no CRM or CPQ knowledge
+globs: src/features/ai/**/*
+alwaysApply: false
+---
+
+# AI is data only
+
+`src/features/ai/` stores records, calls models, and returns data. It does not render anything, and it does not know how CRM or CPQ present that data.
+
+Allowed folders are `types/`, `db/`, `utils/`, and `services/`. Do not add `components/`, `hooks/`, `locales/`, or pages.
+
+- Do not import React, Tailwind, or UI copy.
+- Do not import `src/features/crm/` or `src/features/cpq/`.
+- Inputs and outputs are schemas and types from `src/features/ai/types/`.
+- CRM and CPQ call these functions and decide what to show, send, or save.
+
+```ts
+// src/features/ai/services/messaging-agent.service.ts
+export async function replyToMessage(session: AgentSession, text: string): Promise<{ text: string }> {
+  return { text };
+}
+```
+
+```ts
+// A CRM action records the reply. The AI service does not.
+const reply = await replyToMessage(session, inbound);
+await appendActivity(conversationId, reply.text);
+```
