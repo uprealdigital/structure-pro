@@ -153,7 +153,7 @@ function SharedStage({
   config,
   views,
   stageRef,
-}: BuildingViewsProps) {
+}: Omit<BuildingViewsProps, "onReady">) {
   const gl = useThree((state) => state.gl);
   const scene = useThree((state) => state.scene);
   const viewsRef = useRef(views);
