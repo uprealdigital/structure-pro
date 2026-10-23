@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import {
   applyConversationSuggestion,
   dismissConversationSuggestion,
+  restoreConversationSuggestion,
   syncConversationSuggestions,
 } from "@/src/features/crm/conversations/server/actions";
 import type { ConversationSuggestion } from "@/src/features/crm/conversations/types";
@@ -41,10 +42,12 @@ export function useConversationSuggestions(dealId: string, conversationId: strin
   useEffect(() => {
     if (!dealId || messages.length === 0) return;
     let cancelled = false;
-    void loadSuggestions(key, dealId, conversationId, positionsRef.current).then((result) => {
-      if (cancelled || "error" in result) return;
-      setSuggestions(visible(result.data));
-    });
+    void loadSuggestions(key, dealId, conversationId, positionsRef.current)
+      .then((result) => {
+        if (cancelled || "error" in result) return;
+        setSuggestions(visible(result.data));
+      })
+      .catch(() => {});
     return () => {
       cancelled = true;
     };
@@ -57,14 +60,26 @@ export function useConversationSuggestions(dealId: string, conversationId: strin
 
   return {
     suggestions,
-    dismiss: (id: string) => {
+    dismiss: async (id: string) => {
       const previous = suggestions;
       hide(id);
-      void dismissConversationSuggestion({ id }).then((result) => {
-        if (!("error" in result)) return;
-        hiddenIds.current.delete(id);
-        setSuggestions(previous);
+      const result = await dismissConversationSuggestion({ id });
+      if (!("error" in result)) return true;
+      hiddenIds.current.delete(id);
+      setSuggestions(previous);
+      return false;
+    },
+    restore: async (suggestion: ConversationSuggestion) => {
+      const result = await restoreConversationSuggestion({ id: suggestion.id });
+      if ("error" in result) return false;
+      hiddenIds.current.delete(suggestion.id);
+      setSuggestions((current) => {
+        if (current.some((item) => item.id === suggestion.id)) return current;
+        return [...current, suggestion].sort(
+          (left, right) => Number(left.intent === "new_quote") - Number(right.intent === "new_quote"),
+        );
       });
+      return true;
     },
     apply: async (id: string) => {
       const previous = suggestions;

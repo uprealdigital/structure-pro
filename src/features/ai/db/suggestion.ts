@@ -104,7 +104,7 @@ export async function updateSuggestion(
     messageIds?: number[];
     configChanges?: SuggestionConfigChanges;
     previewImageUrl?: string | null;
-    status?: "applied" | "dismissed";
+    status?: "pending" | "applied" | "dismissed";
   },
 ): Promise<Suggestion | undefined> {
   const next = suggestionPatchSchema.parse(patch);
@@ -114,12 +114,13 @@ export async function updateSuggestion(
   if (next.messageIds || next.configChanges) row.preview_image_url = null;
   if (next.previewImageUrl !== undefined) row.preview_image_url = next.previewImageUrl;
   if (next.status) row.status = next.status;
+  const fromStatus = next.status === "pending" ? "dismissed" : "pending";
 
   const first = await ai()
     .from("suggestions")
     .update(row)
     .eq("id", id)
-    .eq("status", "pending")
+    .eq("status", fromStatus)
     .select(columns)
     .maybeSingle();
   const updated = missingPreviewColumn(first.error)
@@ -127,7 +128,7 @@ export async function updateSuggestion(
         .from("suggestions")
         .update(withoutPreview(row))
         .eq("id", id)
-        .eq("status", "pending")
+        .eq("status", fromStatus)
         .select(columnsWithoutPreview)
         .maybeSingle()
     : first;

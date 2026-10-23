@@ -1,24 +1,21 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { ArrowLeftRight, Check, DollarSign, Plus, RotateCw, X } from "lucide-react";
+import { Check, Plus, RotateCw, X } from "lucide-react";
 import { useEffect, useRef, useState, type Ref } from "react";
 import type { DesignAngle, DesignAngleView } from "@/src/features/cpq/components/building-view";
+import type { QuoteSelections } from "@/src/features/cpq/types";
 import { toBuildingConfig } from "@/src/features/cpq/utils/mappers";
 import { UploadProgress } from "@/src/features/crm/conversations/components/composer-attachments";
+import { RevisionChangeList } from "@/src/features/crm/conversations/components/revision-change-list";
 import { copy } from "@/src/features/crm/conversations/locales/en";
 import type { ConversationQuoteRevision } from "@/src/features/crm/conversations/types";
-import {
-  changesSinceSharedPhotos,
-  previousSharedPhotosRevision,
-  type DesignPreviewChange,
-} from "@/src/features/crm/conversations/utils/design-preview";
+import type { ConfigChanges } from "@/src/features/crm/quotes/types";
 
 const BuildingViews = dynamic(() => import("@/src/features/cpq/components/building-view"), {
   ssr: false,
 });
 
-const visibleChangeCount = 4;
 const maxDesignViews = 4;
 const defaultAngles: DesignAngle[] = ["left", "right", "top", "front"];
 
@@ -27,6 +24,7 @@ const angleLabel: Record<DesignAngle, string> = {
   right: copy.designAngleRight,
   top: copy.designAngleTop,
   front: copy.designAngleFront,
+  quarter: copy.designAngleQuarter,
 };
 
 type DesignView = {
@@ -37,18 +35,14 @@ type DesignView = {
 type DesignPreviewModalProps = {
   current: ConversationQuoteRevision;
   revisions: ConversationQuoteRevision[];
+  selections?: QuoteSelections | null;
+  suggested?: ConfigChanges | null;
   onClose: () => void;
   onAttach: (file: File) => void | Promise<void>;
 };
 
 function createView(angle: DesignAngle): DesignView {
   return { id: crypto.randomUUID(), angle };
-}
-
-function ChangeIcon({ kind }: { kind: DesignPreviewChange["kind"] }) {
-  const className = "mt-0.5 h-3.5 w-3.5 shrink-0";
-  if (kind === "price") return <DollarSign className={className} strokeWidth={1.5} aria-hidden="true" />;
-  return <ArrowLeftRight className={className} strokeWidth={1.5} aria-hidden="true" />;
 }
 
 function roundedCell(context: CanvasRenderingContext2D, x: number, y: number, width: number, height: number, radius: number) {
@@ -159,8 +153,8 @@ function DesignAngleCard({
   );
 }
 
-export function DesignPreviewModal({ current, revisions, onClose, onAttach }: DesignPreviewModalProps) {
-  const [views, setViews] = useState<DesignView[]>(() => defaultAngles.map(createView));
+export function DesignPreviewModal({ current, revisions, selections, suggested, onClose, onAttach }: DesignPreviewModalProps) {
+  const [views, setViews] = useState<DesignView[]>(() => [createView("quarter")]);
   const [modelReady, setModelReady] = useState(false);
   const [attaching, setAttaching] = useState(false);
   const [error, setError] = useState("");
@@ -169,10 +163,7 @@ export function DesignPreviewModal({ current, revisions, onClose, onAttach }: De
   const captureRefs = useRef(new Map<string, DesignAngleView["captureRef"]>());
   const viewCount = useRef(views.length);
   const listEnd = useRef<HTMLDivElement>(null);
-  const config = toBuildingConfig(current.selections);
-  const baseline = previousSharedPhotosRevision(revisions, current);
-  const changes = changesSinceSharedPhotos(revisions, current);
-  const changesScroll = changes.length > visibleChangeCount;
+  const config = toBuildingConfig(selections ?? current.selections);
   const angleViews: DesignAngleView[] = views.map((view) => {
     let track = trackRefs.current.get(view.id);
     if (!track) {
@@ -259,27 +250,7 @@ export function DesignPreviewModal({ current, revisions, onClose, onAttach }: De
         </header>
 
         <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-6 pb-4">
-          <div className="mb-2 flex items-center gap-2">
-            <h3 className="text-[11px] font-semibold tracking-wider text-gray-500 uppercase">{copy.designPreviewChanges}</h3>
-            <span className="inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-gray-200 px-1 text-[10px] font-semibold text-gray-600">
-              {changes.length}
-            </span>
-          </div>
-          {changes.length === 0 ? (
-            <p className="text-xs text-gray-500">{baseline ? copy.noChangesSinceSharedPhotos : copy.noEarlierSharedPhotos}</p>
-          ) : (
-            <ul
-              className={`space-y-1.5 ${changesScroll ? "max-h-[calc(4.5*1.25rem+4*0.375rem)] overflow-y-scroll overscroll-contain pr-2" : ""}`}
-              onWheel={changesScroll ? (event) => event.stopPropagation() : undefined}
-            >
-              {changes.map((change) => (
-                <li key={change.id} className="flex items-start gap-2 text-xs leading-5 font-normal text-gray-950">
-                  <ChangeIcon kind={change.kind} />
-                  <span>{change.text}</span>
-                </li>
-              ))}
-            </ul>
-          )}
+          <RevisionChangeList current={current} revisions={revisions} suggested={suggested} />
 
           <div className="mt-6 mb-3 flex items-center justify-between gap-3">
             <h3 className="text-[11px] font-semibold tracking-wider text-gray-500 uppercase">{copy.designPreviewAngles}</h3>

@@ -51,7 +51,12 @@ export function useConversationSelection({
     if (!id) return undefined;
     const ticket = request.current + 1;
     request.current = ticket;
-    const result = await loadConversationWorkspace(id, dealId);
+    let result: Awaited<ReturnType<typeof loadConversationWorkspace>>;
+    try {
+      result = await loadConversationWorkspace(id, dealId);
+    } catch {
+      return undefined;
+    }
     if (ticket !== request.current) return undefined;
     if ("error" in result || !result.data) return undefined;
     setWorkspace(result.data);
@@ -68,7 +73,15 @@ export function useConversationSelection({
     setStatus("pending");
     replaceUrl(id);
 
-    const result = await loadConversationWorkspace(id, dealId);
+    let result: Awaited<ReturnType<typeof loadConversationWorkspace>>;
+    try {
+      result = await loadConversationWorkspace(id, dealId);
+    } catch {
+      if (ticket !== request.current) return;
+      setWorkspace(undefined);
+      setStatus("error");
+      return;
+    }
     if (ticket !== request.current) return;
     if ("error" in result) {
       setWorkspace(undefined);

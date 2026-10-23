@@ -16,7 +16,7 @@ import type { BuildingCapture } from "@/src/features/cpq/components/building-sce
 import { getStyle, type BuildingConfig } from "@/src/features/cpq/utils/catalog";
 import { roofPeakHeight } from "@/src/features/cpq/utils/geometry";
 
-export type DesignAngle = "left" | "right" | "top" | "front";
+export type DesignAngle = "left" | "right" | "top" | "front" | "quarter";
 
 export type DesignAngleView = {
   id: string;
@@ -44,6 +44,7 @@ const ANGLE_AIM: Record<DesignAngle, { polar: number; azimuth: number; fit: numb
   right: { polar: 1.05, azimuth: Math.PI / 2, fit: 0.78 },
   left: { polar: 1.05, azimuth: -Math.PI / 2, fit: 0.78 },
   top: { polar: 0.12, azimuth: 0.2, fit: 0.82 },
+  quarter: { polar: 1.05, azimuth: Math.PI / 4, fit: 0.72 },
 };
 
 type CameraPlacement = {
@@ -56,7 +57,7 @@ function cameraPlacement(angle: DesignAngle, config: BuildingConfig): CameraPlac
   const { width, length, height } = config;
   const top = SKID_HEIGHT + roofPeakHeight(getStyle(config.styleId), height, width);
   const target: [number, number, number] = [0, top / 2, 0];
-  const span = angle === "top" ? Math.hypot(width, length) : Math.max(width, length, height * 1.7);
+  const span = angle === "top" || angle === "quarter" ? Math.hypot(width, length) : Math.max(width, length, height * 1.7);
   const distance = span / 2 / Math.tan((FIELD_OF_VIEW * Math.PI) / 360) / ANGLE_AIM[angle].fit;
   const aim = ANGLE_AIM[angle];
   const sinPolar = Math.sin(aim.polar);

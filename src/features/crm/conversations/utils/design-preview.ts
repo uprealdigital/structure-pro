@@ -1,4 +1,5 @@
-import type { QuoteSelections } from "@/src/features/cpq/types";
+import { quoteSelectionsSchema, type QuoteSelections } from "@/src/features/cpq/types";
+import type { ConfigChanges } from "@/src/features/crm/quotes/types";
 import {
   getColor,
   getFlooring,
@@ -7,6 +8,7 @@ import {
   getStyle,
 } from "@/src/features/cpq/utils/catalog";
 import { formatUsd, priceSummary } from "@/src/features/cpq/utils/pricing";
+import { configChangeRows } from "@/src/features/crm/conversations/utils/config-changes-summary";
 import { copy } from "@/src/features/crm/conversations/locales/en";
 import type { ConversationQuoteRevision } from "@/src/features/crm/conversations/types";
 
@@ -14,12 +16,14 @@ export type DesignPreviewChange = {
   id: string;
   kind: "price" | "added" | "changed" | "removed";
   text: string;
+  suggested?: boolean;
 };
 
 export function previousSharedPhotosRevision(
   revisions: ConversationQuoteRevision[],
   viewed: ConversationQuoteRevision,
 ): ConversationQuoteRevision | null {
+  if (viewed.sharedPhotosAt) return viewed;
   let match: ConversationQuoteRevision | null = null;
   for (const revision of revisions) {
     if (!revision.sharedPhotosAt || revision.revisionNumber >= viewed.revisionNumber) continue;
@@ -47,9 +51,41 @@ export function changesSinceSharedPhotos(
   return designPreviewChanges(baseline.selections, accumulated);
 }
 
+export function withSuggestedChanges(
+  changes: DesignPreviewChange[],
+  suggested: ConfigChanges | null | undefined,
+): DesignPreviewChange[] {
+  if (!suggested) return changes;
+  const extra = configChangeRows(suggested);
+  if (extra.length === 0) return changes;
+  const byId = new Map(extra.map((row) => [row.id, row]));
+  const seen = new Set<string>();
+  const merged = changes.map((change) => {
+    const next = byId.get(change.id);
+    if (!next) return change;
+    seen.add(change.id);
+    return { id: next.id, kind: next.kind, text: next.text, suggested: true };
+  });
+  for (const row of extra) {
+    if (seen.has(row.id)) continue;
+    merged.push({ id: row.id, kind: row.kind, text: row.text, suggested: true });
+  }
+  return merged;
+}
+
 function priceDeltaLabel(delta: number): string {
   if (delta > 0) return `+${formatUsd(delta)}`;
   return formatUsd(delta);
+}
+
+export function selectionsWithConfigChanges(current: QuoteSelections, changes: ConfigChanges): QuoteSelections {
+  const parsed = quoteSelectionsSchema.safeParse({ ...current, ...changes });
+  return parsed.success ? parsed.data : current;
+}
+
+export function selectionHasConfigChanges(current: QuoteSelections, changes: ConfigChanges): boolean {
+  const proposed = selectionsWithConfigChanges(current, changes);
+  return designPreviewChanges(current, proposed).some((change) => change.kind !== "price");
 }
 
 export function designPreviewChanges(

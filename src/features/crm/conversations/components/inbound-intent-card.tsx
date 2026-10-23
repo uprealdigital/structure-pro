@@ -77,7 +77,7 @@ export function InboundIntentCard({
         </button>
       </div>
       {draft ? (
-        <div className="mt-3 w-full rounded-lg border border-gray-200 bg-gray-50 p-2.5">
+        <div className="mt-3 w-5/8 rounded-lg border border-gray-200 bg-gray-50 p-2.5">
           {quotes && quotes.length > 0 && selectedQuoteId ? (
             <QuoteTarget
               quotes={quotes}

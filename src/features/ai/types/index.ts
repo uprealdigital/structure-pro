@@ -137,7 +137,7 @@ export const suggestionPatchSchema = z.object({
   messageIds: z.array(z.number().int().positive()).min(1).max(40).optional(),
   configChanges: suggestionConfigChangesSchema.optional(),
   previewImageUrl: z.string().nullable().optional(),
-  status: z.enum(["applied", "dismissed"]).optional(),
+  status: z.enum(["pending", "applied", "dismissed"]).optional(),
 });
 
 export const yardPreviewPatchSchema = z.object({

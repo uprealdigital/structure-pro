@@ -70,6 +70,33 @@ export async function createActivities(
   throwIfError(touched.error);
 }
 
+export async function readLatestActivity(conversationId: string): Promise<Activity | undefined> {
+  const { data, error } = await crm()
+    .from("activities")
+    .select(activityColumns)
+    .eq("conversation_id", conversationId)
+    .order("position", { ascending: false })
+    .limit(1);
+  throwIfError(error);
+  const row = data?.[0] as ActivityRow | undefined;
+  if (!row) return undefined;
+  const calls = typeof row.call_id === "string" ? await readCalls([row.call_id]) : [];
+  return toActivity(row, calls[0]) ?? undefined;
+}
+
+export async function readLatestMessageAt(conversationId: string): Promise<string> {
+  const { data, error } = await crm()
+    .from("activities")
+    .select("created_at")
+    .eq("conversation_id", conversationId)
+    .in("channel", ["sms", "facebook", "email", "telegram"])
+    .order("created_at", { ascending: false })
+    .limit(1);
+  throwIfError(error);
+  const stamp = data?.[0]?.created_at;
+  return typeof stamp === "string" ? stamp : "";
+}
+
 export async function readActivities(conversationId: string): Promise<Activity[]> {
   const { data, error } = await crm()
     .from("activities")

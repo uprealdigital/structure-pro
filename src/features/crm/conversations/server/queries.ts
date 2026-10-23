@@ -16,6 +16,8 @@ import {
   countUnreadActivities,
   readActivities,
   readActivitiesSince,
+  readLatestActivity,
+  readLatestMessageAt,
 } from "@/src/features/crm/conversations/db/activity";
 import {
   readConversation,
@@ -50,6 +52,7 @@ import {
 import { readDeal, readDeals, readDealsByIds } from "@/src/features/crm/deals/db/deal";
 import { readDealQuotes } from "@/src/features/crm/deals/db/deal-quote";
 import type { Deal } from "@/src/features/crm/deals/types";
+import { priceSummary } from "@/src/features/cpq/utils/pricing";
 import { readActiveRevisionId, readQuoteStatus, readQuotesByIds } from "@/src/features/crm/quotes/db/quote";
 import { readQuoteRevisions } from "@/src/features/crm/quotes/db/quote-revision";
 import type { ConversationQuoteRevision } from "@/src/features/crm/conversations/types";
@@ -187,9 +190,33 @@ async function dealOption(
     quote: quote ?? null,
     quotes,
     conversationId: thread?.id,
-    activities: thread?.activities ?? [],
+    activities: [],
   });
   return option.success ? option.data : undefined;
+}
+
+async function lightDealOptions(deals: Deal[]): Promise<ConversationDealOption[]> {
+  if (deals.length === 0) return [];
+  const idLists = await Promise.all(deals.map((deal) => quoteIdsForDeal(deal.id, deal.quoteId)));
+  const quoteIds = [...new Set(idLists.flat())];
+  const quotes = quoteIds.length > 0 ? await readQuotesByIds(quoteIds) : [];
+  const quoteById = new Map(quotes.map((quote) => [quote.id, quote]));
+  return deals.flatMap((deal, index) => {
+    const ids = idLists[index] ?? [];
+    const record = quoteById.get(deal.quoteId) ?? ids.map((id) => quoteById.get(id)).find((quote) => quote != null);
+    const summary = record ? priceSummary(record.selections) : undefined;
+    const option = conversationDealOptionSchema.safeParse({
+      id: deal.id,
+      title: deal.name?.trim() || productTitle(summary?.specs ?? []) || record?.invoiceId || "",
+      priceLabel: summary?.totalLabel ?? "",
+      stage: deal.status,
+      dateLabel: formatDealMenuDate(deal.createdAt ?? ""),
+      deal,
+      quote: null,
+      quotes: [],
+    });
+    return option.success ? [option.data] : [];
+  });
 }
 
 export async function getUnreadActivityCount(): Promise<number> {
@@ -204,35 +231,42 @@ export const getConversationInbox = cache(async (): Promise<ConversationInboxIte
     readDeals(),
   ]);
   const customerById = new Map(customers.map((customer) => [customer.id, customer]));
-  const items: ConversationInboxItem[] = [];
-
   const chosen = [...canonicalConversationByCustomer(summaries).values()].sort((left, right) =>
     right.updatedAt.localeCompare(left.updatedAt),
   );
-  for (const summary of chosen) {
-    const customer = customerById.get(summary.customerId);
-    if (!customer) continue;
-    const linked = linkedDeals(links, deals, customer.id).sort(byNewest);
-    const active = customer.activeDealId
-      ? linked.find((item) => item.id === customer.activeDealId)
-      : undefined;
-    const deal = active ?? latestPrimaryDeal(links, deals, customer.id) ?? linked[0];
-    if (!deal) continue;
-    const activities = await readActivities(summary.id);
-    const item = toConversationInboxItem({
-      summary,
-      customer,
-      deal,
-      deals: linked,
-      preview: activityPreview(activities.at(-1)),
-      updatedAt: lastMessageAt(activities),
-      unread: unreadActivityCount(activities) > 0,
-      unreadCount: unreadActivityCount(activities),
-    });
-    if (item) items.push(item);
+  const items: Array<ConversationInboxItem | undefined> = [];
+  for (let index = 0; index < chosen.length; index += 6) {
+    const chunk = await Promise.all(
+      chosen.slice(index, index + 6).map(async (summary) => {
+      const customer = customerById.get(summary.customerId);
+      if (!customer) return undefined;
+      const linked = linkedDeals(links, deals, customer.id).sort(byNewest);
+      const active = customer.activeDealId
+        ? linked.find((item) => item.id === customer.activeDealId)
+        : undefined;
+      const deal = active ?? latestPrimaryDeal(links, deals, customer.id) ?? linked[0];
+      if (!deal) return undefined;
+      const [latest, updatedAt, unreadCount] = await Promise.all([
+        readLatestActivity(summary.id),
+        readLatestMessageAt(summary.id),
+        conversationUnreadCount(summary.id),
+      ]);
+      return toConversationInboxItem({
+        summary,
+        customer,
+        deal,
+        deals: linked,
+        preview: activityPreview(latest),
+        updatedAt,
+        unread: unreadCount > 0,
+        unreadCount,
+      });
+      }),
+    );
+    items.push(...chunk);
   }
 
-  return items;
+  return items.filter((item): item is ConversationInboxItem => item != null);
 });
 
 export async function getCustomerInboxItem(
@@ -443,11 +477,22 @@ export async function getConversationWorkspace(
   if (!customer) return undefined;
   const links = await readDealCustomersForCustomer(customer.id);
   const deals = (await readDealsByIds(links.map((link) => link.dealId))).sort(byNewest);
-  const options: ConversationDealOption[] = [];
-  for (const deal of deals) {
-    const option = await dealOption(deal, conversation);
-    if (option) options.push(option);
-  }
+  const primaryIds = new Set(links.filter((link) => link.isPrimary).map((link) => link.dealId));
+  const focusedDeal =
+    (dealId ? deals.find((deal) => deal.id === dealId) : undefined) ??
+    (customer.activeDealId ? deals.find((deal) => deal.id === customer.activeDealId) : undefined) ??
+    deals.find((deal) => primaryIds.has(deal.id)) ??
+    deals[0];
+  const [focusedOption, lightOptions] = await Promise.all([
+    focusedDeal ? dealOption(focusedDeal, conversation) : undefined,
+    lightDealOptions(deals.filter((deal) => deal.id !== focusedDeal?.id)),
+  ]);
+  const lightById = new Map(lightOptions.map((option) => [option.id, option]));
+  const options = deals.flatMap((deal) => {
+    if (deal.id === focusedDeal?.id) return focusedOption ? [focusedOption] : [];
+    const light = lightById.get(deal.id);
+    return light ? [light] : [];
+  });
   if (options.length === 0) return undefined;
 
   const participantLinks = await readDealCustomersForDeals(options.map((option) => option.id));
@@ -470,7 +515,6 @@ export async function getConversationWorkspace(
     }),
   );
 
-  const primaryIds = new Set(links.filter((link) => link.isPrimary).map((link) => link.dealId));
   const saved = customer.activeDealId
     ? options.find((option) => option.id === customer.activeDealId)
     : undefined;

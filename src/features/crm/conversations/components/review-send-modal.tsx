@@ -17,8 +17,9 @@ import {
 import { createPortal } from "react-dom";
 import { contactInitials } from "@/src/features/crm/common/utils/formatting";
 import { copy } from "@/src/features/crm/conversations/locales/en";
-import type { ConversationParticipant } from "@/src/features/crm/conversations/types";
-import type { QuoteCommunication } from "@/src/features/crm/quotes/types";
+import { RevisionChangeList } from "@/src/features/crm/conversations/components/revision-change-list";
+import type { ConversationParticipant, ConversationQuoteRevision } from "@/src/features/crm/conversations/types";
+import type { ConfigChanges, QuoteCommunication } from "@/src/features/crm/quotes/types";
 import {
   reviewEmailBody,
   reviewMessageToken,
@@ -638,6 +639,9 @@ export function ReviewSendModal({
   revisionId,
   imageUrl,
   statusLabel,
+  current,
+  revisions,
+  suggested,
   communication,
   onSave,
   onSend,
@@ -650,6 +654,9 @@ export function ReviewSendModal({
   revisionId: string;
   imageUrl: string;
   statusLabel: string;
+  current: ConversationQuoteRevision;
+  revisions: ConversationQuoteRevision[];
+  suggested?: ConfigChanges | null;
   communication: QuoteCommunication | null;
   onSave: (communication: QuoteCommunication) => Promise<void>;
   onSend: (communication: QuoteCommunication) => Promise<void>;
@@ -752,29 +759,30 @@ export function ReviewSendModal({
         </div>
 
         <div className="mt-4 space-y-4">
-          <div className="flex items-center gap-4 py-2">
+          <div className="flex items-start gap-4 py-2">
             <div className="flex h-14 w-16 shrink-0 items-center justify-center rounded-lg">
               <img alt={title} src={imageUrl} className="h-full w-full object-contain" />
             </div>
-            <div className="flex min-w-0 flex-1 items-center justify-between gap-4">
-              <div className="min-w-0">
-                <div className="flex items-center gap-2">
-                  <h4 className="truncate text-xs font-bold text-gray-950">{title}</h4>
-                  <span className="inline-flex shrink-0 items-center rounded border border-gray-200 bg-gray-100 px-2 py-0.5 text-[10px] font-semibold text-gray-700">
-                    {statusLabel}
-                  </span>
-                </div>
-                <span className="mt-1 block text-base leading-none font-semibold text-gray-900">{priceLabel}</span>
+            <div className="min-w-0">
+              <div className="flex items-center gap-2">
+                <h4 className="truncate text-xs font-bold text-gray-950">{title}</h4>
+                <span className="inline-flex shrink-0 items-center rounded border border-gray-200 bg-gray-100 px-2 py-0.5 text-[10px] font-semibold text-gray-700">
+                  {statusLabel}
+                </span>
               </div>
+              <span className="mt-1 block text-base leading-none font-semibold text-gray-900">{priceLabel}</span>
               <a
                 href={`/quote/${quoteId}?mode=internal&revision=${encodeURIComponent(revisionId)}`}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="inline-flex shrink-0 cursor-pointer items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 shadow-xs transition-colors hover:bg-gray-50"
+                className="mt-3 inline-flex shrink-0 cursor-pointer items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 shadow-xs transition-colors hover:bg-gray-50"
               >
                 <Calculator className="h-3.5 w-3.5 text-gray-500" strokeWidth={1.8} aria-hidden="true" />
                 <span>{copy.seeQuoteDetails}</span>
               </a>
+            </div>
+            <div className="min-w-0 flex-1">
+              <RevisionChangeList current={current} revisions={revisions} suggested={suggested} />
             </div>
           </div>
 

@@ -1,7 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type RefObject } from "react";
 import { createPortal } from "react-dom";
 import { useProgress } from "@react-three/drei";
 import type { BuildingCapture, QuoteRevisionRenderCapture } from "@/src/features/cpq/components/building-scene";
@@ -20,17 +20,22 @@ export function ProposedShedRender({
   alt,
   suggestionId,
   previewImageUrl,
+  renderCaptureRef: externalCaptureRef,
+  onRenderUrl,
   onPreviewSaved,
 }: {
   selections: QuoteSelections;
   alt: string;
   suggestionId?: string;
   previewImageUrl?: string | null;
+  renderCaptureRef?: RefObject<QuoteRevisionRenderCapture | null>;
+  onRenderUrl?: (url: string) => void;
   onPreviewSaved?: (id: string, previewImageUrl: string) => void;
 }) {
   const selectionKey = JSON.stringify(selections);
   const config = useMemo(() => toBuildingConfig(JSON.parse(selectionKey) as QuoteSelections), [selectionKey]);
-  const renderCaptureRef = useRef<QuoteRevisionRenderCapture | null>(null);
+  const internalCaptureRef = useRef<QuoteRevisionRenderCapture | null>(null);
+  const renderCaptureRef = externalCaptureRef ?? internalCaptureRef;
   const captureBuildingRef = useRef<BuildingCapture | null>(null);
   const urlRef = useRef<string | null>(null);
   const pngRef = useRef<{ key: string; file: Blob } | null>(null);
@@ -127,8 +132,16 @@ export function ProposedShedRender({
     if (pngRef.current?.key === selectionKey) void persistPreview(pngRef.current.file, selectionKey, saveRef, savedKey);
   }, [previewImageUrl, selectionKey]);
 
+  useEffect(() => {
+    if (url) onRenderUrl?.(url);
+  }, [onRenderUrl, url]);
+
+  useEffect(() => {
+    if (previewImageUrl) onRenderUrl?.(previewImageUrl);
+  }, [onRenderUrl, previewImageUrl]);
+
   const scene =
-    url || failed || typeof document === "undefined" ? null : (
+    typeof document === "undefined" ? null : (
       <div className="pointer-events-none fixed top-0 -left-[2000px] size-[150px]" aria-hidden="true">
         <BuildingScene config={config} captureRef={captureBuildingRef} renderCaptureRef={renderCaptureRef} />
       </div>
