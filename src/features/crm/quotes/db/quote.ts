@@ -28,17 +28,18 @@ export async function createQuote(input: {
   );
 
   throwIfError(error);
-  if (!data?.id || typeof data.id !== "string") {
+  const saved = quoteRow(data);
+  if (!saved || typeof saved.id !== "string") {
     throw new Error("Quote was not saved");
   }
 
   const revision = await createQuoteRevision({
-    quoteId: data.id,
+    quoteId: saved.id,
     selections,
     status: "draft",
   });
-  await updateQuote(data.id, { activeRevisionId: revision.id });
-  return data.id;
+  await updateQuote(saved.id, { activeRevisionId: revision.id });
+  return saved.id;
 }
 
 function missingQuoteNumber(error: { message: string } | null): boolean {
@@ -58,13 +59,22 @@ function withoutQuoteNumber(columns: string): string {
     .join(", ");
 }
 
-async function quoteQuery<T>(
-  run: (columns: string) => PromiseLike<{ data: T; error: { message: string } | null }>,
+async function quoteQuery(
+  run: (columns: string) => PromiseLike<{ data: unknown; error: { message: string } | null }>,
   columns: string,
-): Promise<{ data: T; error: { message: string } | null }> {
+): Promise<{ data: unknown; error: { message: string } | null }> {
   const result = await run(columns);
   if (!missingQuoteNumber(result.error)) return result;
   return run(withoutQuoteNumber(columns));
+}
+
+function quoteRow(data: unknown): QuoteRow | undefined {
+  if (!data || typeof data !== "object" || Array.isArray(data)) return undefined;
+  return data as QuoteRow;
+}
+
+function quoteRows(data: unknown): QuoteRow[] {
+  return Array.isArray(data) ? data.filter((row): row is QuoteRow => Boolean(row) && typeof row === "object") : [];
 }
 
 function quoteRecord(row: {
@@ -118,9 +128,10 @@ export async function readQuote(id: string): Promise<QuoteRecord | undefined> {
   );
 
   throwIfError(error);
-  if (!data) return undefined;
-  const selectionsById = await selectionsByRevision([data]);
-  return quoteFromRow(data, selectionsById);
+  const row = quoteRow(data);
+  if (!row) return undefined;
+  const selectionsById = await selectionsByRevision([row]);
+  return quoteFromRow(row, selectionsById);
 }
 
 export async function readQuotesByIds(ids: string[]): Promise<QuoteRecord[]> {
@@ -130,7 +141,7 @@ export async function readQuotesByIds(ids: string[]): Promise<QuoteRecord[]> {
     "id, invoice_id, quote_number, active_revision_id",
   );
   throwIfError(error);
-  const rows = (data ?? []) as QuoteRow[];
+  const rows = quoteRows(data);
   const selectionsById = await selectionsByRevision(rows);
   return rows
     .map((row) => quoteFromRow(row, selectionsById))
@@ -144,7 +155,7 @@ export async function readQuotes(): Promise<ListedQuote[]> {
   );
 
   throwIfError(error);
-  const rows = (data ?? []) as QuoteRow[];
+  const rows = quoteRows(data);
   const selectionsById = await selectionsByRevision(rows);
   return rows
     .flatMap((row) => {
