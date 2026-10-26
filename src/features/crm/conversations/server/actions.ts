@@ -9,7 +9,7 @@ import { createSuggestion, readSuggestions, storeSuggestionPreview, updateSugges
 import { analyzeInboundIntent } from "@/src/features/ai/services/inbound-intent-analyzer.service";
 import type { SuggestionIntent } from "@/src/features/ai/types";
 import { selectionHasConfigChanges } from "@/src/features/crm/conversations/utils/design-preview";
-import { readDealQuotes } from "@/src/features/crm/deals/db/deal-quote";
+import { createDealQuote, deleteDealQuote, readDealQuotes } from "@/src/features/crm/deals/db/deal-quote";
 import { readQuotesByIds } from "@/src/features/crm/quotes/db/quote";
 import type { QuoteSelections } from "@/src/features/cpq/types";
 import type { ConfigChanges } from "@/src/features/crm/quotes/types";
@@ -36,6 +36,7 @@ import {
 } from "@/src/features/crm/conversations/db/conversation";
 import {
   getConversation,
+  getConversationDealOption,
   getConversationInboxItem,
   getConversationWorkspace,
   getCustomerDeals,
@@ -43,6 +44,7 @@ import {
 } from "@/src/features/crm/conversations/server/queries";
 import {
   activeDealRequestSchema,
+  moveQuoteToNewDealSchema,
   activityInsertSchema,
   composerChannelSchema,
   conversationIdSchema,
@@ -56,13 +58,14 @@ import {
   type Activity,
   type ActivityInsert,
   type ConversationDealListItem,
+  type ConversationDealOption,
   type ConversationInboxItem,
   type ConversationSuggestion,
   type ConversationWorkspace,
 } from "@/src/features/crm/conversations/types";
 import { readCustomer, updateCustomer } from "@/src/features/crm/common/db/customer";
-import { readDealCustomersForCustomer } from "@/src/features/crm/common/db/deal-customer";
-import { readDeal, updateDeal } from "@/src/features/crm/deals/db/deal";
+import { createDealCustomer, readDealCustomersForCustomer, readDealCustomersForDeal } from "@/src/features/crm/common/db/deal-customer";
+import { createDeal, deleteDeal, readDeal, updateDeal } from "@/src/features/crm/deals/db/deal";
 import { fileActivityText, imageActivityText } from "@/src/features/crm/conversations/utils/attachments";
 import { emailActivityText } from "@/src/features/crm/conversations/utils/email-message";
 import { systemEventBody } from "@/src/features/crm/conversations/utils/formatting";
@@ -542,6 +545,74 @@ export async function setCustomerActiveDeal(input: {
   }
 }
 
+function missingOptionalQuote(error: unknown): boolean {
+  const message = error instanceof Error ? error.message.toLowerCase() : "";
+  return (
+    message.includes("quote_id") &&
+    (message.includes("null value") || message.includes("not-null") || message.includes("not null"))
+  );
+}
+
+export async function moveQuoteToNewDeal(input: {
+  dealId: string;
+  quoteId: string;
+}): Promise<{ success: true; data: { dealId: string; name: string } } | { error: string }> {
+  const parsed = moveQuoteToNewDealSchema.safeParse(input);
+  if (!parsed.success) return { error: "A deal and quote are required" };
+
+  let createdId = "";
+  try {
+    const [deal, links, customers] = await Promise.all([
+      readDeal(parsed.data.dealId),
+      readDealQuotes(parsed.data.dealId),
+      readDealCustomersForDeal(parsed.data.dealId),
+    ]);
+    if (!deal) return { error: "Deal was not found" };
+    const quoteId = parsed.data.quoteId;
+    const onDeal = deal.quoteId === quoteId || links.some((link) => link.quoteId === quoteId);
+    if (!onDeal) return { error: "Quote was not found" };
+    if (customers.length === 0) return { error: "This deal has no customers" };
+
+    const remaining = [
+      ...new Set(
+        [deal.quoteId, ...links.map((link) => link.quoteId)].filter((id): id is string => Boolean(id) && id !== quoteId),
+      ),
+    ];
+    const created = await createDeal({ quoteId, source: deal.source });
+    createdId = created.id;
+    await createDealQuote({ dealId: created.id, quoteId });
+    for (const customer of customers) {
+      await createDealCustomer({
+        customerId: customer.customerId,
+        dealId: created.id,
+        isPrimary: customer.isPrimary,
+      });
+    }
+    if (deal.quoteId === quoteId) {
+      await updateDeal(deal.id, { quoteId: remaining[0] ?? null });
+    }
+    await deleteDealQuote({ dealId: deal.id, quoteId });
+    createdId = "";
+    for (const customer of customers) {
+      const person = await readCustomer(customer.customerId);
+      if (person?.activeDealId === deal.id) {
+        await updateCustomer(person.id, { activeDealId: created.id });
+      }
+    }
+    revalidatePath("/crm/conversations");
+    revalidatePath("/crm/quotes");
+    revalidatePath("/crm/deals");
+    return { success: true, data: { dealId: created.id, name: created.name ?? "" } };
+  } catch (error) {
+    if (createdId) await deleteDeal(createdId).catch(() => undefined);
+    if (missingOptionalQuote(error)) {
+      return { error: "Run supabase/migrate-crm-deal-optional-quote.sql in the Supabase SQL editor." };
+    }
+    const message = error instanceof Error ? error.message : "Could not move this quote";
+    return { error: message };
+  }
+}
+
 export async function markDealViewed(dealId: string): Promise<{ success: true } | { error: string }> {
   const parsed = dealIdSchema.safeParse(dealId);
   if (!parsed.success) return { error: "A deal is required" };
@@ -692,6 +763,21 @@ export async function loadConversationInboxItem(
     return { success: true, data: item ?? null };
   } catch (error) {
     const message = error instanceof Error ? error.message : "Could not load conversation";
+    return { error: message };
+  }
+}
+
+export async function loadConversationDeal(
+  dealId: string,
+): Promise<{ success: true; data: ConversationDealOption | null } | { error: string }> {
+  const parsed = dealIdSchema.safeParse(dealId);
+  if (!parsed.success) return { error: "A deal is required" };
+
+  try {
+    const option = await getConversationDealOption(parsed.data);
+    return { success: true, data: option ?? null };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Could not load deal";
     return { error: message };
   }
 }

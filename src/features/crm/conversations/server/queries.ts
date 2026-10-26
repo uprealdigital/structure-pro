@@ -172,6 +172,12 @@ export async function getDealTitle(dealId: string): Promise<string | undefined> 
   return title || undefined;
 }
 
+export async function getConversationDealOption(dealId: string): Promise<ConversationDealOption | undefined> {
+  const deal = await readDeal(dealId);
+  if (!deal) return undefined;
+  return dealOption(deal);
+}
+
 async function dealOption(
   deal: Deal,
   thread?: Conversation,
@@ -573,6 +579,7 @@ export async function getAgentSession(key: string) {
   const deal = latestPrimaryDeal(links, deals, customer.id);
   if (!deal) throw new Error("Deal not found");
 
+  if (!deal.quoteId) throw new Error("Quote not found");
   const quote = await getQuoteForPage(deal.quoteId);
   if (!quote) throw new Error("Quote not found");
 

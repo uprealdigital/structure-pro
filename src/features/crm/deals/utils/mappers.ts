@@ -29,7 +29,7 @@ export function toDealQuoteLink(row: DealQuoteRow): (DealQuoteLink & { createdAt
 
 export type DealRow = {
   id: string;
-  quote_id: string;
+  quote_id?: string | null;
   source: string;
   status: string;
   previous_status?: string | null;
@@ -52,7 +52,7 @@ function storedStatus(value: string | null | undefined): DealStatus | null {
 export function toDeal(row: DealRow): Deal | undefined {
   const deal = dealSchema.safeParse({
     id: row.id,
-    quoteId: row.quote_id,
+    quoteId: row.quote_id ?? "",
     source: row.source,
     status: legacyStatus[row.status] ?? row.status,
     previousStatus: storedStatus(row.previous_status),

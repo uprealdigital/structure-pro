@@ -45,7 +45,7 @@ export const getDealBoard = cache(async (): Promise<DealBoardItem[]> => {
     );
     if (related.length === 0) continue;
     const conversation = conversationByCustomer.get(related[0]?.customer.id ?? "");
-    const quote = await getQuoteForPage(deal.quoteId);
+    const quote = deal.quoteId ? await getQuoteForPage(deal.quoteId) : undefined;
     const specs = quote?.summary.specs ?? [];
     const item = toDealBoardItem({
       deal,

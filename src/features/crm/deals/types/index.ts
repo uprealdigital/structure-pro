@@ -39,7 +39,7 @@ export const dealWriteSchema = z.object({
 
 export const dealPatchSchema = z.object({
   status: dealStatusSchema.optional(),
-  quoteId: z.string().optional(),
+  quoteId: z.string().trim().min(1).nullable().optional(),
   name: dealNameSchema.optional(),
   viewedAt: z.string().nullable().optional(),
 });

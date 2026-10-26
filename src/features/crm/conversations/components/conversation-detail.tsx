@@ -10,6 +10,7 @@ import { activityChannelLabel, ConversationThread, previewFrameHeight, type Outg
 import { CustomerMenu } from "@/src/features/crm/conversations/components/customer-menu";
 import { DealHeading } from "@/src/features/crm/conversations/components/deal-menu";
 import { DealSummary } from "@/src/features/crm/conversations/components/deal-summary";
+import { QuoteActionsMenu } from "@/src/features/crm/conversations/components/quote-actions-menu";
 import { QuoteMenu, QuotePanel } from "@/src/features/crm/conversations/components/quote-panel";
 import { Toast } from "@/src/common/components/toast";
 import { InboundIntentCard } from "@/src/features/crm/conversations/components/inbound-intent-card";
@@ -19,10 +20,11 @@ import { useConversationActivities } from "@/src/features/crm/conversations/hook
 import { useConversationSuggestions } from "@/src/features/crm/conversations/hooks/use-conversation-suggestions";
 import { useVisibleActivityReads } from "@/src/features/crm/conversations/hooks/use-visible-activity-reads";
 import { copy } from "@/src/features/crm/conversations/locales/en";
-import { sendQuoteMessages, sendManualActivity, sendStoredAttachment, discardStoredAttachment, recordSystemActivity, deleteConversationActivity, markDealViewed } from "@/src/features/crm/conversations/server/actions";
+import { sendQuoteMessages, sendManualActivity, sendStoredAttachment, discardStoredAttachment, recordSystemActivity, deleteConversationActivity, loadConversationDeal, markDealViewed, moveQuoteToNewDeal } from "@/src/features/crm/conversations/server/actions";
 import type {
   Activity,
   ComposerChannel,
+  ConversationDealOption,
   ConversationParticipant,
   ConversationQuote,
   ConversationQuoteRevision,
@@ -42,7 +44,9 @@ import {
 } from "@/src/features/crm/conversations/utils/mappers";
 import {
   activateQuoteRevision,
+  cancelQuote,
   createDealQuoteAction,
+  duplicateQuote,
   saveQuoteCommunication,
   saveQuoteSelections,
   shareQuoteRevisionPhotos,
@@ -131,6 +135,10 @@ function quotesForDeal(
   const base = option.quotes.length > 0 ? option.quotes : option.quote ? [option.quote] : [];
   const known = new Set(base.map((quote) => quote.id));
   return [...base, ...added.filter((quote) => !known.has(quote.id))].map((quote) => patches[quote.id] ?? quote);
+}
+
+function dealHasQuotes(option: { quote: ConversationQuote | null; quotes: ConversationQuote[] }): boolean {
+  return option.quotes.length > 0 || option.quote != null;
 }
 
 function viewedRevision(
@@ -226,10 +234,14 @@ export function ConversationDetail({
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [detailsSettled, setDetailsSettled] = useState(false);
   const [focusedDealId, setFocusedDealId] = useState(workspace.deal.id);
+  const [loadedDealOptions, setLoadedDealOptions] = useState<Record<string, ConversationDealOption>>({});
+  const dealLoad = useRef(0);
   const [selectedRevisionId, setSelectedRevisionId] = useState<string | null>(null);
   const [viewingQuoteIds, setViewingQuoteIds] = useState<Record<string, string>>({});
   const [addedQuotes, setAddedQuotes] = useState<Record<string, ConversationQuote[]>>({});
   const [addingQuote, setAddingQuote] = useState(false);
+  const [quoteAction, setQuoteAction] = useState<"move" | "duplicate" | "cancel" | null>(null);
+  const [quoteNote, setQuoteNote] = useState("");
   const [quotePatches, setQuotePatches] = useState<Record<string, ConversationQuote>>({});
   const [dealStatusPatches, setDealStatusPatches] = useState<Record<string, DealStatus>>({});
   const [dealNamePatches, setDealNamePatches] = useState<Record<string, string>>({});
@@ -240,7 +252,8 @@ export function ConversationDetail({
   const publishActivityRef = useRef<(activity: Activity) => void>(() => {});
   const removeActivityRef = useRef(onRemoveActivity);
   removeActivityRef.current = onRemoveActivity;
-  const deals = workspace.deals.map((option) => {
+  const deals = workspace.deals.map((incoming) => {
+    const option = dealHasQuotes(incoming) ? incoming : loadedDealOptions[incoming.id] ?? incoming;
     const status = dealStatusPatches[option.id];
     const renamed = dealNamePatches[option.id];
     const seen = seenDealIds.includes(option.id);
@@ -625,10 +638,8 @@ export function ConversationDetail({
     return option;
   }
 
-  function selectDeal(dealId: string) {
-    const previous = deals.find((deal) => deal.id === focusedDealId);
-    const option = focusDeal(dealId);
-    if (!option || !previous || option.id === previous.id) return;
+  function finishDealSwitch(option: ConversationDealOption, previous: ConversationDealOption) {
+    focusDeal(option.id);
     setSeenDealIds((current) => (current.includes(option.id) ? current : [...current, option.id]));
     const previousId = previous.id;
     showNotice(
@@ -643,6 +654,29 @@ export function ConversationDetail({
         return recordNamedActivity("deal", option.title);
       },
     );
+  }
+
+  function selectDeal(dealId: string) {
+    const previous = deals.find((deal) => deal.id === focusedDealId);
+    const option = deals.find((deal) => deal.id === dealId);
+    if (!option || !previous || option.id === previous.id) return;
+    if (dealHasQuotes(option)) {
+      finishDealSwitch(option, previous);
+      return;
+    }
+    const ticket = dealLoad.current + 1;
+    dealLoad.current = ticket;
+    void loadConversationDeal(dealId)
+      .then((result) => {
+        if (ticket !== dealLoad.current) return;
+        if ("error" in result || !result.data) return;
+        const loaded = result.data;
+        if (dealHasQuotes(loaded)) {
+          setLoadedDealOptions((current) => ({ ...current, [loaded.id]: loaded }));
+        }
+        finishDealSwitch(loaded, previous);
+      })
+      .catch(() => undefined);
   }
 
   function selectRevision(revisionId: string) {
@@ -759,6 +793,97 @@ export function ConversationDetail({
     setViewingQuoteIds((current) => ({ ...current, [dealId]: next.id }));
     setSelectedRevisionId(next.activeRevisionId);
     setEditing(false);
+  }
+
+  async function moveFocusedQuote() {
+    const quote = focused.quote;
+    const dealId = focusedOption?.id;
+    if (!quote || !dealId || quoteAction) return;
+    setQuoteAction("move");
+    setRevisionError("");
+    setQuoteNote("");
+    const result = await moveQuoteToNewDeal({ dealId, quoteId: quote.id });
+    setQuoteAction(null);
+    if ("error" in result) {
+      setRevisionError(
+        result.error.includes("migrate-crm-deal-optional-quote") ? result.error : copy.moveQuoteError,
+      );
+      return;
+    }
+    setAddedQuotes((current) =>
+      Object.fromEntries(
+        Object.entries(current).map(([id, quotes]) => [id, quotes.filter((item) => item.id !== quote.id)]),
+      ),
+    );
+    setEditing(false);
+    const loaded = await onFocusDeal(result.data.dealId);
+    const stage = loaded?.deals.find((deal) => deal.id === result.data.dealId)?.stage ?? "lead";
+    setFocusedDealId(result.data.dealId);
+    setViewingQuoteIds((current) => ({ ...current, [result.data.dealId]: quote.id }));
+    setSelectedRevisionId(null);
+    onActivateDeal(result.data.dealId, stage);
+  }
+
+  async function duplicateFocusedQuote() {
+    const quote = focused.quote;
+    const dealId = focusedOption?.id;
+    if (!quote || !dealId || quoteAction) return;
+    setQuoteAction("duplicate");
+    setRevisionError("");
+    setQuoteNote("");
+    const result = await duplicateQuote({ dealId, quoteId: quote.id });
+    setQuoteAction(null);
+    if ("error" in result) {
+      setRevisionError(copy.duplicateQuoteError);
+      return;
+    }
+    const next = conversationQuoteFromSelections(
+      {
+        ...quote,
+        id: result.data.id,
+        invoiceId: result.data.invoiceId,
+        quoteNumber: result.data.quoteNumber,
+        revisions: [],
+        status: "draft",
+      },
+      quote.selections,
+      {
+        id: result.data.revisionId,
+        revisionNumber: result.data.revisionNumber,
+        createdAt: result.data.createdAt,
+        updatedAt: result.data.updatedAt,
+        renders: result.data.renders,
+      },
+    );
+    if (!next) {
+      setRevisionError(copy.duplicateQuoteError);
+      return;
+    }
+    setAddedQuotes((current) => ({
+      ...current,
+      [dealId]: [...(current[dealId] ?? []), next],
+    }));
+    setViewingQuoteIds((current) => ({ ...current, [dealId]: next.id }));
+    setSelectedRevisionId(next.activeRevisionId);
+    setEditing(false);
+  }
+
+  async function cancelFocusedQuote() {
+    const quote = focused.quote;
+    if (!quote || quoteAction) return;
+    setQuoteAction("cancel");
+    setRevisionError("");
+    setQuoteNote("");
+    const result = await cancelQuote({ quoteId: quote.id });
+    setQuoteAction(null);
+    if ("error" in result) {
+      setRevisionError(copy.cancelQuoteError);
+      return;
+    }
+    setQuotePatches((current) => {
+      const base = current[quote.id] ?? quote;
+      return { ...current, [quote.id]: { ...base, status: "voided" } };
+    });
   }
 
   function toggleEditing() {
@@ -1381,7 +1506,7 @@ export function ConversationDetail({
                 href={`tel:${workspace.customer.phone}`}
                 aria-label={copy.callNow}
                 title={`${copy.callNow} ${workspace.customer.fullName}`}
-                className="ml-0.5 flex h-7 w-7 items-center justify-center rounded-full border border-gray-200 bg-transparent text-gray-700 transition-colors hover:bg-gray-50"
+                className="ml-0.5 flex h-7 w-7 items-center justify-center rounded-full bg-transparent text-gray-700 transition-colors hover:bg-gray-50"
               >
                 <Phone className="h-3.5 w-3.5" strokeWidth={1.8} aria-hidden="true" />
               </a>
@@ -1414,25 +1539,23 @@ export function ConversationDetail({
                     className="h-full w-full object-contain p-0.5"
                   />
                 </div>
-                <div className="flex shrink-0 flex-col gap-1.5">
+                <div className="inline-grid shrink-0 grid-cols-[minmax(22rem,max-content)] gap-1.5">
                   <QuoteMenu
                     quotes={listedQuotes}
                     viewingQuoteId={viewingQuote?.id ?? focused.quote.id}
                     error={revisionError}
-                    adding={addingQuote}
                     onViewQuote={viewQuote}
                     onSelectRevision={(id) => void selectRevision(id)}
-                    onAddQuote={() => void addQuote()}
                   />
-                  <div className="flex items-center gap-1.5">
+                  <div className="grid w-full grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] items-stretch gap-1.5">
                     <button
                       type="button"
                       aria-pressed={editing}
                       onClick={toggleEditing}
-                      className={`inline-flex items-center justify-center gap-1 rounded-md border bg-white px-2.5 py-1 text-xs font-medium whitespace-nowrap transition-colors ${
+                      className={`inline-flex min-w-0 items-center justify-center gap-1 rounded-md border bg-transparent px-2.5 py-1 text-xs font-medium whitespace-nowrap transition-colors ${
                         editing
                           ? "border-red-500 text-red-600 shadow-xs hover:bg-red-50"
-                          : "border-transparent text-gray-700 hover:bg-gray-50"
+                          : "border-gray-200 text-gray-700 hover:bg-gray-50"
                       }`}
                     >
                       {editing ? (
@@ -1450,12 +1573,33 @@ export function ConversationDetail({
                         setReviewSuggestionChanges(null);
                         setReviewOpen(true);
                       }}
-                      className="inline-flex items-center justify-center gap-1.5 rounded-md bg-black px-2.5 py-1 text-xs font-medium whitespace-nowrap text-white shadow-xs transition-colors hover:bg-gray-800"
+                      className="inline-flex min-w-0 items-center justify-center gap-1.5 rounded-md bg-black px-2.5 py-1 text-xs font-medium whitespace-nowrap text-white shadow-xs transition-colors hover:bg-gray-800"
                     >
                       <ArrowUpRight className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
                       <span>{copy.reviewAndSendQuote}</span>
                     </button>
+                    <QuoteActionsMenu
+                      quoteId={focused.quote.id}
+                      pending={quoteAction != null}
+                      adding={addingQuote}
+                      onAddQuote={() => void addQuote()}
+                      onMove={() => void moveFocusedQuote()}
+                      onDuplicate={() => void duplicateFocusedQuote()}
+                      onCancel={() => void cancelFocusedQuote()}
+                      onCopied={() => {
+                        setRevisionError("");
+                        setQuoteNote(copy.publishLinkCopied);
+                        window.setTimeout(() => {
+                          setQuoteNote((current) => (current === copy.publishLinkCopied ? "" : current));
+                        }, 2500);
+                      }}
+                      onCopyError={() => {
+                        setQuoteNote("");
+                        setRevisionError(copy.copyPublishLinkError);
+                      }}
+                    />
                   </div>
+                  {quoteNote ? <p className="text-[11px] text-gray-500">{quoteNote}</p> : null}
                 </div>
               </div>
             ) : null}

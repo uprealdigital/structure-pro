@@ -156,6 +156,11 @@ export const activeDealRequestSchema = z.object({
   dealId: dealIdSchema,
 });
 
+export const moveQuoteToNewDealSchema = z.object({
+  dealId: dealIdSchema,
+  quoteId: z.string().trim().min(1),
+});
+
 export const conversationSummarySchema = z.object({
   id: z.string(),
   lookupKey: z.string(),

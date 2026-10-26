@@ -37,6 +37,7 @@ export const getQuoteList = cache(async (): Promise<QuoteListItem[]> => {
   const dealById = new Map(deals.map((deal) => [deal.id, deal]));
   const dealsByQuote = new Map<string, typeof deals>();
   for (const deal of deals) {
+    if (!deal.quoteId) continue;
     const related = dealsByQuote.get(deal.quoteId) ?? [];
     related.push(deal);
     dealsByQuote.set(deal.quoteId, related);
@@ -63,7 +64,7 @@ export const getQuoteList = cache(async (): Promise<QuoteListItem[]> => {
     const deal = dealById.get(link.dealId);
     if (!deal) continue;
     const primaryDealCount = primaryDealsByCustomer.get(link.customerId) ?? 1;
-    if (contractOnDeal(deal.status, true, primaryDealCount)) {
+    if (contractOnDeal(deal.status, true, primaryDealCount) && deal.quoteId) {
       contractQuoteIds.add(deal.quoteId);
       for (const quoteLink of dealLinks) {
         if (quoteLink.dealId === deal.id) contractQuoteIds.add(quoteLink.quoteId);

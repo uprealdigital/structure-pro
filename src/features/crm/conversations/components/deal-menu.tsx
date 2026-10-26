@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowLeftRight, Check, ChevronDown, ChevronRight, EllipsisVertical, Pencil, Plus, RotateCcw, X } from "lucide-react";
+import { ArrowLeftRight, Check, ChevronDown, ChevronRight, EllipsisVertical, Eye, Pencil, Plus, RotateCcw, UserPlus, X } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { copy } from "@/src/features/crm/conversations/locales/en";
@@ -158,39 +158,39 @@ function DealSwitchList({
                   current ? "border border-gray-200/60 bg-gray-50" : "hover:bg-gray-50"
                 } ${lostDeal ? "opacity-90" : ""}`}
               >
-                <span className="flex items-center justify-between gap-2">
-                  <span className={`flex min-w-0 items-center gap-1.5 ${current ? "" : "pl-5"}`}>
-                    {current ? (
-                      <Check className="h-3.5 w-3.5 shrink-0 text-black" strokeWidth={2.5} aria-hidden="true" />
-                    ) : null}
-                    <span
-                      className={`truncate text-xs ${
-                        current ? "font-bold text-gray-950" : "font-medium text-gray-800"
-                      }`}
-                    >
-                      {deal.title || copy.quote}
+                <span className="flex items-center gap-1.5">
+                  <span className="flex w-3.5 shrink-0 items-center justify-center self-center">
+                    {current ? <Eye className="h-3.5 w-3.5 text-black" strokeWidth={2} aria-hidden="true" /> : null}
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="flex items-center justify-between gap-2">
+                      <span className="flex min-w-0 items-center gap-1.5">
+                        <span
+                          className={`truncate text-xs ${
+                            current ? "font-bold text-gray-950" : "font-medium text-gray-800"
+                          }`}
+                        >
+                          {deal.title || copy.quote}
+                        </span>
+                        {deal.isNew && !current ? (
+                          <span className="shrink-0 rounded-full bg-[#121314] px-1.5 py-0.5 text-[10px] leading-none font-medium text-white">
+                            {copy.newDeal}
+                          </span>
+                        ) : null}
+                      </span>
+                      <span
+                        className={`inline-flex shrink-0 items-center rounded border px-1.5 py-0.5 text-[10px] font-medium ${
+                          dealStatusOption(deal.stage)?.badge ?? ""
+                        }`}
+                      >
+                        {dealStatusOption(deal.stage)?.label}
+                      </span>
                     </span>
-                    {current ? (
-                      <span className="shrink-0 rounded-full bg-gray-100 px-1.5 py-0.5 text-[10px] leading-none font-medium text-gray-600">
-                        {copy.active}
-                      </span>
-                    ) : deal.isNew ? (
-                      <span className="shrink-0 rounded-full bg-[#121314] px-1.5 py-0.5 text-[10px] leading-none font-medium text-white">
-                        {copy.newDeal}
-                      </span>
-                    ) : null}
+                    <span className="mt-1.5 flex items-center justify-between gap-2 text-[11px] text-gray-500">
+                      <span className="font-semibold text-gray-900">{deal.priceLabel}</span>
+                      <span>{deal.dateLabel}</span>
+                    </span>
                   </span>
-                  <span
-                    className={`inline-flex shrink-0 items-center rounded border px-1.5 py-0.5 text-[10px] font-medium ${
-                      dealStatusOption(deal.stage)?.badge ?? ""
-                    }`}
-                  >
-                    {dealStatusOption(deal.stage)?.label}
-                  </span>
-                </span>
-                <span className="mt-1.5 flex items-center justify-between gap-2 pl-5 text-[11px] text-gray-500">
-                  <span className="font-semibold text-gray-900">{deal.priceLabel}</span>
-                  <span>{deal.dateLabel}</span>
                 </span>
               </button>
             </li>
@@ -472,6 +472,18 @@ export function DealHeading({
             >
               <Pencil className="h-3.5 w-3.5 shrink-0 text-gray-500" aria-hidden="true" />
               <span>{copy.renameDeal}</span>
+            </button>
+            <button
+              type="button"
+              role="menuitem"
+              onClick={() => {
+                setActionsOpen(false);
+                setSwitchOpen(false);
+              }}
+              className="flex w-full cursor-pointer items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-xs font-medium text-gray-700 transition-colors hover:bg-gray-50 hover:text-black"
+            >
+              <UserPlus className="h-3.5 w-3.5 shrink-0 text-gray-500" aria-hidden="true" />
+              <span>{copy.addPersonToDeal}</span>
             </button>
             <Link
               href="/"

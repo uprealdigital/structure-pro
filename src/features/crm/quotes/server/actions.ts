@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { quoteSelectionsSchema } from "@/src/features/cpq/types";
 import { readDeal, readDealsByIds, readDealsByQuoteId, updateDeal } from "@/src/features/crm/deals/db/deal";
-import { createDealQuote, readDealQuotesForQuote } from "@/src/features/crm/deals/db/deal-quote";
+import { createDealQuote, readDealQuotes, readDealQuotesForQuote } from "@/src/features/crm/deals/db/deal-quote";
 import { newInvoiceId } from "@/src/features/cpq/utils/id";
 import { createQuote, deleteQuote, readActiveRevisionId, readQuote, updateQuote } from "@/src/features/crm/quotes/db/quote";
 import {
@@ -15,7 +15,9 @@ import {
   updateQuoteRevisionRenders,
 } from "@/src/features/crm/quotes/db/quote-revision";
 import {
+  cancelQuoteSchema,
   createDealQuoteSchema,
+  duplicateQuoteSchema,
   payQuoteDepositSchema,
   quoteCommunicationWriteSchema,
   quoteRevisionActivateSchema,
@@ -212,6 +214,96 @@ export async function createDealQuoteAction(input: {
     if (quoteId) await deleteQuote(quoteId).catch(() => undefined);
     if (missingDealQuotes(error)) return { error: "Could not add a quote yet" };
     const message = error instanceof Error ? error.message : "Could not add a quote";
+    return { error: message };
+  }
+}
+
+export async function duplicateQuote(input: {
+  dealId: string;
+  quoteId: string;
+}): Promise<
+  | {
+      success: true;
+      data: {
+        id: string;
+        invoiceId: string;
+        quoteNumber?: number;
+        revisionId: string;
+        revisionNumber: number;
+        createdAt: string;
+        updatedAt: string;
+        renders: QuoteRevisionRenders | null;
+      };
+    }
+  | { error: string }
+> {
+  const parsed = duplicateQuoteSchema.safeParse(input);
+  if (!parsed.success) return { error: "A deal and quote are required" };
+
+  let quoteId = "";
+  try {
+    const [deal, source, links] = await Promise.all([
+      readDeal(parsed.data.dealId),
+      readQuote(parsed.data.quoteId),
+      readDealQuotes(parsed.data.dealId),
+    ]);
+    if (!deal || !source) return { error: "Quote was not found" };
+    const onDeal = deal.quoteId === source.id || links.some((link) => link.quoteId === source.id);
+    if (!onDeal) return { error: "Quote was not found" };
+    const sourceRevisionId = await readActiveRevisionId(source.id);
+    const sourceRevision = sourceRevisionId ? await readQuoteRevision(sourceRevisionId) : undefined;
+    const invoiceId = newInvoiceId();
+    quoteId = await createQuote({ invoiceId, selections: source.selections });
+    const revisionId = await readActiveRevisionId(quoteId);
+    const revision = revisionId ? await readQuoteRevision(revisionId) : undefined;
+    if (!revision) {
+      await deleteQuote(quoteId);
+      return { error: "Could not duplicate this quote" };
+    }
+    const renders = sourceRevision?.renders
+      ? await updateQuoteRevisionRenders(revision.id, sourceRevision.renders)
+      : null;
+    await createDealQuote({ dealId: deal.id, quoteId });
+    const saved = await readQuote(quoteId);
+    revalidatePath("/crm/conversations");
+    revalidatePath("/crm/quotes");
+    revalidatePath("/crm/deals");
+    return {
+      success: true,
+      data: {
+        id: quoteId,
+        invoiceId,
+        quoteNumber: saved?.quoteNumber,
+        revisionId: revision.id,
+        revisionNumber: revision.revisionNumber,
+        createdAt: revision.createdAt,
+        updatedAt: revision.updatedAt,
+        renders,
+      },
+    };
+  } catch (error) {
+    if (quoteId) await deleteQuote(quoteId).catch(() => undefined);
+    if (missingDealQuotes(error)) return { error: "Could not duplicate this quote" };
+    const message = error instanceof Error ? error.message : "Could not duplicate this quote";
+    return { error: message };
+  }
+}
+
+export async function cancelQuote(input: { quoteId: string }): Promise<{ success: true } | { error: string }> {
+  const parsed = cancelQuoteSchema.safeParse(input);
+  if (!parsed.success) return { error: "A quote is required" };
+
+  try {
+    const quote = await readQuote(parsed.data.quoteId);
+    if (!quote) return { error: "Quote was not found" };
+    await updateQuote(quote.id, { status: "voided" });
+    revalidatePath("/crm/conversations");
+    revalidatePath("/crm/quotes");
+    revalidatePath("/crm/deals");
+    revalidatePath(`/quote/${quote.id}`);
+    return { success: true };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Could not cancel this quote";
     return { error: message };
   }
 }

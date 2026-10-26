@@ -76,6 +76,15 @@ export const createDealQuoteSchema = z.object({
   selections: quoteSelectionsSchema,
 });
 
+export const duplicateQuoteSchema = z.object({
+  dealId: z.string().trim().min(1),
+  quoteId: z.string().trim().min(1),
+});
+
+export const cancelQuoteSchema = z.object({
+  quoteId: z.string().trim().min(1),
+});
+
 export const quoteRevisionRendersSchema = z.object({
   render_full_url: z.string().url(),
   render_medium_url: z.string().url(),

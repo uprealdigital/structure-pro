@@ -1,7 +1,8 @@
 "use client";
 
-import { Calendar, Check, ChevronDown, ChevronRight, Plus } from "lucide-react";
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { Calendar, Check, ChevronDown, ChevronRight, Eye } from "lucide-react";
+import { useEffect, useLayoutEffect, useRef, useState, type RefObject } from "react";
+import { createPortal } from "react-dom";
 import { copy } from "@/src/features/crm/conversations/locales/en";
 import type { ConversationQuote, ConversationQuoteRevision } from "@/src/features/crm/conversations/types";
 import {
@@ -35,7 +36,7 @@ const statusClass: Record<QuoteRecordStatus, string> = {
   signed: "bg-emerald-50 text-emerald-700",
   declined: "bg-red-50 text-red-600",
   expired: "bg-gray-100 text-gray-500",
-  voided: "bg-gray-100 text-gray-400",
+  voided: "border border-red-200 bg-red-50 text-red-600",
 };
 
 function activeRevision(quote: ConversationQuote): ConversationQuoteRevision | undefined {
@@ -74,7 +75,7 @@ function QuoteRow({
     >
       <span className="flex items-center gap-2">
         <span className="flex w-3.5 shrink-0 items-center justify-center">
-          {viewing ? <Check className="h-3.5 w-3.5 text-black" strokeWidth={2.5} aria-hidden="true" /> : null}
+          {viewing ? <Eye className="h-3.5 w-3.5 text-black" strokeWidth={2} aria-hidden="true" /> : null}
         </span>
         {current?.renders?.render_small_url ? (
           <img
@@ -89,18 +90,13 @@ function QuoteRow({
               <span className={`truncate text-xs ${viewing ? "font-bold text-gray-950" : "font-semibold text-gray-900"}`}>
                 {name}
               </span>
-              {viewing ? (
-                <span className="shrink-0 rounded-full bg-gray-100 px-1.5 py-0.5 text-[10px] font-medium text-gray-600">
-                  {copy.active}
-                </span>
-              ) : null}
             </span>
             <span className={`shrink-0 text-xs font-bold ${viewing ? "text-gray-950" : "text-gray-900"}`}>
               {current?.totalLabel ?? quote.totalLabel}
             </span>
           </span>
           <span className="mt-1 flex items-center justify-between gap-3">
-            <span className={`inline-flex rounded px-1.5 py-0.5 text-[10px] font-medium ${statusClass[quote.status]}`}>
+            <span className={`inline-flex px-1.5 py-0.5 text-[10px] font-medium ${quote.status === "voided" ? "rounded-full" : "rounded"} ${statusClass[quote.status]}`}>
               {statusLabel[quote.status]}
             </span>
             <span className="text-[11px] font-medium text-gray-500">
@@ -111,6 +107,88 @@ function QuoteRow({
         <ChevronRight className="h-3.5 w-3.5 shrink-0 text-gray-400" aria-hidden="true" />
       </span>
     </button>
+  );
+}
+
+const summaryTipDelayMs = 600;
+
+function RevisionSummary({ text }: { text: string }) {
+  const label = useRef<HTMLSpanElement>(null);
+  const tip = useRef<HTMLSpanElement>(null);
+  const timer = useRef<number | null>(null);
+  const [open, setOpen] = useState(false);
+
+  function cancel() {
+    if (timer.current == null) return;
+    window.clearTimeout(timer.current);
+    timer.current = null;
+  }
+
+  function hide() {
+    cancel();
+    setOpen(false);
+  }
+
+  useEffect(() => hide, []);
+
+  useLayoutEffect(() => {
+    const node = tip.current;
+    const source = label.current;
+    if (!open || !node || !source) return;
+    const box = source.getBoundingClientRect();
+    const width = Math.min(node.offsetWidth, window.innerWidth - 16);
+    let left = box.left;
+    if (left + width > window.innerWidth - 8) left = window.innerWidth - 8 - width;
+    if (left < 8) left = 8;
+    let top = box.bottom + 6;
+    if (top + node.offsetHeight > window.innerHeight - 8) top = Math.max(8, box.top - node.offsetHeight - 6);
+    node.style.left = `${Math.round(left)}px`;
+    node.style.top = `${Math.round(top)}px`;
+  }, [open, text]);
+
+  useEffect(() => {
+    if (!open) return;
+    function dismiss() {
+      setOpen(false);
+    }
+    window.addEventListener("scroll", dismiss, true);
+    window.addEventListener("resize", dismiss);
+    return () => {
+      window.removeEventListener("scroll", dismiss, true);
+      window.removeEventListener("resize", dismiss);
+    };
+  }, [open]);
+
+  return (
+    <>
+      <span
+        ref={label}
+        className="min-w-0 truncate"
+        onMouseEnter={() => {
+          cancel();
+          timer.current = window.setTimeout(() => {
+            const node = label.current;
+            if (!node || node.scrollWidth <= node.clientWidth + 1) return;
+            setOpen(true);
+          }, summaryTipDelayMs);
+        }}
+        onMouseLeave={hide}
+      >
+        {text}
+      </span>
+      {open
+        ? createPortal(
+            <span
+              ref={tip}
+              role="tooltip"
+              className="pointer-events-none fixed z-[80] w-max max-w-80 rounded-md border border-gray-200 bg-white px-2.5 py-1.5 text-[11px] leading-relaxed whitespace-normal text-gray-700 shadow-lg"
+            >
+              {text}
+            </span>,
+            document.body,
+          )
+        : null}
+    </>
   );
 }
 
@@ -125,11 +203,17 @@ function revealRevision(container: HTMLElement, row: HTMLElement) {
 
 function RevisionFlyout({
   quote,
+  anchor,
   side,
+  top,
+  frameRef,
   onSelectRevision,
 }: {
   quote: ConversationQuote;
+  anchor: "dropdown" | "beside";
   side: "left" | "right";
+  top: number;
+  frameRef: RefObject<HTMLDivElement | null>;
   onSelectRevision: (id: string) => void;
 }) {
   const list = useRef<HTMLUListElement>(null);
@@ -142,10 +226,14 @@ function RevisionFlyout({
 
   return (
     <div
+      ref={frameRef}
       role="menu"
       aria-label={copy.revisionsMenu}
-      className={`absolute top-0 z-50 w-80 rounded-xl border border-gray-200/80 bg-white p-2 text-gray-900 shadow-xl ${
-        side === "left" ? "right-full mr-2" : "left-full ml-2"
+      style={anchor === "beside" ? { top } : undefined}
+      className={`absolute z-50 rounded-xl border border-gray-200/80 bg-white p-2 text-gray-900 shadow-xl ${
+        anchor === "dropdown"
+          ? "top-full right-0 mt-1.5 w-full"
+          : `w-[23rem] ${side === "left" ? "right-full mr-2" : "left-full ml-2"}`
       }`}
     >
       <ul ref={list} className="max-h-[70vh] space-y-1 overflow-y-auto overscroll-contain">
@@ -175,8 +263,10 @@ function RevisionFlyout({
                       {revisionMenuLabel(revision.revisionNumber)}
                     </span>
                     {active ? (
-                      <span className="shrink-0 rounded-full bg-gray-100 px-1.5 py-0.5 text-[10px] font-medium text-gray-600">
-                        {copy.active}
+                      <span
+                        className={`shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-medium ${statusClass[quote.status]}`}
+                      >
+                        {statusLabel[quote.status]}
                       </span>
                     ) : null}
                   </span>
@@ -185,7 +275,7 @@ function RevisionFlyout({
                   </span>
                 </span>
                 <span className="mt-1 flex items-center justify-between gap-3 pl-5 text-[11px] text-gray-500">
-                  <span className="min-w-0 truncate">{revision.summary}</span>
+                  <RevisionSummary text={revision.summary} />
                   <span className="shrink-0">{formatRevisionDate(dated)}</span>
                 </span>
               </button>
@@ -201,24 +291,26 @@ export function QuoteMenu({
   quotes,
   viewingQuoteId,
   error,
-  adding,
   onViewQuote,
   onSelectRevision,
-  onAddQuote,
 }: {
   quotes: ConversationQuote[];
   viewingQuoteId: string;
   error?: string;
-  adding?: boolean;
   onViewQuote: (id: string) => void;
   onSelectRevision: (id: string) => void;
-  onAddQuote: () => void;
 }) {
   const [open, setOpen] = useState(false);
+  const [showVoided, setShowVoided] = useState(false);
   const [revisionsQuoteId, setRevisionsQuoteId] = useState<string | null>(null);
   const [side, setSide] = useState<"left" | "right">("left");
+  const [flyoutTop, setFlyoutTop] = useState(0);
   const menu = useRef<HTMLDivElement>(null);
   const panel = useRef<HTMLDivElement>(null);
+  const list = useRef<HTMLUListElement>(null);
+  const viewingRow = useRef<HTMLLIElement>(null);
+  const flyoutFrame = useRef<HTMLDivElement>(null);
+  const placeFlyout = useRef<() => void>(() => undefined);
   const viewingIndex = Math.max(
     0,
     quotes.findIndex((quote) => quote.id === viewingQuoteId),
@@ -226,6 +318,26 @@ export function QuoteMenu({
   const viewing = quotes[viewingIndex];
   const current = viewing ? activeRevision(viewing) : undefined;
   const flyout = quotes.find((quote) => quote.id === revisionsQuoteId);
+  const voidedCount = quotes.filter((quote) => quote.status === "voided").length;
+  const shown = quotes.filter(
+    (quote) => showVoided || quote.status !== "voided" || quote.id === viewingQuoteId,
+  );
+  const single = quotes.length === 1;
+
+  placeFlyout.current = () => {
+    const row = viewingRow.current;
+    const frame = panel.current;
+    if (!row || !frame) return;
+    const frameBox = frame.getBoundingClientRect();
+    let top = row.getBoundingClientRect().top - frameBox.top;
+    const pop = flyoutFrame.current;
+    if (pop) {
+      const limit = window.innerHeight - 8 - frameBox.top - pop.offsetHeight;
+      top = Math.min(top, Math.max(0, limit));
+    }
+    const next = Math.round(top);
+    setFlyoutTop((currentTop) => (currentTop === next ? currentTop : next));
+  };
 
   useEffect(() => {
     if (open) setRevisionsQuoteId(viewingQuoteId);
@@ -254,18 +366,32 @@ export function QuoteMenu({
   useLayoutEffect(() => {
     if (!open || !flyout || !panel.current) return;
     const rect = panel.current.getBoundingClientRect();
-    setSide(rect.left >= 336 ? "left" : "right");
+    setSide(rect.left >= 384 ? "left" : "right");
+    if (list.current && viewingRow.current) revealRevision(list.current, viewingRow.current);
+    placeFlyout.current();
+  }, [open, flyout, viewingQuoteId, shown.length, showVoided]);
+
+  useEffect(() => {
+    const scroller = list.current;
+    if (!open || !scroller) return;
+    const follow = () => placeFlyout.current();
+    scroller.addEventListener("scroll", follow, { passive: true });
+    window.addEventListener("resize", follow);
+    return () => {
+      scroller.removeEventListener("scroll", follow);
+      window.removeEventListener("resize", follow);
+    };
   }, [open, flyout]);
 
   if (!viewing) return null;
 
   return (
-    <div ref={menu} className="relative z-40">
+    <div ref={menu} className="relative z-40 w-full">
       <button
         type="button"
         aria-expanded={open}
         aria-haspopup="menu"
-        aria-label={copy.quotesMenu}
+        aria-label={single ? copy.revisionsMenu : copy.quotesMenu}
         onClick={() => {
           setOpen((value) => {
             if (value) {
@@ -276,7 +402,7 @@ export function QuoteMenu({
             return true;
           });
         }}
-        className="flex w-full cursor-pointer items-center gap-1 rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 text-left whitespace-nowrap shadow-xs transition-colors hover:bg-gray-50"
+        className="flex w-full cursor-pointer items-center gap-1 rounded-lg bg-white px-2.5 py-1.5 text-left whitespace-nowrap shadow-xs transition-colors hover:bg-gray-50"
       >
         <span className="flex min-w-0 flex-1 flex-col gap-1">
           <span className="flex items-center justify-between gap-4">
@@ -286,7 +412,7 @@ export function QuoteMenu({
             <span className="shrink-0 text-xs font-semibold text-gray-950">{current?.totalLabel ?? viewing.totalLabel}</span>
           </span>
           <span className="flex items-center justify-between gap-3">
-            <span className={`inline-flex rounded px-1.5 py-0.5 text-[10px] font-medium ${statusClass[viewing.status]}`}>
+            <span className={`inline-flex px-1.5 py-0.5 text-[10px] font-medium ${viewing.status === "voided" ? "rounded-full" : "rounded"} ${statusClass[viewing.status]}`}>
               {statusLabel[viewing.status]}
             </span>
             <span className="text-[11px] font-medium text-gray-500">
@@ -300,16 +426,35 @@ export function QuoteMenu({
         />
       </button>
       {error ? <p className="pt-1 text-[11px] text-red-600">{error}</p> : null}
-      {open ? (
+      {open && single && flyout ? (
+        <RevisionFlyout
+          quote={flyout}
+          anchor="dropdown"
+          side={side}
+          top={0}
+          frameRef={flyoutFrame}
+          onSelectRevision={(id) => {
+            onSelectRevision(id);
+            setOpen(false);
+            setRevisionsQuoteId(null);
+          }}
+        />
+      ) : null}
+      {open && !single ? (
         <div
           ref={panel}
-          className="absolute top-full right-0 z-50 mt-1.5 w-96 rounded-xl border border-gray-200/80 bg-white p-2 text-gray-900 shadow-xl"
+          className="absolute top-full right-0 z-50 mt-1.5 w-[27.6rem] rounded-xl border border-gray-200/80 bg-white p-2 text-gray-900 shadow-xl"
         >
-          <ul role="menu" aria-label={copy.quotesMenu} className="max-h-80 space-y-1 overflow-y-auto overscroll-contain">
-            {quotes.map((quote, index) => (
-              <li key={quote.id}>
+          <ul
+            ref={list}
+            role="menu"
+            aria-label={copy.quotesMenu}
+            className="max-h-80 space-y-1 overflow-y-auto overscroll-contain"
+          >
+            {shown.map((quote) => (
+              <li key={quote.id} ref={quote.id === viewingQuoteId ? viewingRow : undefined}>
                 <QuoteRow
-                  name={quoteLabel(quote, index)}
+                  name={quoteLabel(quote, Math.max(0, quotes.indexOf(quote)))}
                   quote={quote}
                   viewing={quote.id === viewingQuoteId}
                   revisionsOpen={revisionsQuoteId === quote.id}
@@ -329,7 +474,10 @@ export function QuoteMenu({
           {flyout ? (
             <RevisionFlyout
               quote={flyout}
+              anchor="beside"
               side={side}
+              top={flyoutTop}
+              frameRef={flyoutFrame}
               onSelectRevision={(id) => {
                 onSelectRevision(id);
                 setOpen(false);
@@ -337,18 +485,33 @@ export function QuoteMenu({
               }}
             />
           ) : null}
-          <div className="mt-1 border-t border-gray-100 pt-1">
-            <button
-              type="button"
-              role="menuitem"
-              disabled={adding}
-              onClick={onAddQuote}
-              className="flex w-full cursor-pointer items-center gap-2 rounded-lg px-2.5 py-2 text-left text-xs font-medium text-gray-700 transition-colors hover:bg-gray-50 disabled:cursor-default disabled:opacity-60"
-            >
-              <Plus className="h-3.5 w-3.5 shrink-0 text-gray-500" strokeWidth={2} aria-hidden="true" />
-              <span>{adding ? copy.addingQuote : copy.addQuote}</span>
-            </button>
-          </div>
+          {voidedCount > 0 ? (
+            <div className="mt-1 border-t border-gray-100 px-3 py-2">
+              <button
+                type="button"
+                role="switch"
+                aria-checked={showVoided}
+                onClick={() => setShowVoided((value) => !value)}
+                className="inline-flex cursor-pointer items-center gap-1.5 py-1 text-[11px] font-medium text-gray-600"
+              >
+                <span className="font-medium text-gray-700">{copy.voidedQuotes}</span>
+                <span className="inline-flex items-center justify-center rounded-full bg-gray-100 px-1.5 py-0.5 font-mono text-[10px] leading-none font-medium text-gray-500">
+                  {voidedCount}
+                </span>
+                <span
+                  className={`relative h-4 w-7 rounded-full p-0.5 transition-colors ${
+                    showVoided ? "bg-gray-900" : "bg-gray-200"
+                  }`}
+                >
+                  <span
+                    className={`block h-3 w-3 rounded-full bg-white shadow-xs transition-transform ${
+                      showVoided ? "translate-x-3" : ""
+                    }`}
+                  />
+                </span>
+              </button>
+            </div>
+          ) : null}
         </div>
       ) : null}
     </div>

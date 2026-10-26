@@ -39,6 +39,17 @@ export async function createDealQuote(input: { dealId: string; quoteId: string }
   throwIfError(error);
 }
 
+export async function deleteDealQuote(input: { dealId: string; quoteId: string }): Promise<void> {
+  const link = dealQuoteLinkSchema.parse(input);
+  const { error } = await crm()
+    .from("deal_quotes")
+    .delete()
+    .eq("deal_id", link.dealId)
+    .eq("quote_id", link.quoteId);
+  if (missingDealQuotes(error)) return;
+  throwIfError(error);
+}
+
 export async function readDealQuotes(dealId: string): Promise<(DealQuoteLink & { createdAt: string })[]> {
   if (!dealId) return [];
   const { data, error } = await crm()

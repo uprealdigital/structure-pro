@@ -106,7 +106,7 @@ export async function readDealsByQuoteId(quoteId: string): Promise<Deal[]> {
 
 export async function updateDeal(
   id: string,
-  patch: { status?: unknown; quoteId?: string; name?: string; viewedAt?: string | null },
+  patch: { status?: unknown; quoteId?: string | null; name?: string; viewedAt?: string | null },
 ): Promise<void> {
   const next = dealPatchSchema.parse(patch);
   const row: Record<string, unknown> = { updated_at: new Date().toISOString() };
@@ -116,7 +116,7 @@ export async function updateDeal(
     row.status = next.status;
     if (current && current.status !== next.status) row.previous_status = current.status;
   }
-  if (next.quoteId) row.quote_id = next.quoteId;
+  if (next.quoteId !== undefined) row.quote_id = next.quoteId;
   if (next.viewedAt !== undefined) row.viewed_at = next.viewedAt;
   const updated = await crm().from("deals").update(row).eq("id", id);
   if (updated.error && missingColumn(updated.error, "viewed_at") && "viewed_at" in row) {

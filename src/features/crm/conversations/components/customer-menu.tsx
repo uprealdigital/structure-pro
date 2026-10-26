@@ -1,6 +1,6 @@
 "use client";
 
-import { ChevronDown, Eye, Mail, Phone, Plus } from "lucide-react";
+import { ChevronDown, Eye, Mail, Phone } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { contactInitials } from "@/src/features/crm/common/utils/formatting";
 import { copy } from "@/src/features/crm/conversations/locales/en";
@@ -39,8 +39,10 @@ export function CustomerMenu({
   const [open, setOpen] = useState(false);
   const menu = useRef<HTMLDivElement>(null);
   const avatars = stackAvatars(participants, customer.id);
+  const multiple = participants.length > 1;
 
   useEffect(() => {
+    if (!multiple) return;
     function close(event: MouseEvent) {
       if (!menu.current?.contains(event.target as Node)) setOpen(false);
     }
@@ -53,7 +55,7 @@ export function CustomerMenu({
       document.removeEventListener("mousedown", close);
       document.removeEventListener("keydown", onKey);
     };
-  }, []);
+  }, [multiple]);
 
   function choose(participant: ConversationParticipant) {
     setOpen(false);
@@ -61,49 +63,65 @@ export function CustomerMenu({
     onSelect(participant);
   }
 
-  return (
-    <div ref={menu} className="relative z-50 flex items-center">
-      <button
-        type="button"
-        aria-haspopup="menu"
-        aria-expanded={open}
-        aria-label={copy.dealCustomers}
-        onClick={() => setOpen((value) => !value)}
-        className="group -m-1 flex cursor-pointer items-center gap-2 rounded-lg p-1 text-left transition-colors hover:bg-gray-100 focus:outline-none"
-      >
-        <span className="flex shrink-0 items-center">
-          {avatars.map((participant, index) => (
-            <span
-              key={participant.customer.id}
-              className={`flex items-center justify-center rounded-full border font-serif font-bold ${
-                index === 0
-                  ? "relative z-10 h-8 w-8 border-gray-200 bg-gray-100 text-xs text-gray-700 shadow-xs"
-                  : "relative z-0 -ml-[19px] h-7 w-7 border-white bg-gray-200 text-[10px] text-gray-600"
-              }`}
-            >
-              {contactInitials(participant.customer.fullName)}
-            </span>
-          ))}
-        </span>
-        <span className="flex items-center gap-1">
-          <h2 className="font-serif text-base font-bold tracking-tight text-gray-950 transition-colors group-hover:text-gray-700">
-            {customer.fullName}
-          </h2>
+  const identity = (
+    <>
+      <span className="flex shrink-0 items-center">
+        {avatars.map((participant, index) => (
+          <span
+            key={participant.customer.id}
+            className={`flex items-center justify-center rounded-full border font-serif font-bold ${
+              index === 0
+                ? "relative z-10 h-8 w-8 border-gray-200 bg-gray-100 text-xs text-gray-700 shadow-xs"
+                : "relative z-0 -ml-[19px] h-7 w-7 border-white bg-gray-200 text-[10px] text-gray-600"
+            }`}
+          >
+            {contactInitials(participant.customer.fullName)}
+          </span>
+        ))}
+      </span>
+      <span className="flex items-center gap-1">
+        <h2
+          className={`font-serif text-base font-bold tracking-tight text-gray-950 ${
+            multiple ? "transition-colors group-hover:text-gray-700" : ""
+          }`}
+        >
+          {customer.fullName}
+        </h2>
+        {multiple ? (
           <ChevronDown
             className={`h-3.5 w-3.5 shrink-0 text-gray-500 transition-transform duration-200 group-hover:text-gray-900 ${
               open ? "rotate-180" : ""
             }`}
             aria-hidden="true"
           />
-        </span>
-      </button>
-      {open ? (
+        ) : null}
+      </span>
+    </>
+  );
+
+  return (
+    <div ref={menu} className="relative z-50 flex items-center">
+      {multiple ? (
+        <button
+          type="button"
+          aria-haspopup="menu"
+          aria-expanded={open}
+          aria-label={copy.dealCustomers}
+          onClick={() => setOpen((value) => !value)}
+          className="group -m-1 flex cursor-pointer items-center gap-2 rounded-lg p-1 text-left transition-colors hover:bg-gray-100 focus:outline-none"
+        >
+          {identity}
+        </button>
+      ) : (
+        <div className="-m-1 flex items-center gap-2 p-1">{identity}</div>
+      )}
+      {multiple && open ? (
         <div
           role="menu"
           aria-label={copy.dealCustomers}
           className="absolute top-full left-0 z-50 mt-2 w-80 overflow-hidden rounded-2xl border border-gray-200/80 bg-white shadow-xl"
         >
-          <div className="space-y-2.5 border-b border-gray-100 p-3.5">
+          <div className="space-y-2.5 p-3.5">
             {menuOrder(participants, customer.id).map((participant) => {
               const primary = participant.isPrimary;
               const current = participant.customer.id === customer.id;
@@ -114,69 +132,57 @@ export function CustomerMenu({
                   role="menuitem"
                   aria-current={current ? "true" : undefined}
                   onClick={() => choose(participant)}
-                  className={`w-full rounded-xl border p-2.5 text-left transition-colors ${
+                  className={`flex w-full items-center gap-2.5 rounded-xl border p-2.5 text-left transition-colors ${
                     current
-                      ? "border-gray-300 bg-gray-200/80 hover:bg-gray-200"
+                      ? "border-gray-300 bg-[#f5f5f7] hover:bg-gray-100"
                       : primary
                         ? "border-gray-200/60 bg-gray-50/90 hover:bg-gray-100"
                         : "border-gray-200/60 bg-white hover:bg-gray-50"
                   }`}
                 >
-                  <span className="flex items-start gap-2.5">
-                    <span
-                      className={`mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full font-serif text-[11px] font-bold ${
-                        current || primary ? "bg-[#121314] text-white" : "bg-gray-200 text-gray-700"
-                      }`}
-                    >
-                      {contactInitials(participant.customer.fullName)}
-                    </span>
-                    <span className="min-w-0 flex-1">
-                      <span className="flex items-start justify-between gap-2">
-                        <span className="flex min-w-0 items-center gap-1.5">
-                          <span className={`text-xs text-gray-950 ${current || primary ? "font-bold" : "font-semibold"}`}>
-                            {participant.customer.fullName}
-                          </span>
-                          {primary ? (
-                            <span
-                              className={`rounded-full px-1.5 py-0.5 text-[9px] leading-none font-semibold text-gray-800 ${
-                                current ? "bg-white" : "bg-gray-200"
-                              }`}
-                            >
-                              {copy.primary}
-                            </span>
-                          ) : null}
+                  <span className="min-w-0 flex-1">
+                    <span className="flex items-center gap-2.5">
+                      <span
+                        className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full font-serif text-[11px] font-bold ${
+                          current || primary ? "bg-[#121314] text-white" : "bg-gray-200 text-gray-700"
+                        }`}
+                      >
+                        {contactInitials(participant.customer.fullName)}
+                      </span>
+                      <span className="flex min-w-0 items-center gap-1.5">
+                        <span className={`text-xs text-gray-950 ${current || primary ? "font-bold" : "font-semibold"}`}>
+                          {participant.customer.fullName}
                         </span>
-                        {current ? (
-                          <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-white px-1.5 py-0.5 text-[9px] leading-none font-semibold text-gray-800">
-                            <Eye className="h-2.5 w-2.5 shrink-0" strokeWidth={2} aria-hidden="true" />
-                            {copy.viewing}
+                        {primary ? (
+                          <span
+                            className={`rounded-full px-1.5 py-0.5 text-[9px] leading-none font-semibold text-gray-800 ${
+                              current ? "bg-white" : "bg-gray-200"
+                            }`}
+                          >
+                            {copy.primary}
                           </span>
                         ) : null}
                       </span>
-                      <span className="mt-0.5 block space-y-0.5 text-[11px] text-gray-600">
-                        <span className="flex items-center gap-1.5">
-                          <Phone className="h-3 w-3 shrink-0 text-gray-400" strokeWidth={1.8} aria-hidden="true" />
-                          <span>{participant.customer.phone}</span>
-                        </span>
-                        <span className="flex items-center gap-1.5">
-                          <Mail className="h-3 w-3 shrink-0 text-gray-400" strokeWidth={1.8} aria-hidden="true" />
-                          <span className="truncate">{participant.customer.email}</span>
-                        </span>
+                    </span>
+                    <span className="mt-0.5 block space-y-0.5 pl-[2.375rem] text-[11px] text-gray-600">
+                      <span className="flex items-center gap-1.5">
+                        <Phone className="h-3 w-3 shrink-0 text-gray-400" strokeWidth={1.8} aria-hidden="true" />
+                        <span>{participant.customer.phone}</span>
+                      </span>
+                      <span className="flex items-center gap-1.5">
+                        <Mail className="h-3 w-3 shrink-0 text-gray-400" strokeWidth={1.8} aria-hidden="true" />
+                        <span className="truncate">{participant.customer.email}</span>
                       </span>
                     </span>
                   </span>
+                  {current ? (
+                    <Eye className="h-3.5 w-3.5 shrink-0 text-black" strokeWidth={2} aria-hidden="true" />
+                  ) : (
+                    <span className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                  )}
                 </button>
               );
             })}
-          </div>
-          <div className="bg-gray-50/70 px-3.5 py-2.5">
-            <button
-              type="button"
-              className="flex w-full cursor-pointer items-center justify-center gap-1.5 rounded-lg border border-gray-200 bg-white px-2.5 py-1 text-xs font-medium text-gray-700 shadow-xs transition-colors hover:bg-gray-100 hover:text-gray-950"
-            >
-              <Plus className="h-3.5 w-3.5 text-gray-500" aria-hidden="true" />
-              <span>{copy.addPersonToDeal}</span>
-            </button>
           </div>
         </div>
       ) : null}
