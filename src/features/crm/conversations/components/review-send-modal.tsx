@@ -654,8 +654,8 @@ export function ReviewSendModal({
   revisionId: string;
   imageUrl: string;
   statusLabel: string;
-  current: ConversationQuoteRevision;
-  revisions: ConversationQuoteRevision[];
+  current?: ConversationQuoteRevision;
+  revisions?: ConversationQuoteRevision[];
   suggested?: ConfigChanges | null;
   communication: QuoteCommunication | null;
   onSave: (communication: QuoteCommunication) => Promise<void>;
@@ -781,9 +781,11 @@ export function ReviewSendModal({
                 <span>{copy.seeQuoteDetails}</span>
               </a>
             </div>
-            <div className="min-w-0 flex-1">
-              <RevisionChangeList current={current} revisions={revisions} suggested={suggested} />
-            </div>
+            {current && revisions ? (
+              <div className="min-w-0 flex-1">
+                <RevisionChangeList current={current} revisions={revisions} suggested={suggested} />
+              </div>
+            ) : null}
           </div>
 
           <section className="pt-2 pb-3">

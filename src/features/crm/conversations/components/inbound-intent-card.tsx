@@ -13,7 +13,6 @@ export type IntentChangeRow = {
 export function InboundIntentCard({
   title,
   assistant,
-  summary,
   draft,
   quotes,
   selectedQuoteId,
@@ -29,7 +28,6 @@ export function InboundIntentCard({
 }: {
   title: string;
   assistant?: boolean;
-  summary?: string;
   draft?: {
     title: string;
     price: string;
@@ -128,8 +126,6 @@ export function InboundIntentCard({
             ) : null}
           </div>
         </div>
-      ) : summary ? (
-        <p className="mt-3 text-xs leading-5 text-gray-600">{summary}</p>
       ) : null}
       <div className="mt-3 flex flex-wrap items-center gap-2">
         <IntentShareMenu label={actionLabel} pending={pending} onSharePhotos={onSharePhotos} onShareQuote={onShareQuote} />

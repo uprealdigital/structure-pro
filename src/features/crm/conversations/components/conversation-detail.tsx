@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowUpRight, Camera, Paperclip, Pencil, Phone, X } from "lucide-react";
+import { Camera, Paperclip, Phone } from "lucide-react";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { BuildingConfigurator } from "@/src/features/cpq/components/building-configurator";
 import type { QuoteRevisionRenderCapture, QuoteRevisionRenderFiles } from "@/src/features/cpq/components/building-scene";
@@ -11,8 +11,9 @@ import { CustomerMenu } from "@/src/features/crm/conversations/components/custom
 import { DealHeading } from "@/src/features/crm/conversations/components/deal-menu";
 import { DealSummary } from "@/src/features/crm/conversations/components/deal-summary";
 import { QuoteActionsMenu } from "@/src/features/crm/conversations/components/quote-actions-menu";
+import { QuoteStatusActions } from "@/src/features/crm/conversations/components/quote-status-actions";
 import { QuoteMenu, QuotePanel } from "@/src/features/crm/conversations/components/quote-panel";
-import { Toast } from "@/src/common/components/toast";
+import { Toast, type ToastTone } from "@/src/common/components/toast";
 import { InboundIntentCard } from "@/src/features/crm/conversations/components/inbound-intent-card";
 import { ProposedShedRender } from "@/src/features/crm/conversations/components/proposed-shed-render";
 import { ReviewSendModal } from "@/src/features/crm/conversations/components/review-send-modal";
@@ -42,18 +43,24 @@ import {
   conversationQuoteWithSentRevision,
   conversationQuoteWithSharedPhotos,
 } from "@/src/features/crm/conversations/utils/mappers";
+import { quoteStatuses, type QuoteStatusActionId } from "@/src/features/crm/quotes/config/status";
 import {
   activateQuoteRevision,
   cancelQuote,
   createDealQuoteAction,
+  deleteDraftQuote,
   duplicateQuote,
+  payQuoteDeposit,
+  refreshQuoteLifecycle,
+  renewQuote,
   saveQuoteCommunication,
   saveQuoteSelections,
   shareQuoteRevisionPhotos,
 } from "@/src/features/crm/quotes/server/actions";
-import type { ConfigChanges, QuoteCommunication } from "@/src/features/crm/quotes/types";
+import type { ConfigChanges, QuoteCommunication, QuoteStatus } from "@/src/features/crm/quotes/types";
 import type { QuoteSelections } from "@/src/features/cpq/types";
 import { DealStatusBadge } from "@/src/features/crm/deals/components/deal-status-badge";
+import { canMarkDealLost } from "@/src/features/crm/deals/utils/status";
 import { dealNameMaxLength, type DealStatus } from "@/src/features/crm/deals/types";
 import { configChangeRows } from "@/src/features/crm/conversations/utils/config-changes-summary";
 import { selectionsWithConfigChanges } from "@/src/features/crm/conversations/utils/design-preview";
@@ -113,6 +120,7 @@ export type ThreadReadNotice =
 type NoticeRecord = {
   id: number;
   message: string;
+  tone: ToastTone;
   pending: boolean;
   undoStarted: boolean;
   settled: boolean;
@@ -131,10 +139,13 @@ function quotesForDeal(
   option: ConversationWorkspace["deals"][number],
   patches: Record<string, ConversationQuote>,
   added: ConversationQuote[],
+  removed: Record<string, true>,
 ): ConversationQuote[] {
   const base = option.quotes.length > 0 ? option.quotes : option.quote ? [option.quote] : [];
   const known = new Set(base.map((quote) => quote.id));
-  return [...base, ...added.filter((quote) => !known.has(quote.id))].map((quote) => patches[quote.id] ?? quote);
+  return [...base, ...added.filter((quote) => !known.has(quote.id))]
+    .map((quote) => patches[quote.id] ?? quote)
+    .filter((quote) => !removed[quote.id]);
 }
 
 function dealHasQuotes(option: { quote: ConversationQuote | null; quotes: ConversationQuote[] }): boolean {
@@ -240,15 +251,17 @@ export function ConversationDetail({
   const [viewingQuoteIds, setViewingQuoteIds] = useState<Record<string, string>>({});
   const [addedQuotes, setAddedQuotes] = useState<Record<string, ConversationQuote[]>>({});
   const [addingQuote, setAddingQuote] = useState(false);
-  const [quoteAction, setQuoteAction] = useState<"move" | "duplicate" | "cancel" | null>(null);
+  const [quoteAction, setQuoteAction] = useState<"move" | "duplicate" | "cancel" | "delete" | "renew" | "deposit" | null>(null);
+  const [removedQuoteIds, setRemovedQuoteIds] = useState<Record<string, true>>({});
   const [quoteNote, setQuoteNote] = useState("");
   const [quotePatches, setQuotePatches] = useState<Record<string, ConversationQuote>>({});
   const [dealStatusPatches, setDealStatusPatches] = useState<Record<string, DealStatus>>({});
   const [dealNamePatches, setDealNamePatches] = useState<Record<string, string>>({});
   const [seenDealIds, setSeenDealIds] = useState<string[]>([]);
   const requestedNewDeals = useRef(new Set<string>());
-  const [notice, setNotice] = useState<{ id: number; message: string; pending: boolean } | null>(null);
+  const [notice, setNotice] = useState<{ id: number; message: string; pending: boolean; tone: ToastTone } | null>(null);
   const noticeRecord = useRef<NoticeRecord | null>(null);
+  const pendingLostDealId = useRef<string | null>(null);
   const publishActivityRef = useRef<(activity: Activity) => void>(() => {});
   const removeActivityRef = useRef(onRemoveActivity);
   removeActivityRef.current = onRemoveActivity;
@@ -268,7 +281,7 @@ export function ConversationDetail({
         : {}),
       ...(renamed ? { name: renamed } : {}),
     };
-    const quotes = quotesForDeal(option, quotePatches, addedQuotes[option.id] ?? []);
+    const quotes = quotesForDeal(option, quotePatches, addedQuotes[option.id] ?? [], removedQuoteIds);
     const primary = quotes.find((quote) => quote.id === option.deal.quoteId) ?? quotes[0];
     const patchedPrimary = primary && quotePatches[primary.id]?.id === option.deal.quoteId ? primary : undefined;
     const customName = deal.name?.trim();
@@ -289,7 +302,7 @@ export function ConversationDetail({
     };
   });
   const focusedOption = deals.find((deal) => deal.id === focusedDealId) ?? deals[0];
-  const listedQuotes = focusedOption ? quotesForDeal(focusedOption, {}, []) : [];
+  const listedQuotes = focusedOption ? quotesForDeal(focusedOption, {}, [], removedQuoteIds) : [];
   const viewingQuote =
     listedQuotes.find((quote) => quote.id === viewingQuoteIds[focusedOption?.id ?? ""]) ?? listedQuotes[0] ?? null;
   const participants = participantsForDeal(workspace.participants, focusedOption?.id ?? workspace.deal.id, {
@@ -310,6 +323,35 @@ export function ConversationDetail({
   const outgoingRef = useRef<OutgoingMessage[]>([]);
   const quotesByIdRef = useRef(new Map<string, ConversationQuote>());
   quotesByIdRef.current = new Map(deals.flatMap((deal) => deal.quotes.map((quote) => [quote.id, quote])));
+  const lifecycleQuoteId = focused.quote?.id;
+  const lifecycleStatus = focused.quote?.status;
+  useEffect(() => {
+    if (!lifecycleQuoteId || (lifecycleStatus !== "sent" && lifecycleStatus !== "viewed" && lifecycleStatus !== "changes_requested")) {
+      return;
+    }
+    let cancelled = false;
+    void refreshQuoteLifecycle({ quoteId: lifecycleQuoteId, openedByCustomer: false }).then((result) => {
+      if (cancelled || "error" in result || result.data.status === lifecycleStatus) return;
+      const quote = quotesByIdRef.current.get(lifecycleQuoteId);
+      if (!quote) return;
+      setQuotePatches((current) => {
+        const base = current[quote.id] ?? quote;
+        return {
+          ...current,
+          [quote.id]: {
+            ...base,
+            status: result.data.status,
+            revisions: base.revisions.map((revision) =>
+              revision.id === base.activeRevisionId ? { ...revision, status: result.data.status } : revision,
+            ),
+          },
+        };
+      });
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [lifecycleQuoteId, lifecycleStatus]);
   const heldPreviews = useRef(new Map<string, string>());
   const previewFrames = useRef(new Map<string, number>());
   const imageHeights = useRef(new Map<string, number>());
@@ -536,7 +578,7 @@ export function ConversationDetail({
   }
 
   async function recordNamedActivity(
-    kind: "deal" | "quote" | "activeQuote",
+    kind: "quote",
     name: string,
     previousName?: string,
   ): Promise<Activity | null> {
@@ -566,7 +608,12 @@ export function ConversationDetail({
     }
   }
 
-  function showNotice(message: string, undo: () => Promise<boolean>, commit: () => Promise<Activity | null>) {
+  function showNotice(
+    message: string,
+    undo: () => Promise<boolean>,
+    commit: () => Promise<Activity | null>,
+    tone: ToastTone = "success",
+  ) {
     const previous = noticeRecord.current;
     if (previous && !previous.settled && !previous.cancelled && !previous.undoStarted) {
       previous.settled = true;
@@ -575,6 +622,7 @@ export function ConversationDetail({
     const next: NoticeRecord = {
       id: Date.now(),
       message,
+      tone,
       pending: false,
       undoStarted: false,
       settled: false,
@@ -585,7 +633,7 @@ export function ConversationDetail({
       commit,
     };
     noticeRecord.current = next;
-    setNotice({ id: next.id, message: next.message, pending: false });
+    setNotice({ id: next.id, message: next.message, pending: false, tone });
   }
 
   function commitNotice() {
@@ -605,13 +653,13 @@ export function ConversationDetail({
     if (!current || current.pending || current.undoStarted || current.cancelled) return;
     current.undoStarted = true;
     current.pending = true;
-    setNotice({ id: current.id, message: current.message, pending: true });
+    setNotice({ id: current.id, message: current.message, pending: true, tone: current.tone });
     const undone = await current.undo();
     if (!undone) {
       current.undoStarted = false;
       current.pending = false;
       if (noticeRecord.current === current) {
-        setNotice({ id: current.id, message: current.message, pending: false });
+        setNotice({ id: current.id, message: current.message, pending: false, tone: current.tone });
       }
       if (current.expired && !current.settled) {
         current.settled = true;
@@ -638,30 +686,18 @@ export function ConversationDetail({
     return option;
   }
 
-  function finishDealSwitch(option: ConversationDealOption, previous: ConversationDealOption) {
+  function finishDealSwitch(option: ConversationDealOption) {
     focusDeal(option.id);
     setSeenDealIds((current) => (current.includes(option.id) ? current : [...current, option.id]));
-    const previousId = previous.id;
-    showNotice(
-      copy.activeDealSwitchedToast(option.title),
-      async () => {
-        setSeenDealIds((current) => current.filter((id) => id !== option.id));
-        focusDeal(previousId);
-        return true;
-      },
-      async () => {
-        await markDealViewed(option.id);
-        return recordNamedActivity("deal", option.title);
-      },
-    );
+    void markDealViewed(option.id);
   }
 
   function selectDeal(dealId: string) {
-    const previous = deals.find((deal) => deal.id === focusedDealId);
+    if (dealId === focusedDealId) return;
     const option = deals.find((deal) => deal.id === dealId);
-    if (!option || !previous || option.id === previous.id) return;
+    if (!option) return;
     if (dealHasQuotes(option)) {
-      finishDealSwitch(option, previous);
+      finishDealSwitch(option);
       return;
     }
     const ticket = dealLoad.current + 1;
@@ -674,7 +710,7 @@ export function ConversationDetail({
         if (dealHasQuotes(loaded)) {
           setLoadedDealOptions((current) => ({ ...current, [loaded.id]: loaded }));
         }
-        finishDealSwitch(loaded, previous);
+        finishDealSwitch(loaded);
       })
       .catch(() => undefined);
   }
@@ -728,29 +764,11 @@ export function ConversationDetail({
 
   function viewQuote(quoteId: string) {
     const dealId = focusedOption?.id;
-    const previousId = viewingQuote?.id;
-    if (!dealId || !previousId || quoteId === previousId) return;
-    const quoteIndex = listedQuotes.findIndex((item) => item.id === quoteId);
-    const quoteName = quoteLabel(listedQuotes[quoteIndex], quoteIndex);
-    const previousRevisionId = selectedRevisionId;
+    if (!dealId || !viewingQuote || quoteId === viewingQuote.id) return;
     setViewingQuoteIds((current) => ({ ...current, [dealId]: quoteId }));
     setSelectedRevisionId(null);
     setRevisionError("");
     setEditing(false);
-    if (!quoteName) return;
-    showNotice(
-      copy.activeQuoteChangedToast(quoteName),
-      async () => {
-        setViewingQuoteIds((current) => {
-          if (current[dealId] !== quoteId) return current;
-          return { ...current, [dealId]: previousId };
-        });
-        setSelectedRevisionId((current) => (current == null ? previousRevisionId : current));
-        setEditing(false);
-        return true;
-      },
-      () => recordNamedActivity("activeQuote", quoteName),
-    );
   }
 
   async function addQuote() {
@@ -817,7 +835,7 @@ export function ConversationDetail({
     );
     setEditing(false);
     const loaded = await onFocusDeal(result.data.dealId);
-    const stage = loaded?.deals.find((deal) => deal.id === result.data.dealId)?.stage ?? "lead";
+    const stage = loaded?.deals.find((deal) => deal.id === result.data.dealId)?.stage ?? "new_lead";
     setFocusedDealId(result.data.dealId);
     setViewingQuoteIds((current) => ({ ...current, [result.data.dealId]: quote.id }));
     setSelectedRevisionId(null);
@@ -868,6 +886,29 @@ export function ConversationDetail({
     setEditing(false);
   }
 
+  function patchQuoteStatus(quote: ConversationQuote, status: QuoteStatus) {
+    setQuotePatches((current) => {
+      const base = current[quote.id] ?? quote;
+      return {
+        ...current,
+        [quote.id]: {
+          ...base,
+          status,
+          revisions: base.revisions.map((revision) =>
+            revision.id === base.activeRevisionId ? { ...revision, status } : revision,
+          ),
+        },
+      };
+    });
+  }
+
+  function openQuoteReview() {
+    armedQuoteSuggestionId.current = null;
+    setReviewImageUrl(null);
+    setReviewSuggestionChanges(null);
+    setReviewOpen(true);
+  }
+
   async function cancelFocusedQuote() {
     const quote = focused.quote;
     if (!quote || quoteAction) return;
@@ -880,10 +921,86 @@ export function ConversationDetail({
       setRevisionError(copy.cancelQuoteError);
       return;
     }
-    setQuotePatches((current) => {
-      const base = current[quote.id] ?? quote;
-      return { ...current, [quote.id]: { ...base, status: "voided" } };
-    });
+    patchQuoteStatus(quote, "voided");
+    setEditing(false);
+  }
+
+  async function deleteFocusedDraft() {
+    const quote = focused.quote;
+    if (!quote || quoteAction || quote.status !== "draft") return;
+    setQuoteAction("delete");
+    setRevisionError("");
+    setQuoteNote("");
+    const result = await deleteDraftQuote({ quoteId: quote.id });
+    setQuoteAction(null);
+    if ("error" in result) {
+      setRevisionError(copy.deleteDraftError);
+      return;
+    }
+    setRemovedQuoteIds((current) => ({ ...current, [quote.id]: true }));
+    setEditing(false);
+  }
+
+  async function renewFocusedQuote() {
+    const quote = focused.quote;
+    if (!quote || quoteAction) return;
+    setQuoteAction("renew");
+    setRevisionError("");
+    const result = await renewQuote({ quoteId: quote.id });
+    setQuoteAction(null);
+    if ("error" in result) {
+      setRevisionError(copy.renewQuoteError);
+      return;
+    }
+    patchQuoteStatus(quote, "draft");
+    openQuoteReview();
+  }
+
+  async function collectFocusedDeposit() {
+    const quote = focused.quote;
+    const dealId = focusedOption?.id;
+    if (!quote || !dealId || quoteAction) return;
+    setQuoteAction("deposit");
+    setRevisionError("");
+    const result = await payQuoteDeposit({ quoteId: quote.id });
+    setQuoteAction(null);
+    if ("error" in result) {
+      setRevisionError(copy.collectDepositError);
+      return;
+    }
+    patchQuoteStatus(quote, "deposit_paid");
+    setDealStatusPatches((current) => ({ ...current, [dealId]: "deal_won" }));
+  }
+
+  function runQuoteStatusAction(id: QuoteStatusActionId) {
+    const quote = focused.quote;
+    if (!quote) return;
+    if (id === "send" || id === "resend") {
+      openQuoteReview();
+      return;
+    }
+    if (id === "edit") {
+      toggleEditing();
+      return;
+    }
+    if (id === "view_requested_changes") {
+      setDetailsOpen(true);
+      setDetailsSettled(true);
+      return;
+    }
+    if (id === "collect_deposit") {
+      void collectFocusedDeposit();
+      return;
+    }
+    if (id === "view_signed_quote" || id === "view_deposit_receipt") {
+      window.open(`/quote/${quote.id}`, "_blank", "noopener,noreferrer");
+      return;
+    }
+    if (id === "renew") {
+      void renewFocusedQuote();
+      return;
+    }
+    if (id === "copy") void duplicateFocusedQuote();
   }
 
   function toggleEditing() {
@@ -1263,18 +1380,32 @@ export function ConversationDetail({
     return { success: true as const };
   }
 
-  async function markLost() {
-    if (updatingStatus || focused.deal.status === "deal_lost") return;
+  function markLost() {
+    if (updatingStatus || pendingLostDealId.current || !canMarkDealLost(focused.deal.status)) return;
     const dealId = focused.deal.id;
-    setUpdatingStatus(true);
+    const name = (focusedOption?.title || copy.quote).trim();
+    pendingLostDealId.current = dealId;
     setStatusError("");
-    const result = await onMarkLost(dealId);
-    setUpdatingStatus(false);
-    if ("error" in result) {
-      setStatusError(copy.markAsLostError);
-      return;
-    }
-    setDealStatusPatches((current) => ({ ...current, [dealId]: "deal_lost" }));
+    showNotice(
+      copy.dealMarkedLostToast(name),
+      async () => {
+        if (pendingLostDealId.current === dealId) pendingLostDealId.current = null;
+        return true;
+      },
+      async () => {
+        setUpdatingStatus(true);
+        const result = await onMarkLost(dealId);
+        setUpdatingStatus(false);
+        if (pendingLostDealId.current === dealId) pendingLostDealId.current = null;
+        if ("error" in result) {
+          setStatusError(copy.markAsLostError);
+          return null;
+        }
+        setDealStatusPatches((current) => ({ ...current, [dealId]: "deal_lost" }));
+        return null;
+      },
+      "neutral",
+    );
   }
 
   async function reopen() {
@@ -1547,37 +1678,18 @@ export function ConversationDetail({
                     onViewQuote={viewQuote}
                     onSelectRevision={(id) => void selectRevision(id)}
                   />
-                  <div className="grid w-full grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] items-stretch gap-1.5">
-                    <button
-                      type="button"
-                      aria-pressed={editing}
-                      onClick={toggleEditing}
-                      className={`inline-flex min-w-0 items-center justify-center gap-1 rounded-md border bg-transparent px-2.5 py-1 text-xs font-medium whitespace-nowrap transition-colors ${
-                        editing
-                          ? "border-red-500 text-red-600 shadow-xs hover:bg-red-50"
-                          : "border-gray-200 text-gray-700 hover:bg-gray-50"
-                      }`}
-                    >
-                      {editing ? (
-                        <X className="h-3.5 w-3.5 shrink-0 text-red-500" aria-hidden="true" />
-                      ) : (
-                        <Pencil className="h-3.5 w-3.5 shrink-0 text-gray-500" aria-hidden="true" />
-                      )}
-                      <span>{editing ? copy.cancelQuoteEdits : copy.editQuote}</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        armedQuoteSuggestionId.current = null;
-                        setReviewImageUrl(null);
-                        setReviewSuggestionChanges(null);
-                        setReviewOpen(true);
-                      }}
-                      className="inline-flex min-w-0 items-center justify-center gap-1.5 rounded-md bg-black px-2.5 py-1 text-xs font-medium whitespace-nowrap text-white shadow-xs transition-colors hover:bg-gray-800"
-                    >
-                      <ArrowUpRight className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-                      <span>{copy.reviewAndSendQuote}</span>
-                    </button>
+                  <div
+                    className={`grid w-full items-stretch gap-1.5 ${
+                      quoteStatuses[focused.quote.status].actions.length > 1
+                        ? "grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]"
+                        : "grid-cols-[minmax(0,1fr)_auto]"
+                    }`}
+                  >
+                    <QuoteStatusActions
+                      status={focused.quote.status}
+                      editing={editing}
+                      onAction={runQuoteStatusAction}
+                    />
                     <QuoteActionsMenu
                       quoteId={focused.quote.id}
                       pending={quoteAction != null}
@@ -1585,7 +1697,14 @@ export function ConversationDetail({
                       onAddQuote={() => void addQuote()}
                       onMove={() => void moveFocusedQuote()}
                       onDuplicate={() => void duplicateFocusedQuote()}
-                      onCancel={() => void cancelFocusedQuote()}
+                      menuAction={quoteStatuses[focused.quote.status].menu}
+                      onMenuAction={() => {
+                        const quote = focused.quote;
+                        if (!quote) return;
+                        const menu = quoteStatuses[quote.status].menu;
+                        if (menu?.id === "delete_draft") void deleteFocusedDraft();
+                        else void cancelFocusedQuote();
+                      }}
                       onCopied={() => {
                         setRevisionError("");
                         setQuoteNote(copy.publishLinkCopied);
@@ -1608,6 +1727,7 @@ export function ConversationDetail({
             <Toast
               key={notice.id}
               message={notice.message}
+              tone={notice.tone}
               actionLabel={copy.undo}
               dismissLabel={copy.dismiss}
               pending={notice.pending}
@@ -1707,7 +1827,6 @@ export function ConversationDetail({
         {quoteSuggestion && viewed ? (
           <InboundIntentCard
             title={copy.quoteRequested}
-            summary={quoteSuggestion.summary}
             actionLabel={copy.shareQuote}
             onDismiss={() => void dismissDetectedSuggestion(quoteSuggestion)}
             onShareQuote={() => {

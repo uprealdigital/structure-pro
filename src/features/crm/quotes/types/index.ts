@@ -2,11 +2,20 @@ import { z } from "zod";
 import { quoteSelectionsSchema } from "@/src/features/cpq/types";
 import { customerSchema } from "@/src/features/crm/common/types";
 
-export const quoteStatusSchema = z.enum(["draft", "sent", "contract"]);
+export const quoteStatusSchema = z.enum([
+  "draft",
+  "sent",
+  "viewed",
+  "changes_requested",
+  "signed",
+  "deposit_paid",
+  "expired",
+  "voided",
+]);
 export type QuoteStatus = z.infer<typeof quoteStatusSchema>;
 
-export const quoteRecordStatusSchema = z.enum(["draft", "sent", "signed", "declined", "expired", "voided"]);
-export type QuoteRecordStatus = z.infer<typeof quoteRecordStatusSchema>;
+export const quoteRecordStatusSchema = quoteStatusSchema;
+export type QuoteRecordStatus = QuoteStatus;
 
 export const quoteCustomerSchema = z.object({
   id: z.string(),
@@ -29,8 +38,8 @@ export const quoteListItemSchema = z.object({
 
 export type QuoteListItem = z.infer<typeof quoteListItemSchema>;
 
-export const quoteRevisionStatusSchema = z.enum(["draft", "sent"]);
-export type QuoteRevisionStatus = z.infer<typeof quoteRevisionStatusSchema>;
+export const quoteRevisionStatusSchema = quoteStatusSchema;
+export type QuoteRevisionStatus = QuoteStatus;
 
 export const quoteCommunicationSchema = z.object({
   subject: z.string(),
@@ -127,15 +136,13 @@ export type QuoteRevision = z.infer<typeof quoteRevisionSchema>;
 export const quotePortalModeSchema = z.enum(["internal", "external"]);
 export type QuotePortalMode = z.infer<typeof quotePortalModeSchema>;
 
-export const quotePortalStatusSchema = z.enum([
-  "draft",
-  "sent",
-  "viewed",
-  "signed",
-  "deposit_paid",
-  "expired",
-]);
-export type QuotePortalStatus = z.infer<typeof quotePortalStatusSchema>;
+export const quotePortalStatusSchema = quoteStatusSchema;
+export type QuotePortalStatus = QuoteStatus;
+
+export const quoteLifecycleSchema = z.object({
+  quoteId: z.string().trim().min(1),
+  openedByCustomer: z.boolean().default(false),
+});
 
 export const quotePortalLineSchema = z.object({
   label: z.string(),

@@ -11,8 +11,8 @@ import {
   quoteMenuName,
   revisionMenuLabel,
 } from "@/src/features/crm/conversations/utils/formatting";
+import { QuoteStatusBadge } from "@/src/features/crm/quotes/components/quote-status-badge";
 import { quoteDisplayName } from "@/src/features/crm/quotes/utils/formatting";
-import type { QuoteRecordStatus } from "@/src/features/crm/quotes/types";
 import { specValue } from "@/src/features/crm/common/utils/formatting";
 
 const sectionTitle = "text-sm font-bold tracking-wider text-gray-900 uppercase";
@@ -20,24 +20,6 @@ const sectionTitle = "text-sm font-bold tracking-wider text-gray-900 uppercase";
 function quoteLabel(quote: ConversationQuote, index: number): string {
   return quote.quoteNumber ? quoteDisplayName(quote.quoteNumber, quote.specs) : quoteMenuName(index);
 }
-
-const statusLabel: Record<QuoteRecordStatus, string> = {
-  draft: copy.quoteStatusDraft,
-  sent: copy.quoteStatusSent,
-  signed: copy.quoteStatusSigned,
-  declined: copy.quoteStatusDeclined,
-  expired: copy.quoteStatusExpired,
-  voided: copy.quoteStatusVoided,
-};
-
-const statusClass: Record<QuoteRecordStatus, string> = {
-  draft: "bg-gray-100 text-gray-600",
-  sent: "bg-blue-50 text-blue-600",
-  signed: "bg-emerald-50 text-emerald-700",
-  declined: "bg-red-50 text-red-600",
-  expired: "bg-gray-100 text-gray-500",
-  voided: "border border-red-200 bg-red-50 text-red-600",
-};
 
 function activeRevision(quote: ConversationQuote): ConversationQuoteRevision | undefined {
   return (
@@ -96,9 +78,7 @@ function QuoteRow({
             </span>
           </span>
           <span className="mt-1 flex items-center justify-between gap-3">
-            <span className={`inline-flex px-1.5 py-0.5 text-[10px] font-medium ${quote.status === "voided" ? "rounded-full" : "rounded"} ${statusClass[quote.status]}`}>
-              {statusLabel[quote.status]}
-            </span>
+            <QuoteStatusBadge status={quote.status} />
             <span className="text-[11px] font-medium text-gray-500">
               {current ? revisionMenuLabel(current.revisionNumber) : ""}
             </span>
@@ -263,11 +243,7 @@ function RevisionFlyout({
                       {revisionMenuLabel(revision.revisionNumber)}
                     </span>
                     {active ? (
-                      <span
-                        className={`shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-medium ${statusClass[quote.status]}`}
-                      >
-                        {statusLabel[quote.status]}
-                      </span>
+                      <QuoteStatusBadge status={revision.status} />
                     ) : null}
                   </span>
                   <span className={`shrink-0 text-xs font-bold ${active ? "text-gray-950" : "text-gray-900"}`}>
@@ -412,9 +388,7 @@ export function QuoteMenu({
             <span className="shrink-0 text-xs font-semibold text-gray-950">{current?.totalLabel ?? viewing.totalLabel}</span>
           </span>
           <span className="flex items-center justify-between gap-3">
-            <span className={`inline-flex px-1.5 py-0.5 text-[10px] font-medium ${viewing.status === "voided" ? "rounded-full" : "rounded"} ${statusClass[viewing.status]}`}>
-              {statusLabel[viewing.status]}
-            </span>
+            <QuoteStatusBadge status={viewing.status} />
             <span className="text-[11px] font-medium text-gray-500">
               {current ? revisionMenuLabel(current.revisionNumber) : ""}
             </span>

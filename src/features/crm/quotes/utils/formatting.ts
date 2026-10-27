@@ -1,8 +1,6 @@
 import { specValue } from "@/src/features/crm/common/utils/formatting";
-import type { DealStatus } from "@/src/features/crm/deals/types";
-import { dealAdvancement } from "@/src/features/crm/deals/utils/status";
 import { portalCopy } from "@/src/features/crm/quotes/locales/en";
-import type { QuotePortalMode, QuotePortalStatus } from "@/src/features/crm/quotes/types";
+import type { QuotePortalMode } from "@/src/features/crm/quotes/types";
 
 const dateFormat = new Intl.DateTimeFormat("en-US", {
   month: "short",
@@ -59,25 +57,6 @@ export function quotePortalMode(value: string | string[] | undefined): QuotePort
 
 export function quoteMonthsLabel(months: number): string {
   return `for ${months} mos`;
-}
-
-export function quotePortalStatus(
-  deals: { status: DealStatus }[],
-  revisionStatus: "draft" | "sent",
-): QuotePortalStatus {
-  const open = deals.filter((deal) => deal.status !== "deal_lost");
-  if (deals.length > 0 && open.length === 0) return "expired";
-  if (revisionStatus === "draft") return "draft";
-  const lead = open.reduce<(typeof open)[number] | undefined>((best, deal) => {
-    if (!best || dealAdvancement(deal.status) > dealAdvancement(best.status)) return deal;
-    return best;
-  }, undefined);
-  if (!lead) return revisionStatus === "sent" ? "sent" : "draft";
-  if (lead.status === "deal_won") return "deposit_paid";
-  if (lead.status === "partially_signed") return "signed";
-  if (lead.status === "quote_viewed") return "viewed";
-  if (lead.status === "quote_sent") return "sent";
-  return revisionStatus === "sent" ? "sent" : "draft";
 }
 
 export function quotePortalDealName(

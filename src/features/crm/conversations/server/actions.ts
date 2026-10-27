@@ -77,7 +77,8 @@ import {
 } from "@/src/features/crm/conversations/utils/review-message";
 import type { Customer } from "@/src/features/crm/common/types";
 import { dealIdSchema, dealNameSchema, type DealStatus } from "@/src/features/crm/deals/types";
-import { markQuoteSent } from "@/src/features/crm/quotes/db/quote";
+import { canMarkDealLost } from "@/src/features/crm/deals/utils/status";
+import { markQuoteSent, readQuoteStatus, setQuoteStatus } from "@/src/features/crm/quotes/db/quote";
 import { readQuoteRevision, updateQuoteRevision } from "@/src/features/crm/quotes/db/quote-revision";
 
 export async function openConversation(input: {
@@ -264,7 +265,13 @@ export async function saveAgentSession(
     contractSent: session.contractSent,
   });
   if (!session.contractSent) return;
-  await updateDeal(session.crmDealId, { status: "partially_signed" });
+  await updateDeal(session.crmDealId, { status: "pending_deposit" });
+  const deal = await readDeal(session.crmDealId);
+  if (!deal?.quoteId) return;
+  const status = await readQuoteStatus(deal.quoteId);
+  if (status === "draft" || status === "sent" || status === "viewed" || status === "changes_requested") {
+    await setQuoteStatus(deal.quoteId, "signed");
+  }
 }
 
 export async function markDealLost(dealId: string): Promise<{ success: true } | { error: string }> {
@@ -272,6 +279,9 @@ export async function markDealLost(dealId: string): Promise<{ success: true } | 
   if (!id.success) return { error: "A deal is required" };
 
   try {
+    const deal = await readDeal(id.data);
+    if (!deal) return { error: "Deal was not found" };
+    if (!canMarkDealLost(deal.status)) return { error: "This deal cannot be marked as lost" };
     await updateDeal(id.data, { status: "deal_lost" });
     revalidatePath("/crm/conversations");
     revalidatePath("/crm/deals");
@@ -306,6 +316,14 @@ export async function reopenDeal(
   }
 }
 
+async function markDealQuoteChangesRequested(dealId: string) {
+  const deal = await readDeal(dealId);
+  if (!deal?.quoteId) return;
+  const status = await readQuoteStatus(deal.quoteId);
+  if (status !== "sent" && status !== "viewed") return;
+  await setQuoteStatus(deal.quoteId, "changes_requested");
+}
+
 export async function sendConversationQuote(input: {
   quoteId: string;
   revisionId: string;
@@ -338,9 +356,12 @@ export async function sendConversationQuote(input: {
     if (!deal) return { error: "Deal was not found" };
 
     const sharedQuoteAt = new Date().toISOString();
-    const saved = await updateQuoteRevision(revision.id, { status: "sent", sharedQuoteAt });
+    const saved = await updateQuoteRevision(revision.id, {
+      status: revision.status === "draft" ? "sent" : revision.status,
+      sharedQuoteAt,
+    });
     await markQuoteSent(quoteId);
-    const dealStatus = deal.status === "lead" ? "quote_sent" : deal.status;
+    const dealStatus = deal.status === "new_lead" ? "active_quote" : deal.status;
     if (dealStatus !== deal.status) await updateDeal(deal.id, { status: dealStatus });
 
     revalidatePath("/crm/conversations");
@@ -905,6 +926,7 @@ export async function syncConversationSuggestions(
           if (index >= 0) pending.splice(index, 1);
           continue;
         }
+        if (intent === "revision") await markDealQuoteChangesRequested(parsed.data.dealId);
         if (current) {
           const saved = await updateSuggestion(current.id, { messageIds: combined, configChanges });
           if (!saved) continue;

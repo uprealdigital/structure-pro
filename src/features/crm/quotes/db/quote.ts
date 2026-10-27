@@ -2,9 +2,13 @@ import { db } from "@/src/common/lib/supabase/supabase.service";
 import { throwIfError } from "@/src/common/utils/error-handling";
 import { quoteSelectionsSchema, type ListedQuote, type QuoteRecord } from "@/src/features/cpq/types";
 import { toListedQuote, type QuoteListRow } from "@/src/features/cpq/utils/mappers";
-import { createQuoteRevision, readQuoteRevisionsByIds } from "@/src/features/crm/quotes/db/quote-revision";
-import { quoteRecordStatusSchema, type QuoteRecordStatus } from "@/src/features/crm/quotes/types";
-import { quoteNumberValue } from "@/src/features/crm/quotes/utils/formatting";
+import { describeSelections } from "@/src/features/cpq/utils/pricing";
+import { recordQuoteStatusActivity } from "@/src/features/crm/conversations/server/status-activity";
+import { quoteStatuses } from "@/src/features/crm/quotes/config/status";
+import { createQuoteRevision, readQuoteRevisionsByIds, updateQuoteRevision } from "@/src/features/crm/quotes/db/quote-revision";
+import { portalCopy } from "@/src/features/crm/quotes/locales/en";
+import { quoteStatusSchema, type QuoteStatus } from "@/src/features/crm/quotes/types";
+import { quoteDisplayName, quoteNumberValue } from "@/src/features/crm/quotes/utils/formatting";
 
 function crm() {
   return db("crm");
@@ -101,7 +105,14 @@ type QuoteRow = {
   quote_number?: unknown;
   active_revision_id?: unknown;
   created_at?: string | null;
+  status?: unknown;
 };
+
+export function storedQuoteStatus(value: unknown): QuoteStatus {
+  if (value === "declined") return "changes_requested";
+  const status = quoteStatusSchema.safeParse(value);
+  return status.success ? status.data : "draft";
+}
 
 async function selectionsByRevision(rows: QuoteRow[]) {
   const ids = rows
@@ -148,30 +159,36 @@ export async function readQuotesByIds(ids: string[]): Promise<QuoteRecord[]> {
     .filter((quote): quote is QuoteRecord => quote != null);
 }
 
-export async function readQuotes(): Promise<ListedQuote[]> {
-  const { data, error } = await quoteQuery(
+export async function readQuotes(): Promise<Array<ListedQuote & { status: QuoteStatus }>> {
+  const withStatus = await quoteQuery(
     (columns) => crm().from("quotes").select(columns).order("created_at", { ascending: false }),
-    "id, invoice_id, quote_number, active_revision_id, created_at",
+    "id, invoice_id, quote_number, active_revision_id, created_at, status",
   );
+  const result = missingQuoteStatus(withStatus.error)
+    ? await quoteQuery(
+        (columns) => crm().from("quotes").select(columns).order("created_at", { ascending: false }),
+        "id, invoice_id, quote_number, active_revision_id, created_at",
+      )
+    : withStatus;
 
-  throwIfError(error);
-  const rows = quoteRows(data);
+  throwIfError(result.error);
+  const rows = quoteRows(result.data);
   const selectionsById = await selectionsByRevision(rows);
-  return rows
-    .flatMap((row) => {
-      if (typeof row.id !== "string" || typeof row.invoice_id !== "string") return [];
-      const selections =
-        typeof row.active_revision_id === "string" ? selectionsById.get(row.active_revision_id) : undefined;
-      if (!selections) return [];
-      const listed = toListedQuote({
-        id: row.id,
-        invoice_id: row.invoice_id,
-        quote_number: row.quote_number,
-        selections,
-        created_at: row.created_at,
-      });
-      return listed ? [listed] : [];
+  const includeStatus = !missingQuoteStatus(withStatus.error);
+  return rows.flatMap((row) => {
+    if (typeof row.id !== "string" || typeof row.invoice_id !== "string") return [];
+    const selections =
+      typeof row.active_revision_id === "string" ? selectionsById.get(row.active_revision_id) : undefined;
+    if (!selections) return [];
+    const listed = toListedQuote({
+      id: row.id,
+      invoice_id: row.invoice_id,
+      quote_number: row.quote_number,
+      selections,
+      created_at: row.created_at,
     });
+    return listed ? [{ ...listed, status: includeStatus ? storedQuoteStatus(row.status) : "draft" }] : [];
+  });
 }
 
 export async function readActiveRevisionId(quoteId: string): Promise<string | undefined> {
@@ -195,25 +212,56 @@ function missingQuoteStatus(error: { message: string; code?: string } | null): b
   );
 }
 
-export async function readQuoteStatus(id: string): Promise<QuoteRecordStatus | undefined> {
+export async function readQuoteStatus(id: string): Promise<QuoteStatus | undefined> {
   const { data, error } = await crm().from("quotes").select("status").eq("id", id).maybeSingle();
   if (missingQuoteStatus(error)) return undefined;
   throwIfError(error);
   if (!data) return undefined;
-  const status = quoteRecordStatusSchema.safeParse(data.status);
-  return status.success ? status.data : "draft";
+  return storedQuoteStatus(data.status);
+}
+
+function quoteLogName(quote: QuoteRecord): string {
+  if (!quote.quoteNumber) return portalCopy.quote;
+  return quoteDisplayName(quote.quoteNumber, describeSelections(quote.selections).specs);
 }
 
 export async function updateQuote(
   id: string,
-  patch: { invoiceId?: string; activeRevisionId?: string; status?: QuoteRecordStatus },
+  patch: { invoiceId?: string; activeRevisionId?: string; status?: QuoteStatus },
 ): Promise<void> {
   const row: Record<string, unknown> = { updated_at: new Date().toISOString() };
+  let statusActivity: { quoteId: string; name: string; status: string } | undefined;
   if (patch.invoiceId) row.invoice_id = patch.invoiceId;
   if (patch.activeRevisionId) row.active_revision_id = patch.activeRevisionId;
-  if (patch.status) row.status = quoteRecordStatusSchema.parse(patch.status);
+  if (patch.status) {
+    const next = quoteStatusSchema.parse(patch.status);
+    const current = await readQuoteStatus(id);
+    row.status = next;
+    if (current && current !== next) {
+      const quote = await readQuote(id);
+      statusActivity = {
+        quoteId: id,
+        name: quote ? quoteLogName(quote) : portalCopy.quote,
+        status: quoteStatuses[next].label,
+      };
+    }
+  }
   const { error } = await crm().from("quotes").update(row).eq("id", id);
   throwIfError(error);
+  if (statusActivity) await recordQuoteStatusActivity(statusActivity);
+}
+
+export async function setQuoteStatus(id: string, status: QuoteStatus): Promise<void> {
+  const next = quoteStatusSchema.parse(status);
+  await updateQuote(id, { status: next });
+  const revisionId = await readActiveRevisionId(id);
+  if (!revisionId) return;
+  try {
+    await updateQuoteRevision(revisionId, { status: next });
+  } catch (error) {
+    const message = error instanceof Error ? error.message.toLowerCase() : "";
+    if (!message.includes("check constraint")) throw error;
+  }
 }
 
 export async function markQuoteSent(id: string): Promise<void> {

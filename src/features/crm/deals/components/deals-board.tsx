@@ -3,6 +3,7 @@
 import { ChevronLeft, ChevronRight, Filter, Globe, ImageIcon, List, Plus, Search } from "lucide-react";
 import Link from "next/link";
 import { useRef, useState } from "react";
+import { DealStatusBadge } from "@/src/features/crm/deals/components/deal-status-badge";
 import { copy } from "@/src/features/crm/deals/locales/en";
 import type { DealBoardItem, DealSource, DealStatus } from "@/src/features/crm/deals/types";
 import { dealStatusOption, dealStatusOptions, type DealStatusOption } from "@/src/features/crm/deals/utils/status";
@@ -22,7 +23,7 @@ function sourceLabel(source: DealSource): string {
 }
 
 function showsValue(stage: DealStatus): boolean {
-  return stage !== "lead";
+  return stage !== "new_lead";
 }
 
 function valueClass(stage: DealStatus): string {
@@ -222,19 +223,14 @@ export function DealsBoard({ deals, loadError }: { deals: DealBoardItem[]; loadE
                     className={`flex h-full max-h-full w-[280px] shrink-0 flex-col rounded-lg border p-3 ${columnClass(stage.tone)}`}
                   >
                     <div
-                      className={`mb-3 flex items-center justify-between border-b pb-3 ${
+                      className={`mb-3 flex items-center justify-between gap-2 border-b pb-3 ${
                         stage.tone === "won" ? "border-emerald-200" : "border-gray-200"
                       }`}
                     >
-                      <div className="flex min-w-0 items-center gap-2">
-                        <span className="h-2 w-2 shrink-0 rounded-full bg-black" aria-hidden="true" />
-                        <h3 className="truncate font-serif text-xs font-bold tracking-wide text-black uppercase">
-                          {stage.label}
-                        </h3>
-                        <span className="rounded-full border border-gray-200 bg-gray-100 px-2 py-0.5 text-[11px] font-semibold text-black">
-                          {cards.length}
-                        </span>
-                      </div>
+                      <DealStatusBadge status={stage.id} />
+                      <span className="rounded-full border border-gray-200 bg-gray-100 px-2 py-0.5 text-[11px] font-semibold text-black">
+                        {cards.length}
+                      </span>
                     </div>
                     <div className="min-h-0 flex-1 space-y-3 overflow-y-auto pr-1 pb-1">
                       {cards.map((deal) => (

@@ -39,8 +39,12 @@ export type DealRow = {
 };
 
 const legacyStatus: Record<string, DealStatus> = {
-  open: "lead",
-  invoice_sent: "quote_sent",
+  open: "new_lead",
+  lead: "new_lead",
+  invoice_sent: "active_quote",
+  quote_sent: "active_quote",
+  quote_viewed: "active_quote",
+  partially_signed: "pending_deposit",
 };
 
 function storedStatus(value: string | null | undefined): DealStatus | null {
@@ -63,12 +67,7 @@ export function toDeal(row: DealRow): Deal | undefined {
   return deal.success ? deal.data : undefined;
 }
 
-const quotedStatuses = new Set<DealStatus>([
-  "quote_sent",
-  "quote_viewed",
-  "partially_signed",
-  "deal_won",
-]);
+const quotedStatuses = new Set<DealStatus>(["active_quote", "pending_deposit", "deal_won"]);
 
 export function quoteIssued(status: DealStatus): boolean {
   return quotedStatuses.has(status);
@@ -81,7 +80,7 @@ export function contractOnDeal(
 ): boolean {
   if (!contractSent) return false;
   if (primaryDealCount <= 1) return true;
-  return status === "partially_signed" || status === "deal_won";
+  return status === "pending_deposit" || status === "deal_won";
 }
 
 export function toDealBoardItem(input: {

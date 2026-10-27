@@ -4,7 +4,7 @@ import { quoteSelectionsSchema } from "@/src/features/cpq/types";
 import {
   configChangesSchema,
   quoteCommunicationSchema,
-  quoteRecordStatusSchema,
+  quoteStatusSchema,
   quoteRevisionRendersSchema,
 } from "@/src/features/crm/quotes/types";
 import { customerSchema } from "@/src/features/crm/common/types";
@@ -197,12 +197,10 @@ export const conversationInboxItemSchema = z.object({
 
 export type ConversationInboxItem = z.infer<typeof conversationInboxItemSchema>;
 
-export const quoteRevisionViewStatusSchema = z.enum(["draft", "sent"]);
-
 export const conversationQuoteRevisionSchema = z.object({
   id: z.string(),
   revisionNumber: z.number().int().positive(),
-  status: quoteRevisionViewStatusSchema,
+  status: quoteStatusSchema,
   createdAt: z.string(),
   updatedAt: z.string(),
   totalLabel: z.string(),
@@ -230,7 +228,7 @@ export const conversationQuoteSchema = z.object({
   imageUrl: z.string().min(1),
   selections: quoteSelectionsSchema,
   activeRevisionId: z.string(),
-  status: quoteRecordStatusSchema.default("draft"),
+  status: quoteStatusSchema.default("draft"),
   revisions: z.array(conversationQuoteRevisionSchema),
 });
 

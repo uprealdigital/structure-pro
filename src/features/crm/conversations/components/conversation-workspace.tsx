@@ -25,6 +25,7 @@ import type {
   ConversationParticipant,
   ConversationWorkspace,
 } from "@/src/features/crm/conversations/types";
+import { mostRelevantDeal } from "@/src/features/crm/conversations/utils/deals";
 import { activityPreview, messageActivityAt } from "@/src/features/crm/conversations/utils/formatting";
 import type { DealStatus } from "@/src/features/crm/deals/types";
 
@@ -57,11 +58,10 @@ function shownInbox(
       return { ...deal, status: nextStatus };
     });
     const dealId = activeDealByConversation[item.id] ?? item.dealId;
-    const active = dealStatuses.find((deal) => deal.id === dealId);
     return {
       ...item,
       dealId,
-      dealStatus: active?.status ?? item.dealStatus,
+      dealStatus: mostRelevantDeal(dealStatuses)?.status ?? item.dealStatus,
       dealStatuses,
     };
   });

@@ -5,7 +5,7 @@ import { quoteSelectionsSchema } from "@/src/features/cpq/types";
 import { readDeal, readDealsByIds, readDealsByQuoteId, updateDeal } from "@/src/features/crm/deals/db/deal";
 import { createDealQuote, readDealQuotes, readDealQuotesForQuote } from "@/src/features/crm/deals/db/deal-quote";
 import { newInvoiceId } from "@/src/features/cpq/utils/id";
-import { createQuote, deleteQuote, readActiveRevisionId, readQuote, updateQuote } from "@/src/features/crm/quotes/db/quote";
+import { createQuote, deleteQuote, readActiveRevisionId, readQuote, readQuoteStatus, setQuoteStatus, updateQuote } from "@/src/features/crm/quotes/db/quote";
 import {
   createQuoteRevision,
   readQuoteRevision,
@@ -19,11 +19,14 @@ import {
   createDealQuoteSchema,
   duplicateQuoteSchema,
   payQuoteDepositSchema,
+  quoteLifecycleSchema,
   quoteCommunicationWriteSchema,
   quoteRevisionActivateSchema,
   quoteRevisionRenderFilesSchema,
   type QuoteRevisionRenders,
+  type QuoteStatus,
 } from "@/src/features/crm/quotes/types";
+import { quoteWindowExpired } from "@/src/features/crm/quotes/utils/status";
 
 export async function saveQuoteSelections(input: {
   quoteId: string;
@@ -296,7 +299,7 @@ export async function cancelQuote(input: { quoteId: string }): Promise<{ success
   try {
     const quote = await readQuote(parsed.data.quoteId);
     if (!quote) return { error: "Quote was not found" };
-    await updateQuote(quote.id, { status: "voided" });
+    await setQuoteStatus(quote.id, "voided");
     revalidatePath("/crm/conversations");
     revalidatePath("/crm/quotes");
     revalidatePath("/crm/deals");
@@ -352,6 +355,7 @@ export async function payQuoteDeposit(
       if (deal.status === "deal_won") continue;
       await updateDeal(deal.id, { status: "deal_won" });
     }
+    await setQuoteStatus(parsed.data.quoteId, "deposit_paid");
     revalidatePath("/crm/conversations");
     revalidatePath("/crm/quotes");
     revalidatePath("/crm/deals");
@@ -359,6 +363,77 @@ export async function payQuoteDeposit(
     return { success: true };
   } catch (error) {
     const message = error instanceof Error ? error.message : "Could not record this deposit";
+    return { error: message };
+  }
+}
+
+function revalidateQuote(quoteId: string) {
+  revalidatePath("/crm/conversations");
+  revalidatePath("/crm/quotes");
+  revalidatePath("/crm/deals");
+  revalidatePath(`/quote/${quoteId}`);
+}
+
+export async function deleteDraftQuote(input: { quoteId: string }): Promise<{ success: true } | { error: string }> {
+  const parsed = cancelQuoteSchema.safeParse(input);
+  if (!parsed.success) return { error: "A quote is required" };
+
+  try {
+    const status = await readQuoteStatus(parsed.data.quoteId);
+    if (status !== "draft") return { error: "Only a draft quote can be deleted" };
+    const deals = await readDealsByQuoteId(parsed.data.quoteId);
+    for (const deal of deals) {
+      if (deal.quoteId === parsed.data.quoteId) await updateDeal(deal.id, { quoteId: null });
+    }
+    await deleteQuote(parsed.data.quoteId);
+    revalidateQuote(parsed.data.quoteId);
+    return { success: true };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Could not delete this draft";
+    return { error: message };
+  }
+}
+
+export async function renewQuote(input: { quoteId: string }): Promise<{ success: true } | { error: string }> {
+  const parsed = cancelQuoteSchema.safeParse(input);
+  if (!parsed.success) return { error: "A quote is required" };
+
+  try {
+    const status = await readQuoteStatus(parsed.data.quoteId);
+    if (status !== "expired") return { error: "Only an expired quote can be renewed" };
+    await setQuoteStatus(parsed.data.quoteId, "draft");
+    revalidateQuote(parsed.data.quoteId);
+    return { success: true };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Could not renew this quote";
+    return { error: message };
+  }
+}
+
+export async function refreshQuoteLifecycle(
+  input: unknown,
+): Promise<{ success: true; data: { status: QuoteStatus } } | { error: string }> {
+  const parsed = quoteLifecycleSchema.safeParse(input);
+  if (!parsed.success) return { error: "A quote is required" };
+
+  try {
+    const status = await readQuoteStatus(parsed.data.quoteId);
+    if (!status) return { error: "Quote was not found" };
+    const revisionId = await readActiveRevisionId(parsed.data.quoteId);
+    const revision = revisionId ? await readQuoteRevision(revisionId) : undefined;
+    if (revision && quoteWindowExpired(status, revision.sharedQuoteAt)) {
+      await setQuoteStatus(parsed.data.quoteId, "expired");
+      revalidateQuote(parsed.data.quoteId);
+      return { success: true, data: { status: "expired" } };
+    }
+    if (parsed.data.openedByCustomer && status === "sent") {
+      await setQuoteStatus(parsed.data.quoteId, "viewed");
+      revalidateQuote(parsed.data.quoteId);
+      return { success: true, data: { status: "viewed" } };
+    }
+    return { success: true, data: { status } };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Could not update this quote";
     return { error: message };
   }
 }

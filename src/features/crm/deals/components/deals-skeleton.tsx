@@ -1,13 +1,13 @@
 import { Bone, SkeletonStatus } from "@/src/features/crm/common/components/skeleton";
-import { copy } from "@/src/features/crm/deals/locales/en";
+import { DealStatusBadge } from "@/src/features/crm/deals/components/deal-status-badge";
+import type { DealStatus } from "@/src/features/crm/deals/types";
 
-const columns: { label: string; cards: number; tone: "default" | "won" | "lost" }[] = [
-  { label: copy.statusLead, cards: 2, tone: "default" },
-  { label: copy.statusQuoteSent, cards: 2, tone: "default" },
-  { label: copy.statusQuoteViewed, cards: 1, tone: "default" },
-  { label: copy.statusPartiallySigned, cards: 1, tone: "default" },
-  { label: copy.statusDealWon, cards: 1, tone: "won" },
-  { label: copy.statusDealLost, cards: 1, tone: "lost" },
+const columns: { status: DealStatus; cards: number; tone: "default" | "won" | "lost" }[] = [
+  { status: "new_lead", cards: 2, tone: "default" },
+  { status: "active_quote", cards: 2, tone: "default" },
+  { status: "pending_deposit", cards: 1, tone: "default" },
+  { status: "deal_won", cards: 1, tone: "won" },
+  { status: "deal_lost", cards: 1, tone: "lost" },
 ];
 
 function columnClass(tone: "default" | "won" | "lost"): string {
@@ -51,21 +51,16 @@ export function DealsSkeleton() {
         <div className="flex h-full min-h-0 flex-1 items-stretch gap-3 overflow-hidden p-6">
           {columns.map((column) => (
             <section
-              key={column.label}
+              key={column.status}
               className={`flex h-full max-h-full w-[280px] shrink-0 flex-col rounded-lg border p-3 ${columnClass(column.tone)}`}
             >
               <div
-                className={`mb-3 flex items-center justify-between border-b pb-3 ${
+                className={`mb-3 flex items-center justify-between gap-2 border-b pb-3 ${
                   column.tone === "won" ? "border-emerald-200" : "border-gray-200"
                 }`}
               >
-                <div className="flex min-w-0 items-center gap-2">
-                  <span className="h-2 w-2 shrink-0 rounded-full bg-gray-300" aria-hidden="true" />
-                  <h3 className="truncate font-serif text-xs font-bold tracking-wide text-gray-400 uppercase">
-                    {column.label}
-                  </h3>
-                  <Bone className="h-4 w-6 rounded-full" />
-                </div>
+                <DealStatusBadge status={column.status} />
+                <Bone className="h-5 w-5 rounded-full" />
               </div>
               <div className="min-h-0 flex-1 space-y-3 overflow-hidden">
                 {Array.from({ length: column.cards }, (_, index) => (

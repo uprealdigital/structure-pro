@@ -22,11 +22,12 @@ import {
   type ConversationSummary,
 } from "@/src/features/crm/conversations/types";
 import { configChangesSummary } from "@/src/features/crm/conversations/utils/config-changes-summary";
+import { mostRelevantDeal } from "@/src/features/crm/conversations/utils/deals";
 import { formatDealMenuDate, productTitle, revisionSummary } from "@/src/features/crm/conversations/utils/formatting";
 import { changedConfig } from "@/src/features/crm/quotes/utils/config-changes";
 import type { ConfigChanges, QuoteRevisionRenders } from "@/src/features/crm/quotes/types";
 import type { Deal } from "@/src/features/crm/deals/types";
-import type { QuoteRecordStatus } from "@/src/features/crm/quotes/types";
+import type { QuoteStatus } from "@/src/features/crm/quotes/types";
 
 export type ConversationRow = {
   id: string;
@@ -154,7 +155,7 @@ export function toConversationInboxItem(input: {
     contactPhone: input.customer.phone,
     contactEmail: input.customer.email,
     dealId: input.deal.id,
-    dealStatus: input.deal.status,
+    dealStatus: mostRelevantDeal(linked)?.status ?? input.deal.status,
     dealStatuses: linked.map((deal) => ({ id: deal.id, status: deal.status })),
     dealSource: input.deal.source,
     contractSent: input.summary.contractSent,
@@ -187,7 +188,7 @@ export function toConversationDealListItem(input: {
 export function toConversationQuoteRevision(input: {
   id: string;
   revisionNumber: number;
-  status: "draft" | "sent";
+  status: QuoteStatus;
   createdAt: string;
   updatedAt: string;
   selections: QuoteSelections;
@@ -230,7 +231,7 @@ export function toConversationQuote(input: {
   imageUrl: string;
   selections: QuoteSelections;
   activeRevisionId: string;
-  status: QuoteRecordStatus;
+  status: QuoteStatus;
   revisions: ConversationQuoteRevision[];
 }): ConversationQuote | undefined {
   const quote = conversationQuoteSchema.safeParse(input);

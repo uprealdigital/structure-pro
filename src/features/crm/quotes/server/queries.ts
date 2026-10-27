@@ -4,23 +4,19 @@ import { cache } from "react";
 import { describeSelections } from "@/src/features/cpq/utils/pricing";
 import { readCustomers } from "@/src/features/crm/common/db/customer";
 import { readDealCustomers, readDealCustomersForDeals } from "@/src/features/crm/common/db/deal-customer";
-import { readConversations } from "@/src/features/crm/conversations/db/conversation";
-import { canonicalConversationByCustomer } from "@/src/features/crm/conversations/utils/conversations";
 import { readDeals, readDealsByIds, readDealsByQuoteId } from "@/src/features/crm/deals/db/deal";
 import { readAllDealQuotes, readDealQuotesForQuote } from "@/src/features/crm/deals/db/deal-quote";
-import { contractOnDeal, quoteIssued } from "@/src/features/crm/deals/utils/mappers";
-import { readActiveRevisionId, readQuote, readQuotes } from "@/src/features/crm/quotes/db/quote";
+import { readActiveRevisionId, readQuote, readQuoteStatus, readQuotes } from "@/src/features/crm/quotes/db/quote";
 import { readQuoteRevision } from "@/src/features/crm/quotes/db/quote-revision";
 import type { QuoteCustomer, QuoteListItem, QuotePortal, QuotePortalCustomer, QuotePortalRecipient } from "@/src/features/crm/quotes/types";
-import { quoteDisplayName, quotePortalDealName, quotePortalStatus } from "@/src/features/crm/quotes/utils/formatting";
+import { quoteDisplayName, quotePortalDealName } from "@/src/features/crm/quotes/utils/formatting";
 import { toQuoteListItem, toQuotePortal } from "@/src/features/crm/quotes/utils/mappers";
 
 export const getQuoteList = cache(async (): Promise<QuoteListItem[]> => {
-  const [quotes, deals, customers, conversations, links] = await Promise.all([
+  const [quotes, deals, customers, links] = await Promise.all([
     readQuotes(),
     readDeals(),
     readCustomers(),
-    readConversations(),
     readDealCustomers(),
   ]);
 
@@ -50,28 +46,6 @@ export const getQuoteList = cache(async (): Promise<QuoteListItem[]> => {
     related.push(deal);
     dealsByQuote.set(link.quoteId, related);
   }
-  const conversationByCustomer = canonicalConversationByCustomer(conversations);
-  const primaryDealsByCustomer = new Map<string, number>();
-  for (const link of links) {
-    if (!link.isPrimary) continue;
-    primaryDealsByCustomer.set(link.customerId, (primaryDealsByCustomer.get(link.customerId) ?? 0) + 1);
-  }
-  const contractQuoteIds = new Set<string>();
-  for (const link of links) {
-    if (!link.isPrimary) continue;
-    const conversation = conversationByCustomer.get(link.customerId);
-    if (!conversation?.contractSent) continue;
-    const deal = dealById.get(link.dealId);
-    if (!deal) continue;
-    const primaryDealCount = primaryDealsByCustomer.get(link.customerId) ?? 1;
-    if (contractOnDeal(deal.status, true, primaryDealCount) && deal.quoteId) {
-      contractQuoteIds.add(deal.quoteId);
-      for (const quoteLink of dealLinks) {
-        if (quoteLink.dealId === deal.id) contractQuoteIds.add(quoteLink.quoteId);
-      }
-    }
-  }
-
   const items: QuoteListItem[] = [];
   for (const quote of quotes) {
     const described = describeSelections(quote.selections);
@@ -97,8 +71,7 @@ export const getQuoteList = cache(async (): Promise<QuoteListItem[]> => {
       total: described.estimate.total,
       monthly: described.estimate.rto,
       customers: quoteCustomers,
-      contractSent: contractQuoteIds.has(quote.id),
-      invoiceSent: related.some((deal) => quoteIssued(deal.status)),
+      status: quote.status,
     });
     if (item) items.push(item);
   }
@@ -177,6 +150,6 @@ export const getQuotePortal = cache(async (id: string, revisionId?: string): Pro
     dealIds: deals.map((deal) => deal.id),
     selections: revision.selections,
     communication: revision.communication,
-    status: quotePortalStatus(deals, revision.status),
+    status: (await readQuoteStatus(quote.id)) ?? revision.status,
   });
 });

@@ -1,5 +1,7 @@
 import { db } from "@/src/common/lib/supabase/supabase.service";
 import { throwIfError } from "@/src/common/utils/error-handling";
+import { recordDealStatusActivity } from "@/src/features/crm/conversations/server/status-activity";
+import { dealStatuses } from "@/src/features/crm/deals/config/status";
 import { dealPatchSchema, dealWriteSchema, type Deal } from "@/src/features/crm/deals/types";
 import { toDeal, type DealRow } from "@/src/features/crm/deals/utils/mappers";
 import { defaultDealName } from "@/src/features/crm/deals/utils/naming";
@@ -48,7 +50,7 @@ export async function createDeal(input: {
     .insert({
       quote_id: deal.quoteId,
       source: deal.source,
-      status: "lead",
+      status: "new_lead",
     })
     .select(legacyDealColumns)
     .single();
@@ -110,11 +112,19 @@ export async function updateDeal(
 ): Promise<void> {
   const next = dealPatchSchema.parse(patch);
   const row: Record<string, unknown> = { updated_at: new Date().toISOString() };
+  let statusActivity: { dealId: string; name: string; status: string } | undefined;
   if (next.name) row.name = next.name;
   if (next.status) {
     const current = await readDeal(id);
     row.status = next.status;
-    if (current && current.status !== next.status) row.previous_status = current.status;
+    if (current && current.status !== next.status) {
+      row.previous_status = current.status;
+      const name =
+        next.name?.trim() ||
+        current.name?.trim() ||
+        defaultDealName(current.source, current.createdAt ?? new Date().toISOString());
+      statusActivity = { dealId: id, name, status: dealStatuses[next.status].label };
+    }
   }
   if (next.quoteId !== undefined) row.quote_id = next.quoteId;
   if (next.viewedAt !== undefined) row.viewed_at = next.viewedAt;
@@ -124,9 +134,11 @@ export async function updateDeal(
     if (Object.keys(row).length === 1) return;
     const retry = await crm().from("deals").update(row).eq("id", id);
     throwIfError(retry.error);
+    if (statusActivity) await recordDealStatusActivity(statusActivity);
     return;
   }
   throwIfError(updated.error);
+  if (statusActivity) await recordDealStatusActivity(statusActivity);
 }
 
 export async function deleteDeal(id: string): Promise<void> {

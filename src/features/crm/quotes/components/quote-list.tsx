@@ -5,23 +5,12 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { QuoteCustomers } from "@/src/features/crm/quotes/components/quote-customers";
+import { QuoteStatusBadge } from "@/src/features/crm/quotes/components/quote-status-badge";
 import { copy } from "@/src/features/crm/quotes/locales/en";
-import type { QuoteListItem, QuoteStatus } from "@/src/features/crm/quotes/types";
+import type { QuoteListItem } from "@/src/features/crm/quotes/types";
 import { formatQuoteDate, quotePageNumbers } from "@/src/features/crm/quotes/utils/formatting";
 
 const pageSize = 15;
-
-const statusLabel: Record<QuoteStatus, string> = {
-  draft: copy.statusDraft,
-  sent: copy.statusSent,
-  contract: copy.statusContract,
-};
-
-const statusClass: Record<QuoteStatus, string> = {
-  draft: "border-gray-200 bg-gray-100 text-gray-700",
-  sent: "border-amber-200/60 bg-amber-50 text-amber-800",
-  contract: "border-emerald-200/60 bg-emerald-50 text-emerald-800",
-};
 
 export function QuoteList({ quotes, loadError }: { quotes: QuoteListItem[]; loadError: boolean }) {
   const router = useRouter();
@@ -143,11 +132,7 @@ export function QuoteList({ quotes, loadError }: { quotes: QuoteListItem[]; load
                           <div className="mt-0.5 text-[10px] text-gray-500">{quote.monthlyLabel}</div>
                         </td>
                         <td className="px-4 py-3 text-xs whitespace-nowrap">
-                          <span
-                            className={`inline-flex items-center rounded border px-2 py-0.5 text-[11px] font-medium whitespace-nowrap ${statusClass[quote.status]}`}
-                          >
-                            {statusLabel[quote.status]}
-                          </span>
+                          <QuoteStatusBadge status={quote.status} className="px-2 py-0.5 text-[11px]" />
                         </td>
                         <td className="py-3 pr-6 pl-4 text-center">
                           <div className="flex items-center justify-end pr-2 text-gray-400 transition-colors group-hover:text-gray-900">

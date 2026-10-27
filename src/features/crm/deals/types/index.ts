@@ -4,10 +4,9 @@ export const dealSourceSchema = z.enum(["quote", "yard_preview"]);
 export type DealSource = z.infer<typeof dealSourceSchema>;
 
 export const dealStatusSchema = z.enum([
-  "lead",
-  "quote_sent",
-  "quote_viewed",
-  "partially_signed",
+  "new_lead",
+  "active_quote",
+  "pending_deposit",
   "deal_won",
   "deal_lost",
 ]);

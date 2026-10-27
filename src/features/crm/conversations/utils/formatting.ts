@@ -63,9 +63,19 @@ const quoteSystemPrefix = "quote:";
 const savedRevisionPrefix = "saved-revision:";
 const activeQuotePrefix = "active-quote:";
 const createdDealPrefix = "deal-created:";
+const dealStatusPrefix = "deal-status:";
+const quoteStatusPrefix = "quote-status:";
 const renamedDealPrefix = "deal-renamed:";
 
-export type SystemEventKind = "deal" | "quote" | "activeQuote" | "created" | "renamed" | "savedRevision";
+export type SystemEventKind =
+  | "deal"
+  | "quote"
+  | "activeQuote"
+  | "created"
+  | "dealStatus"
+  | "quoteStatus"
+  | "renamed"
+  | "savedRevision";
 
 export type SystemEvent = {
   kind: SystemEventKind;
@@ -73,6 +83,7 @@ export type SystemEvent = {
   name: string;
   previousName?: string;
   dealId?: string;
+  status?: string;
 };
 
 function decodedName(value: string): string {
@@ -104,6 +115,20 @@ export function systemEventBody(
   return name;
 }
 
+export function statusEventBody(kind: "dealStatus" | "quoteStatus", name: string, status: string): string {
+  const prefix = kind === "dealStatus" ? dealStatusPrefix : quoteStatusPrefix;
+  return `${prefix}${encodeURIComponent(name)}:${encodeURIComponent(status)}`;
+}
+
+function statusEvent(kind: "dealStatus" | "quoteStatus", rest: string): SystemEvent | undefined {
+  const split = rest.indexOf(":");
+  if (split <= 0) return undefined;
+  const name = decodedName(rest.slice(0, split));
+  const status = decodedName(rest.slice(split + 1));
+  if (!name || !status) return undefined;
+  return { kind, label: copy.statusSetTo, name, status };
+}
+
 export function systemEventText(text: string): SystemEvent {
   if (text.startsWith(renamedDealPrefix)) {
     const rest = text.slice(renamedDealPrefix.length);
@@ -115,6 +140,14 @@ export function systemEventText(text: string): SystemEvent {
         return { kind: "renamed", label: copy.dealWasRenamedFrom, previousName, name };
       }
     }
+  }
+  if (text.startsWith(dealStatusPrefix)) {
+    const event = statusEvent("dealStatus", text.slice(dealStatusPrefix.length));
+    if (event) return event;
+  }
+  if (text.startsWith(quoteStatusPrefix)) {
+    const event = statusEvent("quoteStatus", text.slice(quoteStatusPrefix.length));
+    if (event) return event;
   }
   if (text.startsWith(createdDealPrefix)) {
     const rest = text.slice(createdDealPrefix.length);
@@ -185,6 +218,9 @@ export function activityPreview(activity: Activity | undefined): string {
     }
     if (event.kind === "savedRevision" && event.previousName) {
       return `${copy.newRevision} ${name} ${copy.newRevisionFor} ${messagePreview(event.previousName)}`;
+    }
+    if ((event.kind === "dealStatus" || event.kind === "quoteStatus") && event.status) {
+      return `${name} ${copy.statusSetTo} ${messagePreview(event.status)}`;
     }
     return name ? `${event.label} ${name}` : event.label;
   }

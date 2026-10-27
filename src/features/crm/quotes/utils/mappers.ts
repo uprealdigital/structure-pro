@@ -12,7 +12,6 @@ import {
   type QuotePortal,
   type QuotePortalCustomer,
   type QuotePortalRecipient,
-  type QuotePortalStatus,
   type QuoteRevision,
   type QuoteStatus,
 } from "@/src/features/crm/quotes/types";
@@ -69,12 +68,6 @@ export function toQuoteRevision(row: QuoteRevisionRow): QuoteRevision | undefine
   return revision.success ? revision.data : undefined;
 }
 
-function quoteStatus(contractSent: boolean, invoiceSent: boolean): QuoteStatus {
-  if (contractSent) return "contract";
-  if (invoiceSent) return "sent";
-  return "draft";
-}
-
 export function toQuoteListItem(input: {
   id: string;
   invoiceId: string;
@@ -84,8 +77,7 @@ export function toQuoteListItem(input: {
   total: number;
   monthly: number;
   customers: QuoteCustomer[];
-  contractSent: boolean;
-  invoiceSent: boolean;
+  status: QuoteStatus;
 }): QuoteListItem | undefined {
   const item = quoteListItemSchema.safeParse({
     id: input.id,
@@ -96,7 +88,7 @@ export function toQuoteListItem(input: {
     customers: input.customers,
     priceLabel: formatQuotePrice(input.total),
     monthlyLabel: formatQuoteMonthly(input.monthly),
-    status: quoteStatus(input.contractSent, input.invoiceSent),
+    status: input.status,
   });
   return item.success ? item.data : undefined;
 }
@@ -122,7 +114,7 @@ export function toQuotePortal(input: {
   dealIds: string[];
   selections: QuoteSelections;
   communication: QuoteCommunication | null;
-  status: QuotePortalStatus;
+  status: QuoteStatus;
 }): QuotePortal | undefined {
   const portal = quotePortalSchema.safeParse({
     id: input.id,

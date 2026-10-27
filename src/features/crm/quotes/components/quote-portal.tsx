@@ -2,6 +2,7 @@
 
 import { ArrowUpRight, Calendar, Check, CreditCard, Download, Eye, Pencil, Share2, ShieldCheck } from "lucide-react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { BuildingConfigurator } from "@/src/features/cpq/components/building-configurator";
 import type { QuoteRevisionRenderFiles } from "@/src/features/cpq/components/building-scene";
@@ -12,28 +13,12 @@ import type { ConversationParticipant } from "@/src/features/crm/conversations/t
 import { usePayDeposit } from "@/src/features/crm/quotes/hooks/use-pay-deposit";
 import { useSaveQuoteRevision } from "@/src/features/crm/quotes/hooks/use-save-quote-revision";
 import { useSendQuote } from "@/src/features/crm/quotes/hooks/use-send-quote";
+import { quoteStatuses } from "@/src/features/crm/quotes/config/status";
+import { QuoteStatusBadge } from "@/src/features/crm/quotes/components/quote-status-badge";
 import { portalCopy } from "@/src/features/crm/quotes/locales/en";
-import { saveQuoteCommunication } from "@/src/features/crm/quotes/server/actions";
-import type { QuoteCommunication, QuotePortal, QuotePortalMode, QuotePortalStatus } from "@/src/features/crm/quotes/types";
+import { refreshQuoteLifecycle, saveQuoteCommunication } from "@/src/features/crm/quotes/server/actions";
+import type { QuoteCommunication, QuotePortal, QuotePortalMode } from "@/src/features/crm/quotes/types";
 import { downloadQuotePdf, shareQuotePdf } from "@/src/features/crm/quotes/utils/quote-pdf";
-
-const statusLabel: Record<QuotePortalStatus, string> = {
-  draft: portalCopy.statusDraft,
-  sent: portalCopy.statusSent,
-  viewed: portalCopy.statusViewed,
-  signed: portalCopy.statusSigned,
-  deposit_paid: portalCopy.statusDepositPaid,
-  expired: portalCopy.statusExpired,
-};
-
-const statusClass: Record<QuotePortalStatus, string> = {
-  draft: "border-gray-200 bg-gray-100 text-gray-700",
-  sent: "border-[#fde68a] bg-[#fef9ee] text-[#713f12]",
-  viewed: "border-violet-200 bg-violet-50 text-violet-700",
-  signed: "border-amber-200 bg-amber-50 text-amber-800",
-  deposit_paid: "border-emerald-200 bg-emerald-50 text-emerald-700",
-  expired: "border-red-200 bg-red-50 text-red-600",
-};
 
 const actionClass =
   "inline-flex cursor-pointer items-center gap-2 rounded-full border border-[#c5c6c9] px-3.5 py-1.5 text-xs font-medium text-[#1a1c1d] transition-colors hover:bg-[#eeeef0]";
@@ -65,6 +50,7 @@ export function QuotePortal({
   quote: QuotePortal;
   mode?: QuotePortalMode;
 }) {
+  const router = useRouter();
   const internal = mode === "internal";
   const { won, pending, error, pay } = usePayDeposit(quote.id, quote.won);
   const { save } = useSaveQuoteRevision(quote.id);
@@ -81,6 +67,18 @@ export function QuotePortal({
   const [copied, setCopied] = useState(false);
   const [fileError, setFileError] = useState("");
   const shareRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (quote.status !== "sent" && quote.status !== "viewed" && quote.status !== "changes_requested") return;
+    let cancelled = false;
+    void refreshQuoteLifecycle({ quoteId: quote.id, openedByCustomer: !internal }).then((result) => {
+      if (cancelled || "error" in result || result.data.status === quote.status) return;
+      router.refresh();
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [internal, quote.id, quote.status, router]);
 
   useEffect(() => {
     if (!shareOpen) return;
@@ -183,11 +181,7 @@ export function QuotePortal({
             ) : null}
             <div className="flex flex-wrap items-center gap-3">
               {internal ? (
-                <span
-                  className={`inline-flex items-center rounded border px-2.5 py-0.5 text-xs font-medium shadow-xs ${statusClass[quote.status]}`}
-                >
-                  {statusLabel[quote.status]}
-                </span>
+                <QuoteStatusBadge status={quote.status} className="px-2.5 py-0.5 text-xs" />
               ) : null}
               <p className="text-xs font-medium text-[#655d55]">{quote.versionLabel}</p>
             </div>
@@ -379,7 +373,7 @@ export function QuotePortal({
           quoteId={quote.id}
           revisionId={quote.revisionId}
           imageUrl={quote.renders?.render_small_url || quote.imageUrl}
-          statusLabel={statusLabel[quote.status]}
+          statusLabel={quoteStatuses[quote.status].label}
           communication={quote.communication}
           onSave={saveCommunication}
           onSend={send}

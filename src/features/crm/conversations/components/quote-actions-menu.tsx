@@ -1,8 +1,9 @@
 "use client";
 
-import { Ban, CopyPlus, EllipsisVertical, FolderOutput, Link, Plus } from "lucide-react";
+import { Ban, CopyPlus, EllipsisVertical, FolderOutput, Link, Plus, Trash2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { copy } from "@/src/features/crm/conversations/locales/en";
+import type { QuoteStatusAction } from "@/src/features/crm/quotes/config/status";
 
 export function QuoteActionsMenu({
   quoteId,
@@ -11,7 +12,8 @@ export function QuoteActionsMenu({
   onAddQuote,
   onMove,
   onDuplicate,
-  onCancel,
+  menuAction,
+  onMenuAction,
   onCopied,
   onCopyError,
 }: {
@@ -21,7 +23,8 @@ export function QuoteActionsMenu({
   onAddQuote: () => void;
   onMove: () => void;
   onDuplicate: () => void;
-  onCancel: () => void;
+  menuAction?: QuoteStatusAction;
+  onMenuAction: () => void;
   onCopied: () => void;
   onCopyError: () => void;
 }) {
@@ -122,20 +125,28 @@ export function QuoteActionsMenu({
             <Link className="h-3.5 w-3.5 shrink-0 text-gray-500" aria-hidden="true" />
             <span>{copy.copyPublishLink}</span>
           </button>
-          <div className="my-1 border-t border-gray-100" />
-          <button
-            type="button"
-            role="menuitem"
-            disabled={pending}
-            onClick={() => {
-              setOpen(false);
-              onCancel();
-            }}
-            className="flex w-full cursor-pointer items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-xs font-medium text-red-600 transition-colors hover:bg-red-50 disabled:opacity-50"
-          >
-            <Ban className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-            <span>{copy.cancelQuote}</span>
-          </button>
+          {menuAction ? (
+            <>
+              <div className="my-1 border-t border-gray-100" />
+              <button
+                type="button"
+                role="menuitem"
+                disabled={pending}
+                onClick={() => {
+                  setOpen(false);
+                  onMenuAction();
+                }}
+                className="flex w-full cursor-pointer items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-xs font-medium text-red-600 transition-colors hover:bg-red-50 disabled:opacity-50"
+              >
+                {menuAction.id === "delete_draft" ? (
+                  <Trash2 className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                ) : (
+                  <Ban className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                )}
+                <span>{menuAction.label}</span>
+              </button>
+            </>
+          ) : null}
         </div>
       ) : null}
     </div>

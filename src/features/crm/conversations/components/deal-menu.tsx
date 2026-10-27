@@ -6,7 +6,7 @@ import { useEffect, useRef, useState } from "react";
 import { copy } from "@/src/features/crm/conversations/locales/en";
 import type { ConversationDealListItem, ConversationDealOption } from "@/src/features/crm/conversations/types";
 import { orderedDealMenu } from "@/src/features/crm/conversations/utils/deals";
-import { dealStatusOption } from "@/src/features/crm/deals/utils/status";
+import { canMarkDealLost, dealStatusOption } from "@/src/features/crm/deals/utils/status";
 import { dealNameMaxLength, type DealStatus } from "@/src/features/crm/deals/types";
 
 function menuItems(deals: ConversationDealOption[]): ConversationDealListItem[] {
@@ -141,9 +141,24 @@ function DealSwitchList({
   onShowLost: () => void;
   onChoose: (dealId: string) => void;
 }) {
+  const list = useRef<HTMLUListElement>(null);
+
+  useEffect(() => {
+    const scroller = list.current;
+    const item = scroller?.querySelector<HTMLElement>("[data-current='true']");
+    if (!scroller || !item) return;
+    const view = scroller.getBoundingClientRect();
+    const row = item.getBoundingClientRect();
+    const hiddenBelow = row.bottom - view.bottom;
+    const hiddenAbove = view.top - row.top;
+    if (hiddenBelow <= 1 && hiddenAbove <= 1) return;
+    if (hiddenBelow > 1) scroller.scrollTop += hiddenBelow;
+    else scroller.scrollTop -= hiddenAbove;
+  }, []);
+
   return (
     <>
-      <ul role="menu" aria-label={copy.switchActiveDeal} className="max-h-80 space-y-1 overflow-y-auto p-2">
+      <ul ref={list} role="menu" aria-label={copy.switchActiveDeal} className="max-h-80 space-y-1 overflow-y-auto p-2">
         {deals.map((deal) => {
           const current = deal.id === selectedId;
           const lostDeal = deal.stage === "deal_lost";
@@ -152,6 +167,7 @@ function DealSwitchList({
               <button
                 type="button"
                 role="menuitem"
+                data-current={current ? "true" : undefined}
                 aria-current={current ? "true" : undefined}
                 onClick={() => onChoose(deal.id)}
                 className={`w-full rounded-lg p-2.5 text-left transition-colors ${
@@ -260,6 +276,7 @@ export function DealHeading({
   const [renameError, setRenameError] = useState("");
   const menu = useRef<HTMLDivElement>(null);
   const items = menuItems(deals);
+  const canMarkLost = canMarkDealLost(selectedStage);
   const extra = Math.max(0, items.length - 1);
   const hasNewDeal = items.some((deal) => deal.isNew && deal.id !== selectedId && deal.stage !== "deal_lost");
   const lostCount = items.filter((deal) => deal.stage === "deal_lost").length;
@@ -497,28 +514,32 @@ export function DealHeading({
               <Plus className="h-3.5 w-3.5 shrink-0 text-gray-500" aria-hidden="true" />
               <span>{copy.createDeal}</span>
             </Link>
-            <div className="my-1 border-t border-gray-100" />
-            <button
-              type="button"
-              role="menuitem"
-              disabled={pending}
-              onClick={() => {
-                setActionsOpen(false);
-                setSwitchOpen(false);
-                if (lost) onReopen();
-                else onMarkLost();
-              }}
-              className={`flex w-full cursor-pointer items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-xs font-medium disabled:opacity-50 ${
-                lost ? "text-gray-700 hover:bg-gray-50" : "text-red-600 hover:bg-red-50"
-              }`}
-            >
-              {lost ? (
-                <RotateCcw className="h-3.5 w-3.5 shrink-0 text-gray-600" aria-hidden="true" />
-              ) : (
-                <X className="h-3.5 w-3.5 shrink-0 text-red-600" aria-hidden="true" />
-              )}
-              <span>{lost ? copy.reopenDeal : copy.markAsLost}</span>
-            </button>
+            {canMarkLost || lost ? (
+              <>
+                <div className="my-1 border-t border-gray-100" />
+                <button
+                  type="button"
+                  role="menuitem"
+                  disabled={pending}
+                  onClick={() => {
+                    setActionsOpen(false);
+                    setSwitchOpen(false);
+                    if (lost) onReopen();
+                    else onMarkLost();
+                  }}
+                  className={`flex w-full cursor-pointer items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-xs font-medium disabled:opacity-50 ${
+                    lost ? "text-gray-700 hover:bg-gray-50" : "text-red-600 hover:bg-red-50"
+                  }`}
+                >
+                  {lost ? (
+                    <RotateCcw className="h-3.5 w-3.5 shrink-0 text-gray-600" aria-hidden="true" />
+                  ) : (
+                    <X className="h-3.5 w-3.5 shrink-0 text-red-600" aria-hidden="true" />
+                  )}
+                  <span>{lost ? copy.reopenDeal : copy.markAsLost}</span>
+                </button>
+              </>
+            ) : null}
           </div>
         ) : null}
       </div>
