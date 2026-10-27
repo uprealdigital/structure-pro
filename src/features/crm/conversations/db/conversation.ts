@@ -2,6 +2,7 @@ import { db } from "@/src/common/lib/supabase/supabase.service";
 import { throwIfError } from "@/src/common/utils/error-handling";
 import { createActivities, readActivities } from "@/src/features/crm/conversations/db/activity";
 import {
+  conversationAddressSchema,
   conversationPatchSchema,
   conversationWriteSchema,
   type ActivityInsert,
@@ -47,6 +48,12 @@ export async function createConversation(input: {
   const conversation = conversationWriteSchema.parse(input);
   const existing = await readConversationSummaryByCustomer(conversation.customerId);
   if (existing) {
+    if (conversation.channelKey || conversation.chatId) {
+      await updateConversationAddress(existing.id, {
+        channelKey: conversation.channelKey,
+        chatId: conversation.chatId,
+      });
+    }
     if (conversation.activities.length > 0) {
       await createActivities(existing.id, conversation.activities);
     }
@@ -148,6 +155,19 @@ export async function readConversations(): Promise<ConversationSummary[]> {
   return ((data ?? []) as ConversationSummaryRow[])
     .map(toConversationSummary)
     .filter((summary): summary is ConversationSummary => summary != null);
+}
+
+export async function updateConversationAddress(
+  id: string,
+  input: { channelKey?: string; chatId?: string },
+): Promise<void> {
+  const next = conversationAddressSchema.parse(input);
+  const row: Record<string, unknown> = { updated_at: new Date().toISOString() };
+  if (next.channelKey) row.channel_key = next.channelKey;
+  if (next.chatId) row.chat_id = next.chatId;
+  if (Object.keys(row).length === 1) return;
+  const { error } = await crm().from("conversations").update(row).eq("id", id);
+  throwIfError(error);
 }
 
 export async function updateConversation(

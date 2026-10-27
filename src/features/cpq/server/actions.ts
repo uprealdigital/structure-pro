@@ -3,9 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { callRouter, readJson } from "@/src/common/utils/internal-call";
 import { toE164 } from "@/src/common/utils/phone";
-import { openingSms } from "@/src/features/cpq/utils/system";
-import { systemEventBody } from "@/src/features/crm/conversations/utils/formatting";
-import { defaultDealName } from "@/src/features/crm/deals/utils/naming";
+import { sendWebsiteQuoteMessage } from "@/src/features/crm/conversations/server/actions";
 import { createConfiguration } from "@/src/features/cpq/db/configuration";
 import { createQuote, deleteQuote } from "@/src/features/crm/quotes/db/quote";
 import { getConfiguration } from "@/src/features/cpq/server/queries";
@@ -75,25 +73,19 @@ export async function createQuoteAction(input: {
 
   const channel = quoteChannel();
   const invoiceId = newInvoiceId();
-  const openingMessage = openingSms(contact.data.fullName, selections.data);
   let quoteId: string | undefined;
   let dealId: string | undefined;
-  let createdConversation = false;
-  let lookupKey: string | undefined;
-  let conversationId: string | undefined;
 
   try {
     quoteId = await createQuote({ invoiceId, selections: selections.data });
 
     const { POST: createDealRoute } = await import("@/src/app/api/crm/deals/route");
-    const deal = await readJson<{ id: string; name?: string | null }>(
+    const deal = await readJson<{ id: string }>(
       await callRouter(createDealRoute, "/api/crm/deals", {
         body: { quoteId, source: "quote" },
       }),
     );
     dealId = deal.id;
-    const loggedAt = new Date();
-    const dealName = deal.name?.trim() || defaultDealName("quote", loggedAt.toISOString());
 
     const { POST: createCustomer } = await import("@/src/app/api/crm/customers/route");
     const savedCustomer = await readJson<{ id: string }>(
@@ -107,47 +99,15 @@ export async function createQuoteAction(input: {
       }),
     );
 
-    const { POST: start } = await import("@/src/app/api/ai/conversations/route");
-    const started = await readJson<{
-      lookupKey: string;
-      conversationId?: string;
-      created?: boolean;
-    }>(
-      await callRouter(start, "/api/ai/conversations", {
-        body: {
-          phone,
-          channel,
-          customerId: savedCustomer.id,
-          dealId: deal.id,
-          openingMessage,
-          leadActivity: {
-            text: systemEventBody("created", dealName, deal.id),
-            createdAt: loggedAt.toISOString(),
-          },
-        },
-      }),
-    );
-    lookupKey = started.lookupKey;
-    conversationId = started.conversationId;
-    createdConversation = started.created === true;
+    const notified = await sendWebsiteQuoteMessage({
+      dealId: deal.id,
+      customerId: savedCustomer.id,
+    });
 
     revalidatePath("/");
     revalidatePath("/crm/conversations");
-    return { success: true, data: { invoiceId, channel } };
+    return { success: true, data: { invoiceId, channel: notified.channel } };
   } catch (error) {
-    if (createdConversation && lookupKey) {
-      const { DELETE: removeConversation } = await import("@/src/app/api/ai/conversations/route");
-      await callRouter(removeConversation, "/api/ai/conversations", {
-        method: "DELETE",
-        body: { lookupKey },
-      }).catch(() => undefined);
-    } else if (conversationId) {
-      const { DELETE: removeConversation } = await import("@/src/app/api/ai/conversations/route");
-      await callRouter(removeConversation, "/api/ai/conversations", {
-        method: "DELETE",
-        body: { conversationId, latestActivity: true, latestCount: 2 },
-      }).catch(() => undefined);
-    }
     if (dealId) {
       const { DELETE: removeDeal } = await import("@/src/app/api/crm/deals/[id]/route");
       await callRouter(removeDeal, `/api/crm/deals/${dealId}`, {

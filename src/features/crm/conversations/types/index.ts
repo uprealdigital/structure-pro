@@ -151,6 +151,11 @@ export const conversationPatchSchema = z.object({
   contractSent: z.boolean().optional(),
 });
 
+export const conversationAddressSchema = z.object({
+  channelKey: z.string().trim().min(1).optional(),
+  chatId: z.string().trim().min(1).optional(),
+});
+
 export const activeDealRequestSchema = z.object({
   customerId: z.string().trim().min(1),
   dealId: dealIdSchema,

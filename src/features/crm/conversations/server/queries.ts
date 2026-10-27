@@ -17,6 +17,7 @@ import {
   readActivities,
   readActivitiesSince,
   readLatestActivity,
+  readLatestConversationIdForChannel,
   readLatestMessageAt,
 } from "@/src/features/crm/conversations/db/activity";
 import {
@@ -59,6 +60,10 @@ import type { ConversationQuoteRevision } from "@/src/features/crm/conversations
 
 export async function getConversation(key: string) {
   return readConversation(key);
+}
+
+export async function getLatestChannelConversationId(channel: "sms" | "telegram") {
+  return readLatestConversationIdForChannel(channel);
 }
 
 export async function getConversationByCustomer(customerId: string) {

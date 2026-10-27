@@ -70,6 +70,20 @@ export async function createActivities(
   throwIfError(touched.error);
 }
 
+export async function readLatestConversationIdForChannel(
+  channel: "sms" | "telegram",
+): Promise<string | undefined> {
+  const { data, error } = await crm()
+    .from("activities")
+    .select("conversation_id")
+    .eq("channel", channel)
+    .order("created_at", { ascending: false })
+    .limit(1);
+  throwIfError(error);
+  const id = data?.[0]?.conversation_id;
+  return typeof id === "string" ? id : undefined;
+}
+
 export async function readLatestActivity(conversationId: string): Promise<Activity | undefined> {
   const { data, error } = await crm()
     .from("activities")

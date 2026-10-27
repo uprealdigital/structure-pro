@@ -25,6 +25,18 @@ export const agentSessionSchema = z.object({
 
 export type AgentSession = z.infer<typeof agentSessionSchema>;
 
+export const inboundActivityChannelSchema = z.enum(["sms", "telegram"]);
+
+export type InboundActivityChannel = z.infer<typeof inboundActivityChannelSchema>;
+
+export const inboundActivitySchema = z.object({
+  channel: inboundActivityChannelSchema,
+  channelKey: z.string().trim().min(1),
+  text: z.string(),
+});
+
+export type InboundActivity = z.infer<typeof inboundActivitySchema>;
+
 export const yardPreviewEventSchema = z.object({
   at: z.string(),
   step: z.string(),

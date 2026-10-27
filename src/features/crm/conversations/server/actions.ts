@@ -7,10 +7,12 @@ import { demoChatId, sendTelegramFile, sendTelegramMessage } from "@/src/common/
 import { sendSms } from "@/src/common/lib/twilio/twilio.service";
 import { createSuggestion, readSuggestions, storeSuggestionPreview, updateSuggestion } from "@/src/features/ai/db/suggestion";
 import { analyzeInboundIntent } from "@/src/features/ai/services/inbound-intent-analyzer.service";
+import { prepareNewQuoteMessage, sendNewQuoteMessage } from "@/src/features/ai/services/messaging-agent.service";
 import type { SuggestionIntent } from "@/src/features/ai/types";
 import { selectionHasConfigChanges } from "@/src/features/crm/conversations/utils/design-preview";
 import { createDealQuote, deleteDealQuote, readDealQuotes } from "@/src/features/crm/deals/db/deal-quote";
-import { readQuotesByIds } from "@/src/features/crm/quotes/db/quote";
+import { describeSelections } from "@/src/features/cpq/utils/pricing";
+import { readQuote, readQuotesByIds } from "@/src/features/crm/quotes/db/quote";
 import type { QuoteSelections } from "@/src/features/cpq/types";
 import type { ConfigChanges } from "@/src/features/crm/quotes/types";
 import { outboundTextTransport } from "@/src/features/crm/conversations/config/outbound-text";
@@ -33,6 +35,7 @@ import {
   readConversationById,
   readConversationSummaryByCustomer,
   updateConversation,
+  updateConversationAddress,
 } from "@/src/features/crm/conversations/db/conversation";
 import {
   getConversation,
@@ -77,6 +80,7 @@ import {
 } from "@/src/features/crm/conversations/utils/review-message";
 import type { Customer } from "@/src/features/crm/common/types";
 import { dealIdSchema, dealNameSchema, type DealStatus } from "@/src/features/crm/deals/types";
+import { defaultDealName } from "@/src/features/crm/deals/utils/naming";
 import { canMarkDealLost } from "@/src/features/crm/deals/utils/status";
 import { markQuoteSent, readQuoteStatus, setQuoteStatus } from "@/src/features/crm/quotes/db/quote";
 import { readQuoteRevision, updateQuoteRevision } from "@/src/features/crm/quotes/db/quote-revision";
@@ -136,10 +140,87 @@ export async function appendActivity(
   revalidatePath("/crm/conversations");
 }
 
+export async function attachConversationChannel(
+  conversationId: string,
+  input: { channelKey?: string; chatId?: string },
+): Promise<void> {
+  const id = conversationIdSchema.parse(conversationId);
+  await updateConversationAddress(id, input);
+  revalidatePath("/crm/conversations");
+}
+
 export async function removeLatestActivity(conversationId: string): Promise<void> {
   const id = conversationIdSchema.parse(conversationId);
   await deleteLatestActivity(id);
   revalidatePath("/crm/conversations");
+}
+
+export async function sendWebsiteQuoteMessage(input: {
+  dealId: string;
+  customerId: string;
+}): Promise<{ channel: "twilio" | "telegram" }> {
+  const dealId = dealIdSchema.parse(input.dealId);
+  const customerId = input.customerId.trim();
+  if (!customerId) throw new Error("Customer was not found");
+
+  const deal = await readDeal(dealId);
+  if (!deal || deal.source !== "quote") throw new Error("Deal was not found");
+  const [customer, quote] = await Promise.all([readCustomer(customerId), readQuote(deal.quoteId)]);
+  if (!customer) throw new Error("Customer was not found");
+  if (!quote) throw new Error("Quote was not found");
+
+  const described = describeSelections(quote.selections);
+  const delivery = prepareNewQuoteMessage({
+    fullName: customer.fullName,
+    width: quote.selections.width,
+    length: quote.selections.length,
+    productTitle: described.style.productTitle,
+    total: described.estimate.total,
+    companyName: described.brand.name,
+  });
+  const loggedAt = deal.createdAt ?? new Date().toISOString();
+  const leadAt = new Date(loggedAt).toISOString();
+  const sentAt = new Date(Date.parse(leadAt) + 1).toISOString();
+  const dealName = deal.name?.trim() || defaultDealName(deal.source, loggedAt);
+  const channelKey = delivery.chatId ?? customer.phone;
+  const opened = await openConversation({
+    lookupKey: channelKey,
+    channelKey,
+    chatId: delivery.chatId ?? undefined,
+    customerId: customer.id,
+    contractSent: false,
+    activities: [
+      {
+        role: "model",
+        channel: "system",
+        text: systemEventBody("created", dealName, deal.id),
+        generatedBy: "manual",
+        createdAt: leadAt,
+        readAt: leadAt,
+      },
+      {
+        role: "model",
+        channel: delivery.channel,
+        text: delivery.text,
+        generatedBy: "ai",
+        createdAt: sentAt,
+      },
+    ],
+  });
+
+  try {
+    await sendNewQuoteMessage({ phone: customer.phone, delivery });
+  } catch (error) {
+    if (opened.created) await removeConversation(channelKey);
+    else {
+      await removeLatestActivity(opened.id);
+      await removeLatestActivity(opened.id);
+    }
+    throw error;
+  }
+
+  revalidatePath("/crm/conversations");
+  return { channel: delivery.channel === "telegram" ? "telegram" : "twilio" };
 }
 
 export async function sendManualActivity(input: {

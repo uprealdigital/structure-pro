@@ -1,15 +1,7 @@
-import {
-  isValidTelegramWebhook,
-  sendTelegramMessage,
-  type TelegramUpdate,
-} from "@/src/common/lib/telegram/telegram.service";
-import {
-  AUTOMATIC_REPLIES_ENABLED,
-  processInboundMessage,
-} from "@/src/features/ai/services/messaging-agent.service";
+import { isValidTelegramWebhook, type TelegramUpdate } from "@/src/common/lib/telegram/telegram.service";
+import { recordInboundActivity } from "@/src/features/ai/services/inbound-activities.service";
 
 export const runtime = "nodejs";
-export const maxDuration = 120;
 
 export async function POST(request: Request) {
   if (!isValidTelegramWebhook(request)) {
@@ -24,34 +16,13 @@ export async function POST(request: Request) {
   }
 
   const chatId = update.message?.chat?.id;
-  const text = update.message?.text?.trim() ?? "";
   if (chatId == null) return Response.json({ ok: true });
 
-  const key = String(chatId);
-
-  if (text === "/start") {
-    if (AUTOMATIC_REPLIES_ENABLED) {
-      await sendTelegramMessage(
-        key,
-        "This bot is ready. Submit for quote on the website, then reply here.",
-      );
-    }
-    return Response.json({ ok: true });
-  }
-
-  const syncReply = await processInboundMessage({
-    channelKey: key,
+  await recordInboundActivity({
     channel: "telegram",
-    text,
-    sendMessage: async (message) => {
-      if (!AUTOMATIC_REPLIES_ENABLED || !message.trim()) return;
-      await sendTelegramMessage(key, message);
-    },
+    channelKey: String(chatId),
+    text: update.message?.text ?? "",
   });
-
-  if (AUTOMATIC_REPLIES_ENABLED && syncReply?.trim()) {
-    await sendTelegramMessage(key, syncReply);
-  }
 
   return Response.json({ ok: true });
 }
