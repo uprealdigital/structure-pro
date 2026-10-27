@@ -1,7 +1,7 @@
 "use client";
 
 import { Camera, Paperclip, Phone } from "lucide-react";
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { BuildingConfigurator } from "@/src/features/cpq/components/building-configurator";
 import type { QuoteRevisionRenderCapture, QuoteRevisionRenderFiles } from "@/src/features/cpq/components/building-scene";
 import { ComposerAttachments, type ComposerAttachment } from "@/src/features/crm/conversations/components/composer-attachments";
@@ -12,10 +12,10 @@ import { DealHeading } from "@/src/features/crm/conversations/components/deal-me
 import { DealSummary } from "@/src/features/crm/conversations/components/deal-summary";
 import { QuoteActionsMenu } from "@/src/features/crm/conversations/components/quote-actions-menu";
 import { QuoteStatusActions } from "@/src/features/crm/conversations/components/quote-status-actions";
-import { QuoteMenu, QuotePanel } from "@/src/features/crm/conversations/components/quote-panel";
+import { QuoteMenu, QuotePanel, type MissingRevisionRender } from "@/src/features/crm/conversations/components/quote-panel";
 import { Toast, type ToastTone } from "@/src/common/components/toast";
 import { InboundIntentCard } from "@/src/features/crm/conversations/components/inbound-intent-card";
-import { ProposedShedRender } from "@/src/features/crm/conversations/components/proposed-shed-render";
+import { ProposedShedRender, RevisionRenderSlot } from "@/src/features/crm/conversations/components/proposed-shed-render";
 import { ReviewSendModal } from "@/src/features/crm/conversations/components/review-send-modal";
 import { useConversationActivities } from "@/src/features/crm/conversations/hooks/use-conversation-activities";
 import { useConversationSuggestions } from "@/src/features/crm/conversations/hooks/use-conversation-suggestions";
@@ -43,6 +43,7 @@ import {
   conversationQuoteWithSentRevision,
   conversationQuoteWithSharedPhotos,
 } from "@/src/features/crm/conversations/utils/mappers";
+import { DEFAULT_QUOTE_SELECTIONS } from "@/src/features/cpq/utils/catalog";
 import { quoteStatuses, type QuoteStatusActionId } from "@/src/features/crm/quotes/config/status";
 import {
   activateQuoteRevision,
@@ -54,6 +55,7 @@ import {
   refreshQuoteLifecycle,
   renewQuote,
   saveQuoteCommunication,
+  saveQuoteRevisionRenders,
   saveQuoteSelections,
   shareQuoteRevisionPhotos,
 } from "@/src/features/crm/quotes/server/actions";
@@ -253,7 +255,7 @@ export function ConversationDetail({
   const [addingQuote, setAddingQuote] = useState(false);
   const [quoteAction, setQuoteAction] = useState<"move" | "duplicate" | "cancel" | "delete" | "renew" | "deposit" | null>(null);
   const [removedQuoteIds, setRemovedQuoteIds] = useState<Record<string, true>>({});
-  const [quoteNote, setQuoteNote] = useState("");
+  const [quoteToast, setQuoteToast] = useState<{ id: number; message: string; tone?: ToastTone } | null>(null);
   const [quotePatches, setQuotePatches] = useState<Record<string, ConversationQuote>>({});
   const [dealStatusPatches, setDealStatusPatches] = useState<Record<string, DealStatus>>({});
   const [dealNamePatches, setDealNamePatches] = useState<Record<string, string>>({});
@@ -323,6 +325,7 @@ export function ConversationDetail({
   const outgoingRef = useRef<OutgoingMessage[]>([]);
   const quotesByIdRef = useRef(new Map<string, ConversationQuote>());
   quotesByIdRef.current = new Map(deals.flatMap((deal) => deal.quotes.map((quote) => [quote.id, quote])));
+  const headerRenderSaves = useRef(new Set<string>());
   const lifecycleQuoteId = focused.quote?.id;
   const lifecycleStatus = focused.quote?.status;
   useEffect(() => {
@@ -478,6 +481,36 @@ export function ConversationDetail({
   }, [readNotice, suppressUntilHidden, workspace.id]);
   const specs = focused.quote?.specs ?? [];
   const viewed = viewedRevision(focused.quote, selectedRevisionId);
+  const [menuMissingRenders, setMenuMissingRenders] = useState<MissingRevisionRender[]>([]);
+  const [renderFailures, setRenderFailures] = useState<Record<string, true>>({});
+  const rememberMissingRenders = useCallback((items: MissingRevisionRender[]) => {
+    setMenuMissingRenders((current) => {
+      if (
+        current.length === items.length &&
+        current.every(
+          (item, index) => item.revisionId === items[index]?.revisionId && item.quoteId === items[index]?.quoteId,
+        )
+      ) {
+        return current;
+      }
+      return items;
+    });
+  }, []);
+  const renderTarget = useMemo(() => {
+    const header =
+      !editing && viewed && focused.quote && !viewed.renders?.render_small_url
+        ? { quoteId: focused.quote.id, revisionId: viewed.id }
+        : null;
+    const candidates = header ? [header, ...menuMissingRenders] : menuMissingRenders;
+    for (const candidate of candidates) {
+      if (renderFailures[candidate.revisionId]) continue;
+      const match = listedQuotes
+        .find((quote) => quote.id === candidate.quoteId)
+        ?.revisions.find((revision) => revision.id === candidate.revisionId);
+      if (match && !match.renders?.render_small_url) return candidate;
+    }
+    return null;
+  }, [editing, viewed, focused.quote, menuMissingRenders, renderFailures, listedQuotes]);
   const title = productTitle(viewed?.specs ?? specs);
   const channels: ComposerChannel[] = ["telegram", "sms", "facebook", "email"];
 
@@ -777,7 +810,8 @@ export function ConversationDetail({
     if (!quote || !dealId || addingQuote) return;
     setAddingQuote(true);
     setRevisionError("");
-    const result = await createDealQuoteAction({ dealId, selections: quote.selections });
+    const selections = DEFAULT_QUOTE_SELECTIONS;
+    const result = await createDealQuoteAction({ dealId, selections });
     setAddingQuote(false);
     if ("error" in result) {
       setRevisionError(copy.addQuoteError);
@@ -792,7 +826,7 @@ export function ConversationDetail({
         revisions: [],
         status: "draft",
       },
-      quote.selections,
+      selections,
       {
         id: result.data.revisionId,
         revisionNumber: result.data.revisionNumber,
@@ -811,6 +845,7 @@ export function ConversationDetail({
     setViewingQuoteIds((current) => ({ ...current, [dealId]: next.id }));
     setSelectedRevisionId(next.activeRevisionId);
     setEditing(false);
+    setQuoteToast({ id: Date.now(), message: copy.quoteCreatedToast(quoteLabel(next, -1)) });
   }
 
   async function moveFocusedQuote() {
@@ -819,7 +854,6 @@ export function ConversationDetail({
     if (!quote || !dealId || quoteAction) return;
     setQuoteAction("move");
     setRevisionError("");
-    setQuoteNote("");
     const result = await moveQuoteToNewDeal({ dealId, quoteId: quote.id });
     setQuoteAction(null);
     if ("error" in result) {
@@ -840,6 +874,10 @@ export function ConversationDetail({
     setViewingQuoteIds((current) => ({ ...current, [result.data.dealId]: quote.id }));
     setSelectedRevisionId(null);
     onActivateDeal(result.data.dealId, stage);
+    setQuoteToast({
+      id: Date.now(),
+      message: copy.quoteMovedToast(quoteLabel(quote, listedQuotes.findIndex((item) => item.id === quote.id))),
+    });
   }
 
   async function duplicateFocusedQuote() {
@@ -848,8 +886,12 @@ export function ConversationDetail({
     if (!quote || !dealId || quoteAction) return;
     setQuoteAction("duplicate");
     setRevisionError("");
-    setQuoteNote("");
-    const result = await duplicateQuote({ dealId, quoteId: quote.id });
+    const selections = viewed?.selections ?? quote.selections;
+    const result = await duplicateQuote({
+      dealId,
+      quoteId: quote.id,
+      revisionId: viewed?.id,
+    });
     setQuoteAction(null);
     if ("error" in result) {
       setRevisionError(copy.duplicateQuoteError);
@@ -864,7 +906,7 @@ export function ConversationDetail({
         revisions: [],
         status: "draft",
       },
-      quote.selections,
+      selections,
       {
         id: result.data.revisionId,
         revisionNumber: result.data.revisionNumber,
@@ -884,6 +926,7 @@ export function ConversationDetail({
     setViewingQuoteIds((current) => ({ ...current, [dealId]: next.id }));
     setSelectedRevisionId(next.activeRevisionId);
     setEditing(false);
+    setQuoteToast({ id: Date.now(), message: copy.quoteDuplicatedToast(quoteLabel(next, -1)) });
   }
 
   function patchQuoteStatus(quote: ConversationQuote, status: QuoteStatus) {
@@ -914,7 +957,6 @@ export function ConversationDetail({
     if (!quote || quoteAction) return;
     setQuoteAction("cancel");
     setRevisionError("");
-    setQuoteNote("");
     const result = await cancelQuote({ quoteId: quote.id });
     setQuoteAction(null);
     if ("error" in result) {
@@ -925,20 +967,45 @@ export function ConversationDetail({
     setEditing(false);
   }
 
-  async function deleteFocusedDraft() {
+  function deleteFocusedDraft() {
     const quote = focused.quote;
-    if (!quote || quoteAction || quote.status !== "draft") return;
-    setQuoteAction("delete");
+    if (!quote || quoteAction || quote.status !== "draft" || listedQuotes.length < 2) return;
+    const quoteId = quote.id;
+    const name = quoteLabel(quote, listedQuotes.findIndex((item) => item.id === quote.id));
+    const pending = { cancelled: false };
     setRevisionError("");
-    setQuoteNote("");
-    const result = await deleteDraftQuote({ quoteId: quote.id });
-    setQuoteAction(null);
-    if ("error" in result) {
-      setRevisionError(copy.deleteDraftError);
-      return;
-    }
-    setRemovedQuoteIds((current) => ({ ...current, [quote.id]: true }));
+    setQuoteToast(null);
+    setRemovedQuoteIds((current) => ({ ...current, [quoteId]: true }));
     setEditing(false);
+    showNotice(
+      copy.quoteDeletedToast(name),
+      async () => {
+        pending.cancelled = true;
+        setRemovedQuoteIds((current) => {
+          if (!current[quoteId]) return current;
+          const next = { ...current };
+          delete next[quoteId];
+          return next;
+        });
+        return true;
+      },
+      async () => {
+        if (pending.cancelled) return null;
+        const result = await deleteDraftQuote({ quoteId });
+        if (pending.cancelled) return null;
+        if ("error" in result) {
+          setRemovedQuoteIds((current) => {
+            if (!current[quoteId]) return current;
+            const next = { ...current };
+            delete next[quoteId];
+            return next;
+          });
+          setRevisionError(copy.deleteDraftError);
+        }
+        return null;
+      },
+      "neutral",
+    );
   }
 
   async function renewFocusedQuote() {
@@ -1006,6 +1073,32 @@ export function ConversationDetail({
   function toggleEditing() {
     if (!editing) setDetailsOpen(false);
     setEditing((open) => !open);
+  }
+
+  function storeHeaderRender(quoteId: string, revisionId: string, files: QuoteRevisionRenderFiles) {
+    if (headerRenderSaves.current.has(revisionId)) return;
+    headerRenderSaves.current.add(revisionId);
+    void saveQuoteRevisionRenders({ revisionId, renders: files }).then((result) => {
+      if (headerRenderSaves.current.has(revisionId) && "error" in result) {
+        headerRenderSaves.current.delete(revisionId);
+        return;
+      }
+      if ("error" in result) return;
+      const renders = result.data;
+      setQuotePatches((current) => {
+        const base = current[quoteId] ?? quotesByIdRef.current.get(quoteId);
+        if (!base) return current;
+        return {
+          ...current,
+          [quoteId]: {
+            ...base,
+            revisions: base.revisions.map((revision) =>
+              revision.id === revisionId ? { ...revision, renders } : revision,
+            ),
+          },
+        };
+      });
+    });
   }
 
   async function saveFocusedQuote(selections: QuoteSelections, renders: QuoteRevisionRenderFiles) {
@@ -1663,20 +1756,64 @@ export function ConversationDetail({
           <div className="flex shrink-0 items-center gap-2.5">
             {focused.quote && viewed ? (
               <div className="flex flex-row items-center gap-3 p-1">
-                <div className="relative flex h-16 w-20 shrink-0 items-center justify-center overflow-hidden rounded-lg">
-                  <img
-                    alt={title || copy.quote}
-                    src={headerRenderUrl(focused.quote.revisions, viewed)}
-                    className="h-full w-full object-contain p-0.5"
-                  />
+                <div className="relative flex h-16 w-20 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-white">
+                  {viewed.renders?.render_small_url ? (
+                    <img
+                      alt={title || copy.quote}
+                      src={viewed.renders.render_small_url}
+                      className="h-full w-full object-contain p-0.5"
+                    />
+                  ) : editing ? (
+                    <img
+                      alt={title || copy.quote}
+                      src={headerRenderUrl(focused.quote.revisions, viewed)}
+                      className="h-full w-full object-contain p-0.5"
+                    />
+                  ) : (
+                    <RevisionRenderSlot
+                      key={viewed.id}
+                      revisionId={viewed.id}
+                      selections={viewed.selections}
+                      alt={title || copy.quote}
+                      capture={renderTarget?.revisionId === viewed.id}
+                      failed={Boolean(renderFailures[viewed.id])}
+                      progressLabel={copy.renderingRevision}
+                      onCaptured={(files) => {
+                        const quoteId = focused.quote?.id;
+                        if (!quoteId) return;
+                        storeHeaderRender(quoteId, viewed.id, files);
+                      }}
+                      onFailed={() => {
+                        setRenderFailures((current) =>
+                          current[viewed.id] ? current : { ...current, [viewed.id]: true },
+                        );
+                      }}
+                    />
+                  )}
                 </div>
                 <div className="inline-grid shrink-0 grid-cols-[minmax(22rem,max-content)] gap-1.5">
                   <QuoteMenu
                     quotes={listedQuotes}
                     viewingQuoteId={viewingQuote?.id ?? focused.quote.id}
                     error={revisionError}
+                    captureRevisionId={
+                      viewed &&
+                      !editing &&
+                      !viewed.renders?.render_small_url &&
+                      renderTarget?.revisionId === viewed.id
+                        ? null
+                        : (renderTarget?.revisionId ?? null)
+                    }
+                    failedRevisionIds={renderFailures}
                     onViewQuote={viewQuote}
                     onSelectRevision={(id) => void selectRevision(id)}
+                    onMissingRenders={rememberMissingRenders}
+                    onCaptureRenders={storeHeaderRender}
+                    onCaptureFailed={(revisionId) => {
+                      setRenderFailures((current) =>
+                        current[revisionId] ? current : { ...current, [revisionId]: true },
+                      );
+                    }}
                   />
                   <div
                     className={`grid w-full items-stretch gap-1.5 ${
@@ -1697,7 +1834,11 @@ export function ConversationDetail({
                       onAddQuote={() => void addQuote()}
                       onMove={() => void moveFocusedQuote()}
                       onDuplicate={() => void duplicateFocusedQuote()}
-                      menuAction={quoteStatuses[focused.quote.status].menu}
+                      menuAction={
+                        quoteStatuses[focused.quote.status].menu?.id === "delete_draft" && listedQuotes.length < 2
+                          ? undefined
+                          : quoteStatuses[focused.quote.status].menu
+                      }
                       onMenuAction={() => {
                         const quote = focused.quote;
                         if (!quote) return;
@@ -1707,18 +1848,14 @@ export function ConversationDetail({
                       }}
                       onCopied={() => {
                         setRevisionError("");
-                        setQuoteNote(copy.publishLinkCopied);
-                        window.setTimeout(() => {
-                          setQuoteNote((current) => (current === copy.publishLinkCopied ? "" : current));
-                        }, 2500);
+                        setQuoteToast({ id: Date.now(), message: copy.publishLinkCopied });
                       }}
                       onCopyError={() => {
-                        setQuoteNote("");
+                        setQuoteToast(null);
                         setRevisionError(copy.copyPublishLinkError);
                       }}
                     />
                   </div>
-                  {quoteNote ? <p className="text-[11px] text-gray-500">{quoteNote}</p> : null}
                 </div>
               </div>
             ) : null}
@@ -1733,6 +1870,15 @@ export function ConversationDetail({
               pending={notice.pending}
               onAction={() => void undoNotice()}
               onDismiss={commitNotice}
+            />
+          ) : null}
+          {quoteToast ? (
+            <Toast
+              key={quoteToast.id}
+              message={quoteToast.message}
+              tone={quoteToast.tone ?? "success"}
+              dismissLabel={copy.dismiss}
+              onDismiss={() => setQuoteToast(null)}
             />
           ) : null}
           {editing || detailsTop == null ? null : (

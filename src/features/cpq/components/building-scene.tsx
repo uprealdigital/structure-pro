@@ -10,7 +10,18 @@ import {
 } from "react";
 import { Canvas, useThree } from "@react-three/fiber";
 import { ContactShadows, Environment, OrbitControls } from "@react-three/drei";
-import { Color, Vector2, Vector3, type Camera, type PerspectiveCamera, type Scene, type WebGLRenderer } from "three";
+import {
+  Box3,
+  Color,
+  Vector2,
+  Vector3,
+  type Camera,
+  type Mesh,
+  type Object3D,
+  type PerspectiveCamera,
+  type Scene,
+  type WebGLRenderer,
+} from "three";
 import { BuildingModel } from "@/src/features/cpq/components/building-model";
 import type { BuildingConfig } from "@/src/features/cpq/utils/catalog";
 
@@ -37,6 +48,7 @@ const RENDER_FULL = { width: 1200, height: 900 };
 const RENDER_MEDIUM = { width: 600, height: 450 };
 const RENDER_SMALL = { width: 150, height: 150 };
 const PERSPECTIVE_AIM = { polar: 1.05, azimuth: Math.PI / 5, fit: 0.82 };
+const FRAME_LIMIT = 0.9;
 
 const DESKTOP_CAMERA: [number, number, number] = [20, 12, 24];
 const MOBILE_CAMERA: [number, number, number] = [30, 16, 36];
@@ -143,10 +155,12 @@ function canvasBlob(source: HTMLCanvasElement, width: number, height: number, qu
   canvas.width = width;
   canvas.height = height;
   const context = canvas.getContext("2d");
-  if (!context) return Promise.reject(new Error("Could not capture the building"));
+  if (!context || source.width === 0 || source.height === 0) {
+    return Promise.reject(new Error("Could not capture the building"));
+  }
   context.fillStyle = "#ffffff";
   context.fillRect(0, 0, width, height);
-  context.drawImage(source, 0, 0, width, height);
+  context.drawImage(source, 0, 0, source.width, source.height, 0, 0, width, height);
   return new Promise((resolve, reject) => {
     canvas.toBlob(
       (blob) => {
@@ -162,13 +176,103 @@ function canvasBlob(source: HTMLCanvasElement, width: number, height: number, qu
   });
 }
 
-function framePerspective(
+function isBuildingMesh(object: Object3D): object is Mesh {
+  const mesh = object as Mesh;
+  if (!mesh.isMesh || !mesh.geometry || mesh.geometry.type === "PlaneGeometry") return false;
+  const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+  return !materials.some((material) => material?.type === "ShadowMaterial");
+}
+
+function buildingBounds(scene: Scene): Box3 {
+  const box = new Box3();
+  scene.updateMatrixWorld(true);
+  scene.traverse((object) => {
+    if (!isBuildingMesh(object)) return;
+    box.expandByObject(object);
+  });
+  return box;
+}
+
+function boxCorners(box: Box3): Vector3[] {
+  const { min, max } = box;
+  return [
+    new Vector3(min.x, min.y, min.z),
+    new Vector3(min.x, min.y, max.z),
+    new Vector3(min.x, max.y, min.z),
+    new Vector3(min.x, max.y, max.z),
+    new Vector3(max.x, min.y, min.z),
+    new Vector3(max.x, min.y, max.z),
+    new Vector3(max.x, max.y, min.z),
+    new Vector3(max.x, max.y, max.z),
+  ];
+}
+
+function viewDirection(): Vector3 {
+  const sinPolar = Math.sin(PERSPECTIVE_AIM.polar);
+  return new Vector3(
+    sinPolar * Math.sin(PERSPECTIVE_AIM.azimuth),
+    Math.cos(PERSPECTIVE_AIM.polar),
+    sinPolar * Math.cos(PERSPECTIVE_AIM.azimuth),
+  ).normalize();
+}
+
+function placeCamera(camera: PerspectiveCamera, center: Vector3, direction: Vector3, distance: number) {
+  camera.position.copy(center).addScaledVector(direction, distance);
+  camera.lookAt(center);
+  camera.updateMatrixWorld();
+}
+
+function projectedExtent(camera: PerspectiveCamera, corners: Vector3[]): number {
+  const point = new Vector3();
+  let extent = 0;
+  for (const corner of corners) {
+    point.copy(corner).project(camera);
+    if (point.z < -1 || point.z > 1) return Number.POSITIVE_INFINITY;
+    extent = Math.max(extent, Math.abs(point.x), Math.abs(point.y));
+  }
+  return extent;
+}
+
+function frameBuilding(camera: PerspectiveCamera, box: Box3, width: number, height: number) {
+  const center = box.getCenter(new Vector3());
+  const corners = boxCorners(box);
+  const direction = viewDirection();
+  const span = box.getSize(new Vector3()).length();
+  camera.aspect = width / height;
+  camera.near = 0.05;
+  camera.far = Math.max(400, span * 20);
+  camera.updateProjectionMatrix();
+
+  const fits = (distance: number) => {
+    placeCamera(camera, center, direction, distance);
+    camera.updateProjectionMatrix();
+    return projectedExtent(camera, corners) <= FRAME_LIMIT;
+  };
+
+  let low = Math.max(0.5, span * 0.15);
+  let high = Math.max(span * 4, 12);
+  while (!fits(high) && high < span * 80) high *= 1.7;
+  for (let step = 0; step < 24; step += 1) {
+    const mid = (low + high) / 2;
+    if (fits(mid)) high = mid;
+    else low = mid;
+  }
+  placeCamera(camera, center, direction, high);
+  camera.updateProjectionMatrix();
+}
+
+function frameRender(
   camera: PerspectiveCamera,
   controls: unknown,
   config: BuildingConfig,
+  box: Box3,
   width: number,
   height: number,
 ) {
+  if (!box.isEmpty()) {
+    frameBuilding(camera, box, width, height);
+    return;
+  }
   const placement = perspectivePlacement(config.width, config.length, config.height, width / height);
   camera.position.set(...placement.position);
   camera.lookAt(...placement.target);
@@ -198,22 +302,28 @@ function captureRevisionRenders(
   const pixelRatio = renderer.getPixelRatio();
   const aspect = camera.aspect;
   const previousBackground = scene.background;
+  const near = camera.near;
+  const far = camera.far;
+  const bounds = buildingBounds(scene);
 
   if (orbit) {
-    orbit.minDistance = 4;
-    orbit.maxDistance = 400;
+    orbit.minDistance = 1;
+    orbit.maxDistance = 800;
   }
 
   try {
     scene.background = new Color("#ffffff");
     renderer.setPixelRatio(1);
-    framePerspective(camera, controls, config, RENDER_FULL.width, RENDER_FULL.height);
+    renderer.setScissorTest(false);
+    frameRender(camera, controls, config, bounds, RENDER_FULL.width, RENDER_FULL.height);
     renderer.setSize(RENDER_FULL.width, RENDER_FULL.height, false);
+    renderer.setViewport(0, 0, RENDER_FULL.width, RENDER_FULL.height);
     renderer.render(scene, camera);
     const full = canvasBlob(renderer.domElement, RENDER_FULL.width, RENDER_FULL.height, 0.9);
     const medium = canvasBlob(renderer.domElement, RENDER_MEDIUM.width, RENDER_MEDIUM.height, 0.86);
-    framePerspective(camera, controls, config, RENDER_SMALL.width, RENDER_SMALL.height);
+    frameRender(camera, controls, config, bounds, RENDER_SMALL.width, RENDER_SMALL.height);
     renderer.setSize(RENDER_SMALL.width, RENDER_SMALL.height, false);
+    renderer.setViewport(0, 0, RENDER_SMALL.width, RENDER_SMALL.height);
     renderer.render(scene, camera);
     const small = canvasBlob(renderer.domElement, RENDER_SMALL.width, RENDER_SMALL.height, 0.9);
     return Promise.all([full, medium, small]).then(([fullBlob, mediumBlob, smallBlob]) => ({
@@ -223,6 +333,8 @@ function captureRevisionRenders(
     }));
   } finally {
     scene.background = previousBackground;
+    camera.near = near;
+    camera.far = far;
     camera.aspect = aspect;
     camera.updateProjectionMatrix();
     camera.position.copy(position);

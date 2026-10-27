@@ -1,6 +1,6 @@
 import catalog from "@/src/features/cpq/config/catalog.json";
 import defaultConfig from "@/src/features/cpq/config/default-config.json";
-import { buildingConfigSchema, type BuildingConfig } from "@/src/features/cpq/types";
+import { buildingConfigSchema, quoteSelectionsSchema, type BuildingConfig, type QuoteSelections } from "@/src/features/cpq/types";
 
 export type { BuildingConfig };
 export type StyleOption = (typeof catalog.styles)[number];
@@ -15,6 +15,7 @@ export const DEFAULT_ZIP = defaultConfig.zip;
 export const DEFAULT_LNG = defaultConfig.lng;
 
 export const DEFAULT_BUILDING_CONFIG: BuildingConfig = buildingConfigSchema.parse(defaultConfig);
+export const DEFAULT_QUOTE_SELECTIONS: QuoteSelections = quoteSelectionsSchema.parse(defaultConfig);
 
 export function getStyle(id: string): StyleOption {
   return catalog.styles.find((item) => item.id === id) ?? catalog.styles[0];

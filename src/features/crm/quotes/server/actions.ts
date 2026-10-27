@@ -115,6 +115,29 @@ async function storeRevisionRenders(
   });
 }
 
+export async function saveQuoteRevisionRenders(input: {
+  revisionId: string;
+  renders: unknown;
+}): Promise<{ success: true; data: QuoteRevisionRenders } | { error: string }> {
+  const revisionId = input.revisionId.trim();
+  const renders = quoteRevisionRenderFilesSchema.safeParse(input.renders);
+  if (!revisionId || !renders.success) return { error: "A render of this quote is required" };
+
+  try {
+    const revision = await readQuoteRevision(revisionId);
+    if (!revision) return { error: "Quote revision was not found" };
+    if (revision.renders) return { success: true, data: revision.renders };
+    const stored = await storeRevisionRenders(revision.id, renders.data);
+    revalidatePath("/crm/conversations");
+    revalidatePath("/crm/quotes");
+    revalidatePath(`/quote/${revision.quoteId}`);
+    return { success: true, data: stored };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Could not save the render";
+    return { error: message };
+  }
+}
+
 export async function saveQuoteCommunication(input: {
   revisionId: string;
   communication: unknown;
@@ -253,10 +276,18 @@ export async function duplicateQuote(input: {
     if (!deal || !source) return { error: "Quote was not found" };
     const onDeal = deal.quoteId === source.id || links.some((link) => link.quoteId === source.id);
     if (!onDeal) return { error: "Quote was not found" };
-    const sourceRevisionId = await readActiveRevisionId(source.id);
-    const sourceRevision = sourceRevisionId ? await readQuoteRevision(sourceRevisionId) : undefined;
+    const requestedRevision = parsed.data.revisionId ? await readQuoteRevision(parsed.data.revisionId) : undefined;
+    if (parsed.data.revisionId && (!requestedRevision || requestedRevision.quoteId !== source.id)) {
+      return { error: "Quote was not found" };
+    }
+    const sourceRevisionId = requestedRevision ? undefined : await readActiveRevisionId(source.id);
+    const sourceRevision =
+      requestedRevision ?? (sourceRevisionId ? await readQuoteRevision(sourceRevisionId) : undefined);
     const invoiceId = newInvoiceId();
-    quoteId = await createQuote({ invoiceId, selections: source.selections });
+    quoteId = await createQuote({
+      invoiceId,
+      selections: sourceRevision?.selections ?? source.selections,
+    });
     const revisionId = await readActiveRevisionId(quoteId);
     const revision = revisionId ? await readQuoteRevision(revisionId) : undefined;
     if (!revision) {
@@ -374,6 +405,13 @@ function revalidateQuote(quoteId: string) {
   revalidatePath(`/quote/${quoteId}`);
 }
 
+async function quoteIdsOnDeal(dealId: string, primaryQuoteId: string): Promise<string[]> {
+  const links = await readDealQuotes(dealId);
+  const ids = links.map((link) => link.quoteId);
+  if (primaryQuoteId && !ids.includes(primaryQuoteId)) ids.unshift(primaryQuoteId);
+  return ids;
+}
+
 export async function deleteDraftQuote(input: { quoteId: string }): Promise<{ success: true } | { error: string }> {
   const parsed = cancelQuoteSchema.safeParse(input);
   if (!parsed.success) return { error: "A quote is required" };
@@ -381,7 +419,17 @@ export async function deleteDraftQuote(input: { quoteId: string }): Promise<{ su
   try {
     const status = await readQuoteStatus(parsed.data.quoteId);
     if (status !== "draft") return { error: "Only a draft quote can be deleted" };
-    const deals = await readDealsByQuoteId(parsed.data.quoteId);
+    const [primaryDeals, links] = await Promise.all([
+      readDealsByQuoteId(parsed.data.quoteId),
+      readDealQuotesForQuote(parsed.data.quoteId),
+    ]);
+    const seen = new Set(primaryDeals.map((deal) => deal.id));
+    const extra = await readDealsByIds(links.map((link) => link.dealId).filter((id) => !seen.has(id)));
+    const deals = [...primaryDeals, ...extra];
+    for (const deal of deals) {
+      const ids = await quoteIdsOnDeal(deal.id, deal.quoteId);
+      if (ids.length < 2) return { error: "A deal needs to keep at least one quote" };
+    }
     for (const deal of deals) {
       if (deal.quoteId === parsed.data.quoteId) await updateDeal(deal.id, { quoteId: null });
     }

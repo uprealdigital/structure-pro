@@ -4,7 +4,11 @@ import dynamic from "next/dynamic";
 import { useEffect, useMemo, useRef, useState, type RefObject } from "react";
 import { createPortal } from "react-dom";
 import { useProgress } from "@react-three/drei";
-import type { BuildingCapture, QuoteRevisionRenderCapture } from "@/src/features/cpq/components/building-scene";
+import type {
+  BuildingCapture,
+  QuoteRevisionRenderCapture,
+  QuoteRevisionRenderFiles,
+} from "@/src/features/cpq/components/building-scene";
 import type { QuoteSelections } from "@/src/features/cpq/types";
 import { toBuildingConfig } from "@/src/features/cpq/utils/mappers";
 import { copy } from "@/src/features/crm/conversations/locales/en";
@@ -15,6 +19,29 @@ const BuildingScene = dynamic(() => import("@/src/features/cpq/components/buildi
 const RING_RADIUS = 16;
 const RING_CIRCUMFERENCE = 2 * Math.PI * RING_RADIUS;
 
+type RenderJob = { revisionId: string; progress: number };
+let renderJob: RenderJob = { revisionId: "", progress: 0 };
+const renderJobListeners = new Set<() => void>();
+
+function setRenderJob(revisionId: string, progress: number) {
+  if (renderJob.revisionId === revisionId && renderJob.progress === progress) return;
+  renderJob = { revisionId, progress };
+  for (const listener of renderJobListeners) listener();
+}
+
+function useRevisionRenderProgress(revisionId: string): number {
+  const [progress, setProgress] = useState(0);
+  useEffect(() => {
+    const sync = () => setProgress(renderJob.revisionId === revisionId ? renderJob.progress : 0);
+    sync();
+    renderJobListeners.add(sync);
+    return () => {
+      renderJobListeners.delete(sync);
+    };
+  }, [revisionId]);
+  return progress;
+}
+
 export function ProposedShedRender({
   selections,
   alt,
@@ -23,6 +50,10 @@ export function ProposedShedRender({
   renderCaptureRef: externalCaptureRef,
   onRenderUrl,
   onPreviewSaved,
+  onCaptured,
+  onFailed,
+  progressLabel,
+  revisionId,
 }: {
   selections: QuoteSelections;
   alt: string;
@@ -31,6 +62,10 @@ export function ProposedShedRender({
   renderCaptureRef?: RefObject<QuoteRevisionRenderCapture | null>;
   onRenderUrl?: (url: string) => void;
   onPreviewSaved?: (id: string, previewImageUrl: string) => void;
+  onCaptured?: (files: QuoteRevisionRenderFiles) => void;
+  onFailed?: () => void;
+  progressLabel?: (progress: number) => string;
+  revisionId?: string;
 }) {
   const selectionKey = JSON.stringify(selections);
   const config = useMemo(() => toBuildingConfig(JSON.parse(selectionKey) as QuoteSelections), [selectionKey]);
@@ -42,6 +77,12 @@ export function ProposedShedRender({
   const savedKey = useRef("");
   const saveRef = useRef({ suggestionId, previewImageUrl, onPreviewSaved });
   saveRef.current = { suggestionId, previewImageUrl, onPreviewSaved };
+  const capturedRef = useRef(onCaptured);
+  capturedRef.current = onCaptured;
+  const failedRef = useRef(onFailed);
+  failedRef.current = onFailed;
+  const jobId = useRef(revisionId);
+  jobId.current = revisionId;
   const meterRef = useRef(0);
   const [url, setUrl] = useState<string | null>(null);
   const [failed, setFailed] = useState(false);
@@ -73,6 +114,7 @@ export function ProposedShedRender({
       if (shown !== current) {
         meterRef.current = shown;
         setMeter(shown);
+        if (jobId.current) setRenderJob(jobId.current, shown);
       }
       if (pendingUrl && shown >= 99) {
         window.clearInterval(frame);
@@ -98,6 +140,7 @@ export function ProposedShedRender({
         void capture()
           .then(async (files) => {
             if (cancelled) return;
+            capturedRef.current?.(files);
             const png = await pngFile(files.small);
             if (cancelled) return;
             pngRef.current = { key: selectionKey, file: png };
@@ -110,6 +153,7 @@ export function ProposedShedRender({
             window.clearInterval(timer);
             window.clearInterval(frame);
             setFailed(true);
+            failedRef.current?.();
           });
       }, 300);
     }, 120);
@@ -123,6 +167,8 @@ export function ProposedShedRender({
         URL.revokeObjectURL(urlRef.current);
         urlRef.current = null;
       }
+      const id = jobId.current;
+      if (id && renderJob.revisionId === id) setRenderJob("", 0);
     };
   }, [selectionKey]);
 
@@ -152,7 +198,7 @@ export function ProposedShedRender({
       {url ? (
         <img alt={alt} src={url} width={150} height={150} className="h-full w-full object-contain" />
       ) : failed ? null : (
-        <RenderMeter value={meter} />
+        <RenderMeter value={meter} label={progressLabel} />
       )}
       {scene ? createPortal(scene, document.body) : null}
     </>
@@ -208,9 +254,10 @@ async function pngFile(source: Blob): Promise<Blob> {
   return png;
 }
 
-function RenderMeter({ value }: { value: number }) {
+function RenderMeter({ value, label }: { value: number; label?: (progress: number) => string }) {
   const shown = Math.min(100, Math.max(0, value));
   const offset = RING_CIRCUMFERENCE - (shown / 100) * RING_CIRCUMFERENCE;
+  const text = label ?? copy.renderingSuggestion;
   return (
     <div
       className="flex h-full w-full items-center justify-center bg-white"
@@ -218,9 +265,9 @@ function RenderMeter({ value }: { value: number }) {
       aria-valuemin={0}
       aria-valuemax={100}
       aria-valuenow={Math.round(shown)}
-      aria-label={copy.renderingSuggestion(Math.round(shown))}
+      aria-label={text(Math.round(shown))}
     >
-      <svg className="h-12 w-12 -rotate-90" viewBox="0 0 40 40" aria-hidden="true">
+      <svg className="h-[70%] w-auto max-h-12 -rotate-90" viewBox="0 0 40 40" aria-hidden="true">
         <circle cx="20" cy="20" r={RING_RADIUS} fill="none" stroke="#121314" strokeOpacity="0.16" strokeWidth="3.25" />
         <circle
           cx="20"
@@ -235,5 +282,54 @@ function RenderMeter({ value }: { value: number }) {
         />
       </svg>
     </div>
+  );
+}
+
+function LinkedRenderMeter({
+  revisionId,
+  label,
+}: {
+  revisionId: string;
+  label?: (progress: number) => string;
+}) {
+  const progress = useRevisionRenderProgress(revisionId);
+  return <RenderMeter value={progress} label={label} />;
+}
+
+export function RevisionRenderSlot({
+  revisionId,
+  imageUrl,
+  selections,
+  alt,
+  capture,
+  failed,
+  progressLabel,
+  onCaptured,
+  onFailed,
+}: {
+  revisionId: string;
+  imageUrl?: string | null;
+  selections: QuoteSelections;
+  alt: string;
+  capture: boolean;
+  failed?: boolean;
+  progressLabel?: (progress: number) => string;
+  onCaptured?: (files: QuoteRevisionRenderFiles) => void;
+  onFailed?: () => void;
+}) {
+  if (imageUrl) {
+    return <img alt={alt} src={imageUrl} className="h-full w-full object-contain" />;
+  }
+  if (failed) return null;
+  if (!capture) return <LinkedRenderMeter revisionId={revisionId} label={progressLabel} />;
+  return (
+    <ProposedShedRender
+      selections={selections}
+      alt={alt}
+      revisionId={revisionId}
+      progressLabel={progressLabel}
+      onCaptured={onCaptured}
+      onFailed={onFailed}
+    />
   );
 }

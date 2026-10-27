@@ -1,8 +1,10 @@
 "use client";
 
 import { Calendar, Check, ChevronDown, ChevronRight, Eye } from "lucide-react";
-import { useEffect, useLayoutEffect, useRef, useState, type RefObject } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type RefObject } from "react";
 import { createPortal } from "react-dom";
+import type { QuoteRevisionRenderFiles } from "@/src/features/cpq/components/building-scene";
+import { RevisionRenderSlot } from "@/src/features/crm/conversations/components/proposed-shed-render";
 import { copy } from "@/src/features/crm/conversations/locales/en";
 import type { ConversationQuote, ConversationQuoteRevision } from "@/src/features/crm/conversations/types";
 import {
@@ -16,6 +18,40 @@ import { quoteDisplayName } from "@/src/features/crm/quotes/utils/formatting";
 import { specValue } from "@/src/features/crm/common/utils/formatting";
 
 const sectionTitle = "text-sm font-bold tracking-wider text-gray-900 uppercase";
+
+export type MissingRevisionRender = { quoteId: string; revisionId: string };
+
+function RevisionThumb({
+  quoteId,
+  revision,
+  captureRevisionId,
+  failedRevisionIds,
+  onCaptured,
+  onFailed,
+}: {
+  quoteId: string;
+  revision: ConversationQuoteRevision;
+  captureRevisionId: string | null;
+  failedRevisionIds: Record<string, true>;
+  onCaptured: (quoteId: string, revisionId: string, files: QuoteRevisionRenderFiles) => void;
+  onFailed: (revisionId: string) => void;
+}) {
+  return (
+    <span className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-md bg-gray-50">
+      <RevisionRenderSlot
+        revisionId={revision.id}
+        imageUrl={revision.renders?.render_small_url}
+        selections={revision.selections}
+        alt=""
+        capture={captureRevisionId === revision.id}
+        failed={Boolean(failedRevisionIds[revision.id])}
+        progressLabel={copy.renderingRevision}
+        onCaptured={(files) => onCaptured(quoteId, revision.id, files)}
+        onFailed={() => onFailed(revision.id)}
+      />
+    </span>
+  );
+}
 
 function quoteLabel(quote: ConversationQuote, index: number): string {
   return quote.quoteNumber ? quoteDisplayName(quote.quoteNumber, quote.specs) : quoteMenuName(index);
@@ -33,12 +69,20 @@ function QuoteRow({
   quote,
   viewing,
   revisionsOpen,
+  captureRevisionId,
+  failedRevisionIds,
+  onCapture,
+  onCaptureFailed,
   onSelect,
 }: {
   name: string;
   quote: ConversationQuote;
   viewing: boolean;
   revisionsOpen: boolean;
+  captureRevisionId: string | null;
+  failedRevisionIds: Record<string, true>;
+  onCapture: (quoteId: string, revisionId: string, files: QuoteRevisionRenderFiles) => void;
+  onCaptureFailed: (revisionId: string) => void;
   onSelect: () => void;
 }) {
   const current = activeRevision(quote);
@@ -59,11 +103,14 @@ function QuoteRow({
         <span className="flex w-3.5 shrink-0 items-center justify-center">
           {viewing ? <Eye className="h-3.5 w-3.5 text-black" strokeWidth={2} aria-hidden="true" /> : null}
         </span>
-        {current?.renders?.render_small_url ? (
-          <img
-            src={current.renders.render_small_url}
-            alt=""
-            className="h-10 w-10 shrink-0 object-contain"
+        {current ? (
+          <RevisionThumb
+            quoteId={quote.id}
+            revision={current}
+            captureRevisionId={captureRevisionId}
+            failedRevisionIds={failedRevisionIds}
+            onCaptured={onCapture}
+            onFailed={onCaptureFailed}
           />
         ) : null}
         <span className="min-w-0 flex-1">
@@ -263,18 +310,39 @@ function RevisionFlyout({
   );
 }
 
+function missingRevisionRenders(shown: ConversationQuote[], open: boolean, single: boolean): MissingRevisionRender[] {
+  if (!open || single) return [];
+  const items: MissingRevisionRender[] = [];
+  for (const quote of shown) {
+    const current = activeRevision(quote);
+    if (!current || current.renders?.render_small_url) continue;
+    items.push({ quoteId: quote.id, revisionId: current.id });
+  }
+  return items;
+}
+
 export function QuoteMenu({
   quotes,
   viewingQuoteId,
   error,
+  captureRevisionId,
+  failedRevisionIds,
   onViewQuote,
   onSelectRevision,
+  onMissingRenders,
+  onCaptureRenders,
+  onCaptureFailed,
 }: {
   quotes: ConversationQuote[];
   viewingQuoteId: string;
   error?: string;
+  captureRevisionId: string | null;
+  failedRevisionIds: Record<string, true>;
   onViewQuote: (id: string) => void;
   onSelectRevision: (id: string) => void;
+  onMissingRenders: (items: MissingRevisionRender[]) => void;
+  onCaptureRenders: (quoteId: string, revisionId: string, files: QuoteRevisionRenderFiles) => void;
+  onCaptureFailed: (revisionId: string) => void;
 }) {
   const [open, setOpen] = useState(false);
   const [showVoided, setShowVoided] = useState(false);
@@ -299,6 +367,20 @@ export function QuoteMenu({
     (quote) => showVoided || quote.status !== "voided" || quote.id === viewingQuoteId,
   );
   const single = quotes.length === 1;
+  const renderStamp = quotes
+    .map((quote) =>
+      `${quote.id}:${quote.revisions.map((revision) => `${revision.id}:${revision.renders?.render_small_url ?? ""}`).join(",")}`,
+    )
+    .join("|");
+  const missingRenders = useMemo(
+    () => missingRevisionRenders(shown, open, single),
+    [renderStamp, open, single, showVoided, viewingQuoteId],
+  );
+  const missingKey = missingRenders.map((item) => `${item.quoteId}:${item.revisionId}`).join("|");
+
+  useEffect(() => {
+    onMissingRenders(open ? missingRenders : []);
+  }, [missingKey, open, onMissingRenders]);
 
   placeFlyout.current = () => {
     const row = viewingRow.current;
@@ -432,6 +514,10 @@ export function QuoteMenu({
                   quote={quote}
                   viewing={quote.id === viewingQuoteId}
                   revisionsOpen={revisionsQuoteId === quote.id}
+                  captureRevisionId={captureRevisionId}
+                  failedRevisionIds={failedRevisionIds}
+                  onCapture={onCaptureRenders}
+                  onCaptureFailed={onCaptureFailed}
                   onSelect={() => {
                     if (quote.id === viewingQuoteId) {
                       setRevisionsQuoteId(quote.id);
