@@ -52,8 +52,8 @@ export function reviewMessageValues(
   };
 }
 
-export function quoteRevisionPath(quoteId: string, revisionId: string): string {
-  return `/quote/${quoteId}?revision=${encodeURIComponent(revisionId)}`;
+export function quoteRevisionPath(quoteId: string): string {
+  return `/quote/${quoteId}`;
 }
 
 export function emailHtml(text: string): string {

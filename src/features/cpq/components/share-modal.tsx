@@ -1,6 +1,8 @@
 "use client";
 
 import { Check, X } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { Toast } from "@/src/common/components/toast";
 import { copy } from "@/src/features/cpq/locales/en";
 
 type ShareModalProps = {
@@ -11,6 +13,20 @@ type ShareModalProps = {
 };
 
 export function ShareModal({ status, url, error, onClose }: ShareModalProps) {
+  const detail = status === "error" && error && error !== copy.shareError ? error : "";
+  const [notice, setNotice] = useState<{ id: number; message: string } | null>(null);
+  const shown = useRef("");
+
+  useEffect(() => {
+    if (!detail) {
+      shown.current = "";
+      return;
+    }
+    if (detail === shown.current) return;
+    shown.current = detail;
+    setNotice({ id: Date.now(), message: detail });
+  }, [detail]);
+
   const title =
     status === "copied"
       ? copy.shareCopiedTitle
@@ -59,9 +75,6 @@ export function ShareModal({ status, url, error, onClose }: ShareModalProps) {
           {status === "copied" ? (
             <p className="mt-2 text-sm leading-relaxed text-gray-600">{copy.shareCopiedBody}</p>
           ) : null}
-          {status === "error" && error && error !== copy.shareError ? (
-            <p className="mt-2 text-sm leading-relaxed text-red-600">{error}</p>
-          ) : null}
           {url ? (
             <p className="mt-4 rounded-lg bg-gray-50 px-3 py-2 text-left font-mono text-xs break-all text-gray-700">
               {url}
@@ -69,6 +82,15 @@ export function ShareModal({ status, url, error, onClose }: ShareModalProps) {
           ) : null}
         </div>
       </div>
+      {notice ? (
+        <Toast
+          key={notice.id}
+          message={notice.message}
+          tone="error"
+          dismissLabel={copy.dismiss}
+          onDismiss={() => setNotice(null)}
+        />
+      ) : null}
     </div>
   );
 }

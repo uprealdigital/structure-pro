@@ -15,11 +15,11 @@ import {
   type RefObject,
 } from "react";
 import { createPortal } from "react-dom";
+import { Toast } from "@/src/common/components/toast";
 import { contactInitials } from "@/src/features/crm/common/utils/formatting";
 import { copy } from "@/src/features/crm/conversations/locales/en";
-import { RevisionChangeList } from "@/src/features/crm/conversations/components/revision-change-list";
-import type { ConversationParticipant, ConversationQuoteRevision } from "@/src/features/crm/conversations/types";
-import type { ConfigChanges, QuoteCommunication } from "@/src/features/crm/quotes/types";
+import type { ConversationParticipant } from "@/src/features/crm/conversations/types";
+import type { QuoteCommunication } from "@/src/features/crm/quotes/types";
 import {
   reviewEmailBody,
   reviewMessageToken,
@@ -639,9 +639,6 @@ export function ReviewSendModal({
   revisionId,
   imageUrl,
   statusLabel,
-  current,
-  revisions,
-  suggested,
   communication,
   onSave,
   onSend,
@@ -654,9 +651,6 @@ export function ReviewSendModal({
   revisionId: string;
   imageUrl: string;
   statusLabel: string;
-  current?: ConversationQuoteRevision;
-  revisions?: ConversationQuoteRevision[];
-  suggested?: ConfigChanges | null;
   communication: QuoteCommunication | null;
   onSave: (communication: QuoteCommunication) => Promise<void>;
   onSend: (communication: QuoteCommunication) => Promise<void>;
@@ -667,7 +661,7 @@ export function ReviewSendModal({
     savedCommunication(communication, people, defaultCommunication(people)),
   );
   const [sending, setSending] = useState(false);
-  const [sendError, setSendError] = useState("");
+  const [sendError, setSendError] = useState<{ id: number; message: string } | null>(null);
   const draftRef = useRef(draft);
   const savedKey = useRef(communication ? JSON.stringify(draft) : "");
   const defaultKey = useRef(JSON.stringify(defaultCommunication(people)));
@@ -704,17 +698,17 @@ export function ReviewSendModal({
   const dismiss = useCallback(() => {
     void flush()
       .then(() => onCloseRef.current())
-      .catch(() => setSendError(copy.saveQuoteError));
+      .catch(() => setSendError({ id: Date.now(), message: copy.saveQuoteError }));
   }, [flush]);
 
   async function submit() {
     if (sending) return;
     setSending(true);
-    setSendError("");
+    setSendError(null);
     try {
       await flush();
     } catch {
-      setSendError(copy.saveQuoteError);
+      setSendError({ id: Date.now(), message: copy.saveQuoteError });
       setSending(false);
       return;
     }
@@ -722,7 +716,10 @@ export function ReviewSendModal({
       await onSend(draftRef.current);
       onClose();
     } catch (error) {
-      setSendError(error instanceof Error ? error.message : copy.sendQuoteError);
+      setSendError({
+        id: Date.now(),
+        message: error instanceof Error && error.message ? error.message : copy.sendQuoteError,
+      });
       setSending(false);
     }
   }
@@ -759,11 +756,11 @@ export function ReviewSendModal({
         </div>
 
         <div className="mt-4 space-y-4">
-          <div className="flex items-start gap-4 py-2">
+          <div className="flex items-center gap-4 py-2">
             <div className="flex h-14 w-16 shrink-0 items-center justify-center rounded-lg">
               <img alt={title} src={imageUrl} className="h-full w-full object-contain" />
             </div>
-            <div className="min-w-0">
+            <div className="min-w-0 flex-1">
               <div className="flex items-center gap-2">
                 <h4 className="truncate text-xs font-bold text-gray-950">{title}</h4>
                 <span className="inline-flex shrink-0 items-center rounded border border-gray-200 bg-gray-100 px-2 py-0.5 text-[10px] font-semibold text-gray-700">
@@ -771,21 +768,16 @@ export function ReviewSendModal({
                 </span>
               </div>
               <span className="mt-1 block text-base leading-none font-semibold text-gray-900">{priceLabel}</span>
-              <a
-                href={`/quote/${quoteId}?mode=internal&revision=${encodeURIComponent(revisionId)}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="mt-3 inline-flex shrink-0 cursor-pointer items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 shadow-xs transition-colors hover:bg-gray-50"
-              >
-                <Calculator className="h-3.5 w-3.5 text-gray-500" strokeWidth={1.8} aria-hidden="true" />
-                <span>{copy.seeQuoteDetails}</span>
-              </a>
             </div>
-            {current && revisions ? (
-              <div className="min-w-0 flex-1">
-                <RevisionChangeList current={current} revisions={revisions} suggested={suggested} />
-              </div>
-            ) : null}
+            <a
+              href={`/quote/${quoteId}?mode=internal`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex shrink-0 cursor-pointer items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 shadow-xs transition-colors hover:bg-gray-50"
+            >
+              <Calculator className="h-3.5 w-3.5 text-gray-500" strokeWidth={1.8} aria-hidden="true" />
+              <span>{copy.seeQuoteDetails}</span>
+            </a>
           </div>
 
           <section className="pt-2 pb-3">
@@ -866,10 +858,22 @@ export function ReviewSendModal({
             <Send className="h-3.5 w-3.5" aria-hidden="true" />
           </button>
         </div>
-        {sendError ? <p className="mt-3 text-xs text-red-600">{sendError}</p> : null}
       </div>
     </div>
   );
 
-  return createPortal(dialog, document.body);
+  return (
+    <>
+      {createPortal(dialog, document.body)}
+      {sendError ? (
+        <Toast
+          key={sendError.id}
+          message={sendError.message}
+          tone="error"
+          dismissLabel={copy.dismiss}
+          onDismiss={() => setSendError(null)}
+        />
+      ) : null}
+    </>
+  );
 }

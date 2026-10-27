@@ -22,6 +22,12 @@ export type QuoteStatusAction = {
   tone: "primary" | "secondary";
 };
 
+const movableToNewDeal = new Set<QuoteStatus>(["draft", "sent", "viewed", "changes_requested"]);
+
+export function canMoveQuoteToNewDeal(status: QuoteStatus, quoteCount: number): boolean {
+  return quoteCount >= 2 && movableToNewDeal.has(status);
+}
+
 export type QuoteStatusInfo = {
   label: string;
   badgeClass: string;
@@ -33,7 +39,7 @@ export type QuoteStatusInfo = {
 export const quoteStatuses: Record<QuoteStatus, QuoteStatusInfo> = {
   draft: {
     label: copy.statusDraft,
-    badgeClass: "bg-gray-100 text-gray-600",
+    badgeClass: "border-gray-200 bg-gray-100 text-gray-600",
     priority: 40,
     actions: [
       { id: "send", label: copy.actionSend, tone: "primary" },
@@ -43,7 +49,7 @@ export const quoteStatuses: Record<QuoteStatus, QuoteStatusInfo> = {
   },
   sent: {
     label: copy.statusSent,
-    badgeClass: "bg-blue-50 text-blue-600",
+    badgeClass: "border-blue-200 bg-blue-50 text-blue-600",
     priority: 50,
     actions: [
       { id: "resend", label: copy.actionResend, tone: "primary" },
@@ -53,7 +59,7 @@ export const quoteStatuses: Record<QuoteStatus, QuoteStatusInfo> = {
   },
   viewed: {
     label: copy.statusViewed,
-    badgeClass: "bg-violet-50 text-violet-700",
+    badgeClass: "border-violet-200 bg-violet-50 text-violet-700",
     priority: 60,
     actions: [
       { id: "resend", label: copy.actionResend, tone: "primary" },
@@ -63,7 +69,7 @@ export const quoteStatuses: Record<QuoteStatus, QuoteStatusInfo> = {
   },
   changes_requested: {
     label: copy.statusChangesRequested,
-    badgeClass: "bg-orange-50 text-orange-600",
+    badgeClass: "border-orange-200 bg-orange-50 text-orange-600",
     priority: 70,
     actions: [
       { id: "edit", label: copy.actionEdit, tone: "primary" },
@@ -73,7 +79,7 @@ export const quoteStatuses: Record<QuoteStatus, QuoteStatusInfo> = {
   },
   signed: {
     label: copy.statusSigned,
-    badgeClass: "bg-amber-50 text-amber-700",
+    badgeClass: "border-amber-200 bg-amber-50 text-amber-700",
     priority: 80,
     actions: [
       { id: "collect_deposit", label: copy.actionCollectDeposit, tone: "primary" },
@@ -83,7 +89,7 @@ export const quoteStatuses: Record<QuoteStatus, QuoteStatusInfo> = {
   },
   deposit_paid: {
     label: copy.statusDepositPaid,
-    badgeClass: "bg-emerald-50 text-emerald-700",
+    badgeClass: "border-emerald-200 bg-emerald-50 text-emerald-700",
     priority: 30,
     actions: [
       { id: "view_signed_quote", label: copy.actionViewSignedQuote, tone: "secondary" },
@@ -92,7 +98,7 @@ export const quoteStatuses: Record<QuoteStatus, QuoteStatusInfo> = {
   },
   expired: {
     label: copy.statusExpired,
-    badgeClass: "bg-stone-100 text-stone-600",
+    badgeClass: "border-stone-200 bg-stone-100 text-stone-600",
     priority: 20,
     actions: [
       { id: "renew", label: copy.actionRenew, tone: "primary" },
@@ -101,7 +107,7 @@ export const quoteStatuses: Record<QuoteStatus, QuoteStatusInfo> = {
   },
   voided: {
     label: copy.statusVoided,
-    badgeClass: "bg-red-50 text-red-600",
+    badgeClass: "border-red-200 bg-red-50 text-red-600",
     priority: 10,
     actions: [{ id: "copy", label: copy.actionCopy, tone: "secondary" }],
   },

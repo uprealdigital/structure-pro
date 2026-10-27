@@ -112,6 +112,7 @@ export function toQuotePortal(input: {
   customers: QuotePortalCustomer[];
   recipients: QuotePortalRecipient[];
   dealIds: string[];
+  quoteCount: number;
   selections: QuoteSelections;
   communication: QuoteCommunication | null;
   status: QuoteStatus;
@@ -140,6 +141,7 @@ export function toQuotePortal(input: {
     customers: input.customers,
     recipients: input.recipients,
     dealIds: input.dealIds,
+    quoteCount: input.quoteCount,
     selections: input.selections,
     communication: input.communication,
     status: input.status,

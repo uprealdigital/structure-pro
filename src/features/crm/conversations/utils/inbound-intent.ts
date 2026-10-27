@@ -31,9 +31,8 @@ export function sameSelections(left: QuoteSelections, right: QuoteSelections): b
 export function estimateDelta(before: number, after: number): string {
   const delta = after - before;
   const amount = formatUsd(Math.abs(delta));
-  if (delta > 0) return `+${amount}`;
   if (delta < 0) return `-${amount}`;
-  return amount;
+  return `+${amount}`;
 }
 
 export function selectionTotals(current: QuoteSelections, proposed: QuoteSelections) {

@@ -1,16 +1,22 @@
 "use client";
 
-import { ArrowRightLeft, CirclePlus, Download, Eye, FileText, Pencil, Phone, Tag } from "lucide-react";
+import { ArrowRight, Calculator, Download, Eye, FileText, Handshake, Phone } from "lucide-react";
 import { useRef, useState } from "react";
 import { UploadProgress } from "@/src/features/crm/conversations/components/composer-attachments";
 import { EmailCard } from "@/src/features/crm/conversations/components/email-message";
 import { downloadImage, ImageViewerModal } from "@/src/features/crm/conversations/components/image-viewer-modal";
 import { MessageText } from "@/src/features/crm/conversations/components/message-text";
 import { copy } from "@/src/features/crm/conversations/locales/en";
+import { DealStatusBadge } from "@/src/features/crm/deals/components/deal-status-badge";
+import { dealStatuses } from "@/src/features/crm/deals/config/status";
+import type { DealStatus } from "@/src/features/crm/deals/types";
+import { QuoteStatusBadge } from "@/src/features/crm/quotes/components/quote-status-badge";
+import { quoteStatuses } from "@/src/features/crm/quotes/config/status";
+import type { QuoteStatus } from "@/src/features/crm/quotes/types";
 import type { Activity, ActivityChannel } from "@/src/features/crm/conversations/types";
 import { attachmentPreviewPath, fileAttachment, imageAttachment } from "@/src/features/crm/conversations/utils/attachments";
 import { parseEmailActivity, type EmailMessage } from "@/src/features/crm/conversations/utils/email-message";
-import { formatCallDuration, formatMessageClock, formatMessageDay, systemEventText } from "@/src/features/crm/conversations/utils/formatting";
+import { formatCallDuration, formatMessageClock, formatMessageDay, systemEventText, type SystemEventKind } from "@/src/features/crm/conversations/utils/formatting";
 import { contactInitials } from "@/src/features/crm/common/utils/formatting";
 
 export type OutgoingMessage = {
@@ -65,37 +71,59 @@ function callDirectionLabel(activity: Activity): string {
   return copy.channelCall;
 }
 
+function statusByLabel<T extends string>(
+  statuses: Record<T, { label: string }>,
+  label: string,
+): T | undefined {
+  return (Object.keys(statuses) as T[]).find((status) => statuses[status].label === label);
+}
+
+function StatusChangePill({ kind, label }: { kind: "dealStatus" | "quoteStatus"; label: string }) {
+  if (kind === "quoteStatus") {
+    const status = statusByLabel<QuoteStatus>(quoteStatuses, label);
+    if (status) return <QuoteStatusBadge status={status} />;
+  } else {
+    const status = statusByLabel<DealStatus>(dealStatuses, label);
+    if (status) return <DealStatusBadge status={status} />;
+  }
+  return <strong className="font-bold text-gray-900">{label}</strong>;
+}
+
+function logSubjectIcon(kind: SystemEventKind) {
+  const quote =
+    kind === "quote" || kind === "quoteStatus" || kind === "savedRevision" || kind === "activeQuote";
+  const Icon = quote ? Calculator : Handshake;
+  return <Icon className="h-3.5 w-3.5 shrink-0 text-gray-500" strokeWidth={1.8} aria-hidden="true" />;
+}
+
 function SystemActivity({ activity }: { activity: Activity }) {
   const clock = activity.createdAt ? formatMessageClock(activity.createdAt) : "";
   const event = systemEventText(activity.text);
+  const statusChange = (event.kind === "dealStatus" || event.kind === "quoteStatus") && event.status;
 
   return (
     <div className="my-2 flex flex-col items-center justify-center">
       <div className="inline-flex max-w-full flex-wrap items-center justify-center gap-x-1.5 gap-y-1 rounded-full border border-gray-200/80 bg-transparent px-3 py-1 text-center text-xs text-gray-600 shadow-xs transition-colors hover:bg-gray-50">
-        {event.kind === "created" || event.kind === "savedRevision" ? (
-          <CirclePlus className="h-3.5 w-3.5 shrink-0 text-gray-500" strokeWidth={1.8} aria-hidden="true" />
-        ) : event.kind === "dealStatus" || event.kind === "quoteStatus" ? (
-          <Tag className="h-3.5 w-3.5 shrink-0 text-gray-500" strokeWidth={1.8} aria-hidden="true" />
-        ) : event.kind === "renamed" ? (
-          <Pencil className="h-3.5 w-3.5 shrink-0 text-gray-500" strokeWidth={1.8} aria-hidden="true" />
-        ) : (
-          <ArrowRightLeft className="h-3.5 w-3.5 shrink-0 text-gray-500" strokeWidth={1.8} aria-hidden="true" />
-        )}
+        {logSubjectIcon(event.kind)}
         {event.kind === "renamed" && event.previousName ? (
           <span>
             {copy.dealWasRenamedFrom} <strong className="font-bold text-gray-900">{event.previousName}</strong>{" "}
             {copy.dealWasRenamedTo} <strong className="font-bold text-gray-900">{event.name}</strong>
           </span>
         ) : event.kind === "savedRevision" && event.previousName ? (
-          <span>
-            {copy.newRevision} <strong className="font-bold text-gray-900">{event.name}</strong> {copy.newRevisionFor}{" "}
-            <strong className="font-bold text-gray-900">{event.previousName}</strong>
-          </span>
-        ) : (event.kind === "dealStatus" || event.kind === "quoteStatus") && event.status ? (
-          <span>
-            <strong className="font-bold text-gray-900">{event.name}</strong> {copy.statusSetTo}{" "}
-            <strong className="font-bold text-gray-900">{event.status}</strong>
-          </span>
+          <>
+            <span className="font-normal text-gray-900">{event.previousName}</span>
+            <ArrowRight className="h-3.5 w-3.5 shrink-0 text-gray-400" strokeWidth={1.8} aria-hidden="true" />
+            <span className="inline-flex items-center rounded-full border border-gray-200 bg-gray-100 px-2 py-0.5 text-[11px] font-medium whitespace-nowrap text-gray-900">
+              {event.name}
+            </span>
+          </>
+        ) : statusChange ? (
+          <>
+            <span className="font-normal text-gray-900">{event.name}</span>
+            <ArrowRight className="h-3.5 w-3.5 shrink-0 text-gray-400" strokeWidth={1.8} aria-hidden="true" />
+            <StatusChangePill kind={event.kind as "dealStatus" | "quoteStatus"} label={event.status ?? ""} />
+          </>
         ) : event.kind === "quote" && event.previousName ? (
           <span>
             <strong className="font-bold text-gray-900">{event.previousName}</strong> {copy.revisionSwitchedTo}{" "}

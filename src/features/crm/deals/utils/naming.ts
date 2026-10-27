@@ -29,11 +29,15 @@ export function dealSourceLabel(source: string): string {
   );
 }
 
-export function defaultDealName(source: string, createdAt: string | Date): string {
+function dealStampText(createdAt: string | Date): string {
   const date = createdAt instanceof Date ? createdAt : new Date(createdAt);
-  const stamp = Number.isNaN(date.getTime())
-    ? ""
-    : dealStamp.format(date).replace(/[\u202f\u00a0]/g, " ");
-  const name = stamp ? `${dealSourceLabel(source)} (${stamp})` : dealSourceLabel(source);
-  return name.slice(0, dealNameMaxLength);
+  if (Number.isNaN(date.getTime())) return "";
+  return dealStamp.format(date).replace(/[\u202f\u00a0]/g, " ");
+}
+
+export function defaultDealName(source: string, createdAt: string | Date, number = 1): string {
+  const stamp = dealStampText(createdAt);
+  const detail = stamp ? `${dealSourceLabel(source)} - ${stamp}` : dealSourceLabel(source);
+  const count = Number.isInteger(number) && number > 0 ? number : 1;
+  return `Deal ${count} (${detail})`.slice(0, dealNameMaxLength);
 }

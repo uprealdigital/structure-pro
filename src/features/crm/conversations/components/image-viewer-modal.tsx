@@ -3,6 +3,7 @@
 import { Download, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
+import { Toast } from "@/src/common/components/toast";
 import { copy } from "@/src/features/crm/conversations/locales/en";
 
 function imageFileName(name: string, type: string): string {
@@ -38,7 +39,7 @@ export function ImageViewerModal({
   onClose: () => void;
 }) {
   const [saving, setSaving] = useState(false);
-  const [error, setError] = useState("");
+  const [error, setError] = useState<{ id: number; message: string } | null>(null);
 
   useEffect(() => {
     function onKey(event: KeyboardEvent) {
@@ -51,11 +52,11 @@ export function ImageViewerModal({
   async function save() {
     if (saving) return;
     setSaving(true);
-    setError("");
+    setError(null);
     try {
       await downloadImage(src, name);
     } catch {
-      setError(copy.downloadImageFailed);
+      setError({ id: Date.now(), message: copy.downloadImageFailed });
     } finally {
       setSaving(false);
     }
@@ -98,9 +99,17 @@ export function ImageViewerModal({
           >
             {copy.ok}
           </button>
-          {error ? <p className="basis-full text-xs text-red-600">{error}</p> : null}
         </footer>
       </div>
+      {error ? (
+        <Toast
+          key={error.id}
+          message={error.message}
+          tone="error"
+          dismissLabel={copy.dismiss}
+          onDismiss={() => setError(null)}
+        />
+      ) : null}
     </div>,
     document.body,
   );

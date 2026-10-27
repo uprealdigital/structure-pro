@@ -217,7 +217,7 @@ export function activityPreview(activity: Activity | undefined): string {
       return `${messagePreview(event.previousName)} ${copy.revisionSwitchedTo} ${name}`;
     }
     if (event.kind === "savedRevision" && event.previousName) {
-      return `${copy.newRevision} ${name} ${copy.newRevisionFor} ${messagePreview(event.previousName)}`;
+      return `${messagePreview(event.previousName)} ${name}`;
     }
     if ((event.kind === "dealStatus" || event.kind === "quoteStatus") && event.status) {
       return `${name} ${copy.statusSetTo} ${messagePreview(event.status)}`;

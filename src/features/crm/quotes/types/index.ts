@@ -188,6 +188,7 @@ export const quotePortalSchema = z.object({
   customers: z.array(quotePortalCustomerSchema),
   recipients: z.array(quotePortalRecipientSchema),
   dealIds: z.array(z.string()),
+  quoteCount: z.number().int().nonnegative(),
   selections: quoteSelectionsSchema,
   communication: quoteCommunicationSchema.nullable(),
   status: quotePortalStatusSchema,

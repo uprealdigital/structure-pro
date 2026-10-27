@@ -1,22 +1,31 @@
 "use client";
 
-import { ArrowUpRight, Calendar, Check, CreditCard, Download, Eye, Pencil, Share2, ShieldCheck } from "lucide-react";
+import { Calendar, Check, CreditCard, Download, Eye, Share2, ShieldCheck } from "lucide-react";
 import Link from "next/link";
+import { Toast } from "@/src/common/components/toast";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { BuildingConfigurator } from "@/src/features/cpq/components/building-configurator";
 import type { QuoteRevisionRenderFiles } from "@/src/features/cpq/components/building-scene";
 import type { QuoteSelections } from "@/src/features/cpq/types";
 import { contactInitials } from "@/src/features/crm/common/utils/formatting";
+import { QuoteStatusActions } from "@/src/features/crm/conversations/components/quote-status-actions";
 import { ReviewSendModal } from "@/src/features/crm/conversations/components/review-send-modal";
 import type { ConversationParticipant } from "@/src/features/crm/conversations/types";
 import { usePayDeposit } from "@/src/features/crm/quotes/hooks/use-pay-deposit";
 import { useSaveQuoteRevision } from "@/src/features/crm/quotes/hooks/use-save-quote-revision";
 import { useSendQuote } from "@/src/features/crm/quotes/hooks/use-send-quote";
-import { quoteStatuses } from "@/src/features/crm/quotes/config/status";
+import { quoteStatuses, type QuoteStatusActionId } from "@/src/features/crm/quotes/config/status";
 import { QuoteStatusBadge } from "@/src/features/crm/quotes/components/quote-status-badge";
 import { portalCopy } from "@/src/features/crm/quotes/locales/en";
-import { refreshQuoteLifecycle, saveQuoteCommunication } from "@/src/features/crm/quotes/server/actions";
+import {
+  duplicateQuote,
+  payQuoteDeposit,
+  refreshQuoteLifecycle,
+  renewQuote,
+  saveQuoteCommunication,
+  signQuoteAgreement,
+} from "@/src/features/crm/quotes/server/actions";
 import type { QuoteCommunication, QuotePortal, QuotePortalMode } from "@/src/features/crm/quotes/types";
 import { downloadQuotePdf, shareQuotePdf } from "@/src/features/crm/quotes/utils/quote-pdf";
 
@@ -62,11 +71,22 @@ export function QuotePortal({
     dealPrice: quote.totalLabel,
   });
   const [editing, setEditing] = useState(false);
+  const [signing, setSigning] = useState(false);
   const [reviewOpen, setReviewOpen] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
   const [copied, setCopied] = useState(false);
-  const [fileError, setFileError] = useState("");
+  const [toast, setToast] = useState<{ id: number; message: string } | null>(null);
+  const [actionPending, setActionPending] = useState(false);
   const shareRef = useRef<HTMLDivElement>(null);
+  const dealId = quote.dealIds[0];
+
+  function showError(message: string) {
+    setToast({ id: Date.now(), message });
+  }
+
+  useEffect(() => {
+    setSigning(false);
+  }, [quote.status]);
 
   useEffect(() => {
     if (quote.status !== "sent" && quote.status !== "viewed" && quote.status !== "changes_requested") return;
@@ -89,6 +109,11 @@ export function QuotePortal({
     return () => document.removeEventListener("mousedown", onPointer);
   }, [shareOpen]);
 
+  useEffect(() => {
+    if (!error) return;
+    setToast({ id: Date.now(), message: error });
+  }, [error]);
+
   if (!internal && won) return <QuoteSuccess />;
 
   const participants: ConversationParticipant[] = quote.recipients.map((recipient) => ({
@@ -107,28 +132,102 @@ export function QuotePortal({
     if ("error" in result) throw new Error(result.error);
   }
 
+  async function copyQuote() {
+    if (!dealId || actionPending) return;
+    setActionPending(true);
+    const result = await duplicateQuote({ dealId, quoteId: quote.id, revisionId: quote.revisionId });
+    setActionPending(false);
+    if ("error" in result) {
+      showError(portalCopy.actionError);
+      return;
+    }
+    router.push(`/quote/${result.data.id}?mode=internal`);
+  }
+
+  async function renew() {
+    if (actionPending) return;
+    setActionPending(true);
+    const result = await renewQuote({ quoteId: quote.id });
+    setActionPending(false);
+    if ("error" in result) {
+      showError(portalCopy.actionError);
+      return;
+    }
+    setReviewOpen(true);
+    router.refresh();
+  }
+
+  async function collectDeposit() {
+    if (actionPending) return;
+    setActionPending(true);
+    const result = await payQuoteDeposit({ quoteId: quote.id });
+    setActionPending(false);
+    if ("error" in result) {
+      showError(result.error || portalCopy.payError);
+      return;
+    }
+    router.refresh();
+  }
+
+  function runStatusAction(id: QuoteStatusActionId) {
+    if (id === "send" || id === "resend") {
+      setReviewOpen(true);
+      return;
+    }
+    if (id === "edit") {
+      setEditing((open) => !open);
+      return;
+    }
+    if (id === "view_requested_changes") {
+      document.getElementById("quote-summary")?.scrollIntoView({ behavior: "smooth", block: "start" });
+      return;
+    }
+    if (id === "collect_deposit") {
+      void collectDeposit();
+      return;
+    }
+    if (id === "view_signed_quote" || id === "view_deposit_receipt") {
+      window.open(customerQuotePath(quote.id), "_blank", "noopener,noreferrer");
+      return;
+    }
+    if (id === "renew") {
+      void renew();
+      return;
+    }
+    if (id === "copy") void copyQuote();
+  }
+
+  async function signAgreement() {
+    if (signing) return;
+    setSigning(true);
+    const result = await signQuoteAgreement({ quoteId: quote.id });
+    if ("error" in result) {
+      showError(result.error || portalCopy.signError);
+      setSigning(false);
+      return;
+    }
+    router.refresh();
+  }
+
   async function onDownload() {
-    setFileError("");
     try {
       downloadQuotePdf(quote);
     } catch {
-      setFileError(portalCopy.pdfError);
+      showError(portalCopy.pdfError);
     }
   }
 
   async function onSharePdf() {
-    setFileError("");
     setShareOpen(false);
     try {
       await shareQuotePdf(quote);
     } catch (shareFailure) {
       if (shareFailure instanceof DOMException && shareFailure.name === "AbortError") return;
-      setFileError(portalCopy.shareError);
+      showError(portalCopy.shareError);
     }
   }
 
   async function onCopyLink() {
-    setFileError("");
     const url = `${window.location.origin}${customerQuotePath(quote.id)}`;
     try {
       await navigator.clipboard.writeText(url);
@@ -143,7 +242,7 @@ export function QuotePortal({
       const copiedLink = document.execCommand("copy");
       field.remove();
       if (!copiedLink) {
-        setFileError(portalCopy.shareError);
+        showError(portalCopy.shareError);
         return;
       }
     }
@@ -181,7 +280,7 @@ export function QuotePortal({
             ) : null}
             <div className="flex flex-wrap items-center gap-3">
               {internal ? (
-                <QuoteStatusBadge status={quote.status} className="px-2.5 py-0.5 text-xs" />
+                <QuoteStatusBadge status={quote.status} />
               ) : null}
               <p className="text-xs font-medium text-[#655d55]">{quote.versionLabel}</p>
             </div>
@@ -246,7 +345,7 @@ export function QuotePortal({
             {quote.dateLabel ? (
               <p className="text-xs font-medium text-[#655d55]">{quote.dateLabel}</p>
             ) : null}
-            {fileError ? <p className="text-xs text-red-600">{fileError}</p> : null}
+            {copied && !shareOpen ? <p className="text-xs text-[#44474a]">{portalCopy.linkCopied}</p> : null}
           </div>
         </div>
       </header>
@@ -258,6 +357,7 @@ export function QuotePortal({
             mode="internal"
             selections={quote.selections}
             onSave={saveRevision}
+            onCancel={() => setEditing(false)}
           />
         </div>
       ) : (
@@ -272,7 +372,7 @@ export function QuotePortal({
             </div>
 
             <div className="lg:col-span-5">
-              <div className="flex flex-col gap-5 rounded-xl border border-[#e8e8ea] bg-white p-6 shadow-md">
+              <div id="quote-summary" className="flex flex-col gap-5 rounded-xl border border-[#e8e8ea] bg-white p-6 shadow-md">
                 <h2 className="border-b border-[#e8e8ea] pb-4 font-serif text-base font-semibold text-[#1a1c1d]">
                   {portalCopy.quote}
                 </h2>
@@ -311,37 +411,45 @@ export function QuotePortal({
                 </div>
 
                 {internal ? (
-                  <div className="flex items-center gap-3">
+                  <div className="flex flex-col gap-2">
+                    <div className="flex items-stretch gap-3">
+                      <QuoteStatusActions
+                        status={quote.status}
+                        editing={editing}
+                        disabled={actionPending}
+                        size="card"
+                        onAction={runStatusAction}
+                      />
+                    </div>
+                  </div>
+                ) : quote.status === "signed" ? (
+                  <div className="flex flex-col items-center gap-3">
                     <button
                       type="button"
-                      onClick={() => setEditing(true)}
-                      className="flex flex-1 cursor-pointer items-center justify-center gap-2 rounded-xl border border-[#c5c6c9] bg-white px-4 py-3 text-sm font-medium text-[#1a1c1d] transition-colors hover:bg-[#f3f3f5]"
+                      disabled={pending}
+                      onClick={() => void pay()}
+                      className="flex w-full cursor-pointer items-center justify-center gap-2 rounded-xl bg-black px-6 py-3 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-[#1b1c1d] disabled:cursor-default disabled:opacity-60"
                     >
-                      <Pencil className="h-4 w-4" aria-hidden="true" />
-                      {portalCopy.editQuote}
+                      <CreditCard className="h-4 w-4" aria-hidden="true" />
+                      {pending ? portalCopy.paying : portalCopy.payDeposit}
                     </button>
-                    <button
-                      type="button"
-                      onClick={() => setReviewOpen(true)}
-                      className="flex flex-1 cursor-pointer items-center justify-center gap-2 rounded-xl bg-black px-4 py-3 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-[#1b1c1d]"
-                    >
-                      <ArrowUpRight className="h-4 w-4" aria-hidden="true" />
-                      {portalCopy.reviewAndSend}
+                    <button type="button" className="text-xs font-medium text-[#1a1c1d] underline">
+                      {portalCopy.viewSignedAgreement}
                     </button>
                   </div>
-                ) : (
-                  <button
-                    type="button"
-                    disabled={pending}
-                    onClick={() => void pay()}
-                    className="flex w-full cursor-pointer items-center justify-center gap-2 rounded-xl bg-black px-6 py-3 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-[#1b1c1d] disabled:cursor-default disabled:opacity-60"
-                  >
-                    <CreditCard className="h-4 w-4" aria-hidden="true" />
-                    {pending ? portalCopy.paying : portalCopy.payDeposit}
-                  </button>
-                )}
-                {!internal && error ? <p className="text-xs text-red-600">{error}</p> : null}
-
+                ) : quote.status === "sent" || quote.status === "viewed" ? (
+                  <div className="flex flex-col items-center gap-2">
+                    <button
+                      type="button"
+                      disabled={signing}
+                      onClick={() => void signAgreement()}
+                      className="flex w-full cursor-pointer items-center justify-center gap-2 rounded-xl bg-black px-6 py-3 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-[#1b1c1d] disabled:cursor-default disabled:opacity-60"
+                    >
+                      {portalCopy.reviewAndSign}
+                    </button>
+                    <p className="text-center text-xs text-[#655d55]">{portalCopy.noPaymentToday}</p>
+                  </div>
+                ) : null}
                 <div className="flex flex-col gap-2 pt-1 text-xs text-[#655d55]">
                   <div className="flex items-center gap-2">
                     <Calendar className="h-4 w-4 shrink-0" aria-hidden="true" />
@@ -365,6 +473,15 @@ export function QuotePortal({
         </div>
       )}
 
+      {toast ? (
+        <Toast
+          key={toast.id}
+          message={toast.message}
+          tone="error"
+          dismissLabel={portalCopy.dismiss}
+          onDismiss={() => setToast(null)}
+        />
+      ) : null}
       {reviewOpen ? (
         <ReviewSendModal
           participants={participants}

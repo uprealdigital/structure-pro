@@ -44,7 +44,8 @@ const instruction = `You read inbound customer text messages for a building sale
 The messages are numbered. Return each intent separately. Never merge a specification change and a quote request into one intent.
 
 Use kind "configuration" when they ask to change the building: size, style, siding, colors, roof, doors, windows, loft, vents, flooring, or any other specification.
-Use kind "quote_request" when they ask to receive, resend, or look at their quote, invoice, or contract.
+Use kind "quote_request" only when the customer explicitly asks for a quote or an estimate. The message has to ask for one of those by name, such as "send me a quote" or "can I get an estimate".
+A yes, "that works", or "looks good" is not a quote request. Asking to see a photo, a closeup, or the building is not a quote request. Do not infer a quote request from agreement or from context.
 
 If one message asks for both, return both intents and include that message number on each.
 messageIndexes lists the message numbers that belong to that intent.

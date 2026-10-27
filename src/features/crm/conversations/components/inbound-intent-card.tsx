@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowLeftRight, ArrowUpRight, Calculator, Camera, Check, ChevronDown, DollarSign, Pencil, Settings, Star, X } from "lucide-react";
+import { ArrowLeftRight, ArrowUpRight, Calculator, Camera, ChevronDown, DollarSign, Pencil, Settings, X } from "lucide-react";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { copy } from "@/src/features/crm/conversations/locales/en";
 
@@ -13,6 +13,7 @@ export type IntentChangeRow = {
 export function InboundIntentCard({
   title,
   assistant,
+  icon = "settings",
   draft,
   quotes,
   selectedQuoteId,
@@ -28,6 +29,7 @@ export function InboundIntentCard({
 }: {
   title: string;
   assistant?: boolean;
+  icon?: "settings" | "quote";
   draft?: {
     title: string;
     price: string;
@@ -52,10 +54,10 @@ export function InboundIntentCard({
     <section className="mb-2.5 rounded-xl border border-gray-200 border-l-[3px] border-l-violet-500 bg-white p-3 shadow-xs">
       <div className="flex min-w-0 items-center gap-2">
         <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-violet-100 text-violet-600">
-          {assistant ? (
-            <Settings className="h-3.5 w-3.5" strokeWidth={2} aria-hidden="true" />
+          {icon === "quote" ? (
+            <Calculator className="h-3.5 w-3.5" strokeWidth={2} aria-hidden="true" />
           ) : (
-            <Star className="h-3.5 w-3.5" fill="currentColor" aria-hidden="true" />
+            <Settings className="h-3.5 w-3.5" strokeWidth={2} aria-hidden="true" />
           )}
         </span>
         <h3 className="truncate text-xs font-semibold text-gray-950">{title}</h3>
@@ -94,13 +96,9 @@ export function InboundIntentCard({
               </div>
               <div>
                 <p className="text-xs font-semibold text-gray-950">{draft.title}</p>
-                <p className="mt-0.5 flex items-baseline gap-1.5 text-xs font-medium text-gray-800">
+                <p className="mt-0.5 flex items-center gap-1.5 text-xs font-medium text-gray-800">
                   <span>{draft.price}</span>
-                  {draft.priceDelta ? (
-                    <span className={draft.priceDelta === "$0" ? "text-gray-500" : "text-emerald-600"}>
-                      ({draft.priceDelta})
-                    </span>
-                  ) : null}
+                  {draft.priceDelta ? <PriceDelta delta={draft.priceDelta} /> : null}
                 </p>
               </div>
             </div>
@@ -134,9 +132,8 @@ export function InboundIntentCard({
             type="button"
             disabled={pending}
             onClick={onApply}
-            className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs font-medium whitespace-nowrap text-gray-900 shadow-xs hover:bg-gray-50 disabled:opacity-60"
+            className="inline-flex shrink-0 items-center rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs font-medium whitespace-nowrap text-gray-900 shadow-xs hover:bg-gray-50 disabled:opacity-60"
           >
-            <Check className="h-3.5 w-3.5 shrink-0" strokeWidth={2} aria-hidden="true" />
             {copy.applySuggestion}
           </button>
         ) : null}
@@ -235,6 +232,19 @@ function QuoteTarget({
   );
 }
 
+function PriceDelta({ delta }: { delta: string }) {
+  const tone = delta.startsWith("-")
+    ? "border-rose-200 bg-rose-50 text-rose-700"
+    : delta === "+$0"
+      ? "border-gray-200 bg-gray-100 text-gray-500"
+      : "border-emerald-200 bg-emerald-50 text-emerald-700";
+  return (
+    <span className={`inline-flex items-center rounded-full border px-1.5 py-0.5 text-[10px] font-medium leading-none whitespace-nowrap ${tone}`}>
+      {delta}
+    </span>
+  );
+}
+
 function ChangeIcon({ tone }: { tone: IntentChangeRow["tone"] }) {
   const className = "mt-0.5 h-3.5 w-3.5 shrink-0";
   if (tone === "price") return <DollarSign className={className} strokeWidth={1.5} aria-hidden="true" />;
@@ -304,7 +314,6 @@ function IntentShareMenu({
         onClick={() => setOpen((value) => !value)}
         className="inline-flex items-center gap-1.5 rounded-lg bg-black px-3 py-2 text-xs font-medium whitespace-nowrap text-white shadow-xs hover:bg-gray-800 disabled:opacity-60"
       >
-        <ArrowUpRight className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
         <span>{label}</span>
         <ChevronDown className={`h-3.5 w-3.5 shrink-0 transition-transform ${open ? "rotate-180" : ""}`} aria-hidden="true" />
       </button>
@@ -320,10 +329,7 @@ function IntentShareMenu({
             className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs font-medium whitespace-nowrap text-gray-900 hover:bg-gray-50"
           >
             <Camera className="h-3.5 w-3.5 shrink-0 text-gray-500" strokeWidth={1.8} aria-hidden="true" />
-            <span className="min-w-0 flex-1">{copy.sharePhotos}</span>
-            <span className="shrink-0 rounded bg-gray-100 px-1.5 py-0.5 text-[10px] font-medium text-gray-600">
-              {copy.sharePhotosBadge}
-            </span>
+            <span>{copy.sharePhotos}</span>
           </button>
           <button
             type="button"
@@ -332,10 +338,7 @@ function IntentShareMenu({
             className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs font-medium whitespace-nowrap text-gray-900 hover:bg-gray-50"
           >
             <Calculator className="h-3.5 w-3.5 shrink-0 text-gray-500" strokeWidth={1.8} aria-hidden="true" />
-            <span className="min-w-0 flex-1">{copy.shareQuote}</span>
-            <span className="shrink-0 rounded bg-gray-100 px-1.5 py-0.5 text-[10px] font-medium text-gray-600">
-              {copy.shareQuoteBadge}
-            </span>
+            <span>{copy.shareQuoteOption}</span>
           </button>
         </div>
       ) : null}

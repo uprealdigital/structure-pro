@@ -1,6 +1,6 @@
 "use client";
 
-import { Calculator, Camera, Check, ChevronDown } from "lucide-react";
+import { Calculator, Camera, Check, ChevronDown, X } from "lucide-react";
 import {
   useEffect,
   useLayoutEffect,
@@ -40,6 +40,7 @@ type BuildingControlsProps = {
   config: BuildingConfig;
   onChange: (next: BuildingConfig) => void;
   onSubmit: () => void;
+  onCancel?: () => void;
   onShare?: () => void;
   onReview?: () => void;
   pending?: boolean;
@@ -61,6 +62,7 @@ export function BuildingControls({
   config,
   onChange,
   onSubmit,
+  onCancel,
   onShare,
   onReview,
   pending = false,
@@ -523,6 +525,7 @@ export function BuildingControls({
             mode={mode}
             pending={pending}
             onQuote={onSubmit}
+            onCancel={onCancel}
             onShare={onShare}
             onReview={onReview}
           />
@@ -538,6 +541,7 @@ export function BuildingControls({
         mode={mode}
         pending={pending}
         onQuote={onSubmit}
+        onCancel={onCancel}
         onShare={onShare}
         onReview={onReview}
         onPriceClick={() => selectSection("details")}
@@ -621,10 +625,7 @@ function SaveAndShareMenu({
               className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs font-medium whitespace-nowrap text-gray-900 hover:bg-gray-50"
             >
               <Camera className="h-3.5 w-3.5 shrink-0 text-gray-500" strokeWidth={1.8} aria-hidden="true" />
-              <span className="min-w-0 flex-1">{copy.shareDesignPreview}</span>
-              <span className="shrink-0 rounded bg-gray-100 px-1.5 py-0.5 text-[10px] font-medium text-gray-600">
-                {copy.photosBadge}
-              </span>
+              <span>{copy.shareDesignPreview}</span>
             </button>
           ) : null}
           {onReview ? (
@@ -635,10 +636,7 @@ function SaveAndShareMenu({
               className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs font-medium whitespace-nowrap text-gray-900 hover:bg-gray-50"
             >
               <Calculator className="h-3.5 w-3.5 shrink-0 text-gray-500" strokeWidth={1.8} aria-hidden="true" />
-              <span className="min-w-0 flex-1">{copy.reviewAndSendFormalQuote}</span>
-              <span className="shrink-0 rounded bg-gray-100 px-1.5 py-0.5 text-[10px] font-medium text-gray-600">
-                {copy.quotesBadge}
-              </span>
+              <span>{copy.reviewAndSendFormalQuote}</span>
             </button>
           ) : null}
         </div>
@@ -647,10 +645,28 @@ function SaveAndShareMenu({
   );
 }
 
+function CancelEditingButton({
+  onClick,
+  disabled,
+  className,
+}: {
+  onClick: () => void;
+  disabled: boolean;
+  className: string;
+}) {
+  return (
+    <button type="button" onClick={onClick} disabled={disabled} className={className}>
+      <X className="h-3.5 w-3.5 shrink-0 text-red-500" aria-hidden="true" />
+      {copy.cancelEditing}
+    </button>
+  );
+}
+
 export function QuoteActions({
   mode,
   variant,
   onPrimary,
+  onCancel,
   onShare,
   onReview,
   pending = false,
@@ -658,6 +674,7 @@ export function QuoteActions({
   mode: ConfiguratorMode;
   variant: "header" | "panel" | "bar";
   onPrimary: () => void;
+  onCancel?: () => void;
   onShare?: () => void;
   onReview?: () => void;
   pending?: boolean;
@@ -695,6 +712,13 @@ export function QuoteActions({
             {copy.saveAndClose}
           </button>
         ) : null}
+        {onCancel ? (
+          <CancelEditingButton
+            onClick={onCancel}
+            disabled={pending}
+            className="mt-2 flex w-full items-center justify-center gap-1.5 rounded-full border border-red-500 bg-white py-3 text-sm font-medium text-red-600 hover:bg-red-50 disabled:opacity-60"
+          />
+        ) : null}
       </>
     );
   }
@@ -710,9 +734,22 @@ export function QuoteActions({
 
   if (!menu) {
     return (
-      <button type="button" onClick={activate} disabled={pending} className={primaryClass}>
-        {label}
-      </button>
+      <div className="flex shrink-0 flex-col items-stretch gap-2">
+        <button type="button" onClick={activate} disabled={pending} className={primaryClass}>
+          {label}
+        </button>
+        {onCancel ? (
+          <CancelEditingButton
+            onClick={onCancel}
+            disabled={pending}
+            className={
+              variant === "header"
+                ? "inline-flex items-center justify-center gap-1.5 rounded-full border border-red-500 bg-white px-5 py-3 text-[13px] leading-none font-medium whitespace-nowrap text-red-600 hover:bg-red-50 disabled:opacity-60 lg:px-8 lg:py-3.5 lg:text-sm"
+                : "inline-flex items-center justify-center gap-1.5 rounded-full border border-red-500 bg-white px-5 py-3 text-sm leading-none font-medium whitespace-nowrap text-red-600 hover:bg-red-50 disabled:opacity-60"
+            }
+          />
+        ) : null}
+      </div>
     );
   }
 
@@ -732,6 +769,7 @@ function MobileQuoteBar({
   mode,
   pending,
   onQuote,
+  onCancel,
   onShare,
   onReview,
   onPriceClick,
@@ -741,6 +779,7 @@ function MobileQuoteBar({
   mode: ConfiguratorMode;
   pending: boolean;
   onQuote: () => void;
+  onCancel?: () => void;
   onShare?: () => void;
   onReview?: () => void;
   onPriceClick: () => void;
@@ -765,7 +804,7 @@ function MobileQuoteBar({
             {copy.seeDetails}
           </button>
         </div>
-        <QuoteActions mode={mode} variant="bar" pending={pending} onPrimary={onQuote} onShare={onShare} onReview={onReview} />
+        <QuoteActions mode={mode} variant="bar" pending={pending} onPrimary={onQuote} onCancel={onCancel} onShare={onShare} onReview={onReview} />
       </div>
     </div>
   );
@@ -883,6 +922,7 @@ function EstimateBreakdownBody({
   mode,
   pending,
   onQuote,
+  onCancel,
   onShare,
   onReview,
 }: {
@@ -895,6 +935,7 @@ function EstimateBreakdownBody({
   mode: ConfiguratorMode;
   pending: boolean;
   onQuote: () => void;
+  onCancel?: () => void;
   onShare?: () => void;
   onReview?: () => void;
 }) {
@@ -944,7 +985,7 @@ function EstimateBreakdownBody({
         {copy.quoteDisclaimer}
       </p>
       <p className="text-[11px] leading-relaxed text-gray-500">{copy.satisfaction}</p>
-      <QuoteActions mode={mode} variant="panel" pending={pending} onPrimary={onQuote} onShare={onShare} onReview={onReview} />
+      <QuoteActions mode={mode} variant="panel" pending={pending} onPrimary={onQuote} onCancel={onCancel} onShare={onShare} onReview={onReview} />
       <div className="flex items-center space-x-2 pt-3 text-xs text-gray-600">
         <span>
           {copy.deliveryTo}{" "}

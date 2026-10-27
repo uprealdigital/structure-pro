@@ -6,7 +6,8 @@ import { useEffect, useRef, useState } from "react";
 import { copy } from "@/src/features/crm/conversations/locales/en";
 import type { ConversationDealListItem, ConversationDealOption } from "@/src/features/crm/conversations/types";
 import { orderedDealMenu } from "@/src/features/crm/conversations/utils/deals";
-import { canMarkDealLost, dealStatusOption } from "@/src/features/crm/deals/utils/status";
+import { DealStatusBadge } from "@/src/features/crm/deals/components/deal-status-badge";
+import { canMarkDealLost } from "@/src/features/crm/deals/utils/status";
 import { dealNameMaxLength, type DealStatus } from "@/src/features/crm/deals/types";
 
 function menuItems(deals: ConversationDealOption[]): ConversationDealListItem[] {
@@ -182,7 +183,7 @@ function DealSwitchList({
                     <span className="flex items-center justify-between gap-2">
                       <span className="flex min-w-0 items-center gap-1.5">
                         <span
-                          className={`truncate text-xs ${
+                          className={`whitespace-nowrap text-xs ${
                             current ? "font-bold text-gray-950" : "font-medium text-gray-800"
                           }`}
                         >
@@ -194,13 +195,7 @@ function DealSwitchList({
                           </span>
                         ) : null}
                       </span>
-                      <span
-                        className={`inline-flex shrink-0 items-center rounded border px-1.5 py-0.5 text-[10px] font-medium ${
-                          dealStatusOption(deal.stage)?.badge ?? ""
-                        }`}
-                      >
-                        {dealStatusOption(deal.stage)?.label}
-                      </span>
+                      <DealStatusBadge status={deal.stage} />
                     </span>
                     <span className="mt-1.5 flex items-center justify-between gap-2 text-[11px] text-gray-500">
                       <span className="font-semibold text-gray-900">{deal.priceLabel}</span>
@@ -421,7 +416,7 @@ export function DealHeading({
           </span>
         )}
         {dealsOpen ? (
-          <div className="absolute top-full left-0 z-50 mt-1.5 w-80 max-w-[calc(100vw-2.5rem)] overflow-hidden rounded-xl border border-gray-200/90 bg-white shadow-2xl">
+          <div className="absolute top-full left-0 z-50 mt-1.5 w-max min-w-80 max-w-[calc(100vw-2.5rem)] overflow-hidden rounded-xl border border-gray-200/90 bg-white shadow-2xl">
             <DealSwitchList
               deals={visible}
               selectedId={selectedId}
@@ -468,7 +463,7 @@ export function DealHeading({
                   <ChevronRight className="h-3 w-3 shrink-0 text-gray-500" aria-hidden="true" />
                 </button>
                 {switchOpen ? (
-                  <div className="absolute top-full left-0 z-50 mt-1 w-80 max-w-[calc(100vw-2.5rem)] overflow-hidden rounded-xl border border-gray-200/90 bg-white shadow-2xl md:top-0 md:left-full md:mt-0 md:ml-1.5">
+                  <div className="absolute top-full left-0 z-50 mt-1 w-max min-w-80 max-w-[calc(100vw-2.5rem)] overflow-hidden rounded-xl border border-gray-200/90 bg-white shadow-2xl md:top-0 md:left-full md:mt-0 md:ml-1.5">
                     <DealSwitchList
                       deals={visible}
                       selectedId={selectedId}

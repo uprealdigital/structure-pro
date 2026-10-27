@@ -3,6 +3,7 @@
 import dynamic from "next/dynamic";
 import { Check, Plus, RotateCw, X } from "lucide-react";
 import { useEffect, useRef, useState, type Ref } from "react";
+import { Toast } from "@/src/common/components/toast";
 import type { DesignAngle, DesignAngleView } from "@/src/features/cpq/components/building-view";
 import type { QuoteSelections } from "@/src/features/cpq/types";
 import { toBuildingConfig } from "@/src/features/cpq/utils/mappers";
@@ -157,7 +158,7 @@ export function DesignPreviewModal({ current, revisions, selections, suggested, 
   const [views, setViews] = useState<DesignView[]>(() => [createView("quarter")]);
   const [modelReady, setModelReady] = useState(false);
   const [attaching, setAttaching] = useState(false);
-  const [error, setError] = useState("");
+  const [error, setError] = useState<{ id: number; message: string } | null>(null);
   const stageRef = useRef<HTMLDivElement>(null);
   const trackRefs = useRef(new Map<string, DesignAngleView["track"]>());
   const captureRefs = useRef(new Map<string, DesignAngleView["captureRef"]>());
@@ -204,7 +205,7 @@ export function DesignPreviewModal({ current, revisions, selections, suggested, 
   async function attach() {
     if (attaching || views.length === 0) return;
     setAttaching(true);
-    setError("");
+    setError(null);
     try {
       const blobs: Blob[] = [];
       for (const view of views) {
@@ -214,7 +215,10 @@ export function DesignPreviewModal({ current, revisions, selections, suggested, 
       }
       await onAttach(await composeDesignPreview(blobs));
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : copy.designPreviewAttachFailed);
+      setError({
+        id: Date.now(),
+        message: caught instanceof Error ? caught.message : copy.designPreviewAttachFailed,
+      });
       setAttaching(false);
     }
   }
@@ -308,8 +312,16 @@ export function DesignPreviewModal({ current, revisions, selections, suggested, 
               {attaching ? copy.attachingDesignPreview : copy.attachDesignPreviewAction}
             </button>
           </div>
-          {error ? <p className="basis-full text-xs text-red-600">{error}</p> : null}
         </footer>
+        {error ? (
+          <Toast
+            key={error.id}
+            message={error.message}
+            tone="error"
+            dismissLabel={copy.dismiss}
+            onDismiss={() => setError(null)}
+          />
+        ) : null}
       </div>
     </div>
   );

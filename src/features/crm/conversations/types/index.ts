@@ -166,6 +166,13 @@ export const moveQuoteToNewDealSchema = z.object({
   quoteId: z.string().trim().min(1),
 });
 
+export const undoMoveQuoteToNewDealSchema = z.object({
+  quoteId: z.string().trim().min(1),
+  sourceDealId: dealIdSchema,
+  createdDealId: dealIdSchema,
+  wasPrimary: z.boolean(),
+});
+
 export const conversationSummarySchema = z.object({
   id: z.string(),
   lookupKey: z.string(),

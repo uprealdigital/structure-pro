@@ -1,5 +1,6 @@
 import { db } from "@/src/common/lib/supabase/supabase.service";
 import { throwIfError } from "@/src/common/utils/error-handling";
+import { readDealCustomersForCustomer, readDealCustomersForDeal } from "@/src/features/crm/common/db/deal-customer";
 import { recordDealStatusActivity } from "@/src/features/crm/conversations/server/status-activity";
 import { dealStatuses } from "@/src/features/crm/deals/config/status";
 import { dealPatchSchema, dealWriteSchema, type Deal } from "@/src/features/crm/deals/types";
@@ -69,6 +70,32 @@ export async function createDeal(input: {
     return saved;
   }
   return { ...saved, name };
+}
+
+export async function assignDefaultDealName(dealId: string): Promise<string | undefined> {
+  const deal = await readDeal(dealId);
+  if (!deal) return undefined;
+  const onDeal = await readDealCustomersForDeal(dealId);
+  const owner = onDeal.find((link) => link.isPrimary) ?? onDeal[0];
+  let number = 1;
+  if (owner) {
+    const links = await readDealCustomersForCustomer(owner.customerId);
+    const owned = links.filter((link) => link.isPrimary);
+    const counted = owned.length > 0 ? owned : links;
+    const related = await readDealsByIds(counted.map((link) => link.dealId));
+    const ordered = related.sort((left, right) => {
+      const leftAt = left.createdAt ?? "";
+      const rightAt = right.createdAt ?? "";
+      if (leftAt < rightAt) return -1;
+      if (leftAt > rightAt) return 1;
+      return left.id < right.id ? -1 : left.id > right.id ? 1 : 0;
+    });
+    const index = ordered.findIndex((item) => item.id === deal.id);
+    number = index >= 0 ? index + 1 : ordered.length + 1;
+  }
+  const name = defaultDealName(deal.source, deal.createdAt ?? new Date().toISOString(), number);
+  await updateDeal(deal.id, { name });
+  return name;
 }
 
 export async function readDeals(): Promise<Deal[]> {

@@ -324,7 +324,6 @@ function missingRevisionRenders(shown: ConversationQuote[], open: boolean, singl
 export function QuoteMenu({
   quotes,
   viewingQuoteId,
-  error,
   captureRevisionId,
   failedRevisionIds,
   onViewQuote,
@@ -335,7 +334,6 @@ export function QuoteMenu({
 }: {
   quotes: ConversationQuote[];
   viewingQuoteId: string;
-  error?: string;
   captureRevisionId: string | null;
   failedRevisionIds: Record<string, true>;
   onViewQuote: (id: string) => void;
@@ -481,7 +479,6 @@ export function QuoteMenu({
           aria-hidden="true"
         />
       </button>
-      {error ? <p className="pt-1 text-[11px] text-red-600">{error}</p> : null}
       {open && single && flyout ? (
         <RevisionFlyout
           quote={flyout}

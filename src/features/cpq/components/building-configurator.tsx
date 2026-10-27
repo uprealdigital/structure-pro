@@ -2,6 +2,7 @@
 
 import dynamic from "next/dynamic";
 import Link from "next/link";
+import { Toast } from "@/src/common/components/toast";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import {
   Box,
@@ -42,18 +43,20 @@ export function BuildingConfigurator({
   onSave,
   onSaveAndShare,
   onSaveAndReview,
+  onCancel,
 }: {
   selections?: QuoteSelections;
   mode?: ConfiguratorMode;
   onSave?: (selections: QuoteSelections, renders: QuoteRevisionRenderFiles) => Promise<void>;
   onSaveAndShare?: (selections: QuoteSelections, renders: QuoteRevisionRenderFiles) => Promise<void>;
   onSaveAndReview?: (selections: QuoteSelections, renders: QuoteRevisionRenderFiles) => Promise<void>;
+  onCancel?: () => void;
 } = {}) {
   const internal = mode === "internal";
   const [yardOpen, setYardOpen] = useState(false);
   const [quoteOpen, setQuoteOpen] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [saveError, setSaveError] = useState("");
+  const [saveError, setSaveError] = useState<{ id: number; message: string } | null>(null);
   const savingRef = useRef(false);
   const captureBuildingRef = useRef<BuildingCapture | null>(null);
   const renderCaptureRef = useRef<QuoteRevisionRenderCapture | null>(null);
@@ -81,13 +84,16 @@ export function BuildingConfigurator({
     if (!save || savingRef.current) return;
     savingRef.current = true;
     setSaving(true);
-    setSaveError("");
+    setSaveError(null);
     try {
       const capture = renderCaptureRef.current;
       if (!capture) throw new Error(copy.saveQuoteError);
       await save(selections, await capture());
     } catch (error) {
-      setSaveError(error instanceof Error ? error.message : copy.saveQuoteError);
+      setSaveError({
+        id: Date.now(),
+        message: error instanceof Error && error.message ? error.message : copy.saveQuoteError,
+      });
     } finally {
       savingRef.current = false;
       setSaving(false);
@@ -219,6 +225,7 @@ export function BuildingConfigurator({
           config={config}
           onChange={setConfig}
           onSubmit={submitQuote}
+          onCancel={onCancel}
           onShare={onSaveAndShare ? shareQuote : undefined}
           onReview={onSaveAndReview ? reviewQuote : undefined}
           pending={saving}
@@ -250,11 +257,20 @@ export function BuildingConfigurator({
                 variant="header"
                 pending={saving}
                 onPrimary={submitQuote}
+                onCancel={onCancel}
                 onShare={onSaveAndShare ? shareQuote : undefined}
                 onReview={onSaveAndReview ? reviewQuote : undefined}
               />
             </div>
-            {saveError ? <p className="mt-3 text-right text-xs text-red-600">{saveError}</p> : null}
+            {saveError ? (
+              <Toast
+                key={saveError.id}
+                message={saveError.message}
+                tone="error"
+                dismissLabel={copy.dismiss}
+                onDismiss={() => setSaveError(null)}
+              />
+            ) : null}
           </header>
         </BuildingControls>
 
@@ -313,6 +329,7 @@ export function BuildingConfigurator({
               variant="panel"
               pending={saving}
               onPrimary={submitQuote}
+              onCancel={onCancel}
               onShare={onSaveAndShare ? shareQuote : undefined}
               onReview={onSaveAndReview ? reviewQuote : undefined}
             />
@@ -811,10 +828,8 @@ function QuoteModal({
   const [email, setEmail] = useState("");
   const [agreedToTerms, setAgreedToTerms] = useState(false);
   const [fieldErrors, setFieldErrors] = useState<QuoteFieldErrors>({});
-  const [status, setStatus] = useState<"idle" | "submitting" | "success" | "error">(
-    "idle",
-  );
-  const [errorMessage, setErrorMessage] = useState("");
+  const [status, setStatus] = useState<"idle" | "submitting" | "success">("idle");
+  const [submitError, setSubmitError] = useState<{ id: number; message: string } | null>(null);
   const submittingRef = useRef(false);
 
   function requiredPlaceholder(label: string) {
@@ -835,13 +850,12 @@ function QuoteModal({
     setFieldErrors(nextErrors);
     if (Object.values(nextErrors).some(Boolean)) {
       setStatus("idle");
-      setErrorMessage("");
       return;
     }
 
     submittingRef.current = true;
     setStatus("submitting");
-    setErrorMessage("");
+    setSubmitError(null);
 
     try {
       const result = await createQuoteAction({
@@ -852,15 +866,15 @@ function QuoteModal({
       });
       if ("error" in result) {
         submittingRef.current = false;
-        setStatus("error");
-        setErrorMessage(result.error || copy.quoteSubmitError);
+        setStatus("idle");
+        setSubmitError({ id: Date.now(), message: result.error || copy.quoteSubmitError });
         return;
       }
       setStatus("success");
     } catch {
       submittingRef.current = false;
-      setStatus("error");
-      setErrorMessage(copy.quoteSubmitError);
+      setStatus("idle");
+      setSubmitError({ id: Date.now(), message: copy.quoteSubmitError });
     }
   }
 
@@ -1009,9 +1023,6 @@ function QuoteModal({
               </div>
               {fieldErrors.consent ? <FieldError message={fieldErrors.consent} /> : null}
             </div>
-            {status === "error" ? (
-              <p className="text-sm text-red-600">{errorMessage}</p>
-            ) : null}
             <div className="pt-2">
               <button
                 type="submit"
@@ -1024,6 +1035,15 @@ function QuoteModal({
           </>
         )}
       </div>
+      {submitError ? (
+        <Toast
+          key={submitError.id}
+          message={submitError.message}
+          tone="error"
+          dismissLabel={copy.dismiss}
+          onDismiss={() => setSubmitError(null)}
+        />
+      ) : null}
     </div>
   );
 }

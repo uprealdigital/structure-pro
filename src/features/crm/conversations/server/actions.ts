@@ -48,6 +48,7 @@ import {
 import {
   activeDealRequestSchema,
   moveQuoteToNewDealSchema,
+  undoMoveQuoteToNewDealSchema,
   activityInsertSchema,
   composerChannelSchema,
   conversationIdSchema,
@@ -67,8 +68,8 @@ import {
   type ConversationWorkspace,
 } from "@/src/features/crm/conversations/types";
 import { readCustomer, updateCustomer } from "@/src/features/crm/common/db/customer";
-import { createDealCustomer, readDealCustomersForCustomer, readDealCustomersForDeal } from "@/src/features/crm/common/db/deal-customer";
-import { createDeal, deleteDeal, readDeal, updateDeal } from "@/src/features/crm/deals/db/deal";
+import { createDealCustomer, deleteDealCustomer, readDealCustomersForCustomer, readDealCustomersForDeal } from "@/src/features/crm/common/db/deal-customer";
+import { assignDefaultDealName, createDeal, deleteDeal, readDeal, updateDeal } from "@/src/features/crm/deals/db/deal";
 import { fileActivityText, imageActivityText } from "@/src/features/crm/conversations/utils/attachments";
 import { emailActivityText } from "@/src/features/crm/conversations/utils/email-message";
 import { systemEventBody } from "@/src/features/crm/conversations/utils/formatting";
@@ -82,6 +83,7 @@ import type { Customer } from "@/src/features/crm/common/types";
 import { dealIdSchema, dealNameSchema, type DealStatus } from "@/src/features/crm/deals/types";
 import { defaultDealName } from "@/src/features/crm/deals/utils/naming";
 import { canMarkDealLost } from "@/src/features/crm/deals/utils/status";
+import { canMoveQuoteToNewDeal } from "@/src/features/crm/quotes/config/status";
 import { markQuoteSent, readQuoteStatus, setQuoteStatus } from "@/src/features/crm/quotes/db/quote";
 import { readQuoteRevision, updateQuoteRevision } from "@/src/features/crm/quotes/db/quote-revision";
 
@@ -489,10 +491,10 @@ async function recordOutbound(conversationId: string, channel: "email" | "sms", 
   ]);
 }
 
-async function currentQuoteLink(quoteId: string, revisionId: string): Promise<string> {
+async function currentQuoteLink(quoteId: string): Promise<string> {
   const headerStore = await headers();
   const host = (headerStore.get("x-forwarded-host") ?? headerStore.get("host") ?? "").split(",")[0]?.trim() ?? "";
-  const path = quoteRevisionPath(quoteId, revisionId);
+  const path = quoteRevisionPath(quoteId);
   if (!host) return path;
   const forwarded = headerStore.get("x-forwarded-proto")?.split(",")[0]?.trim();
   const proto = forwarded || (host.startsWith("localhost") || host.startsWith("127.0.0.1") ? "http" : "https");
@@ -556,7 +558,7 @@ export async function sendQuoteMessages(
       }
     }
 
-    const quoteLink = await currentQuoteLink(quoteId, revisionId);
+    const quoteLink = await currentQuoteLink(quoteId);
     for (const customer of emailRecipients) {
       if (!customer) continue;
       const values = reviewMessageValues(customer.fullName, dealName, dealPrice, quoteLink);
@@ -658,28 +660,33 @@ function missingOptionalQuote(error: unknown): boolean {
 export async function moveQuoteToNewDeal(input: {
   dealId: string;
   quoteId: string;
-}): Promise<{ success: true; data: { dealId: string; name: string } } | { error: string }> {
+}): Promise<{ success: true; data: { dealId: string; name: string; wasPrimary: boolean } } | { error: string }> {
   const parsed = moveQuoteToNewDealSchema.safeParse(input);
   if (!parsed.success) return { error: "A deal and quote are required" };
 
   let createdId = "";
   try {
-    const [deal, links, customers] = await Promise.all([
+    const [deal, links, customers, status] = await Promise.all([
       readDeal(parsed.data.dealId),
       readDealQuotes(parsed.data.dealId),
       readDealCustomersForDeal(parsed.data.dealId),
+      readQuoteStatus(parsed.data.quoteId),
     ]);
     if (!deal) return { error: "Deal was not found" };
     const quoteId = parsed.data.quoteId;
-    const onDeal = deal.quoteId === quoteId || links.some((link) => link.quoteId === quoteId);
-    if (!onDeal) return { error: "Quote was not found" };
-    if (customers.length === 0) return { error: "This deal has no customers" };
-
-    const remaining = [
+    const quoteIds = [
       ...new Set(
-        [deal.quoteId, ...links.map((link) => link.quoteId)].filter((id): id is string => Boolean(id) && id !== quoteId),
+        [deal.quoteId, ...links.map((link) => link.quoteId)].filter((id): id is string => Boolean(id)),
       ),
     ];
+    if (!quoteIds.includes(quoteId)) return { error: "Quote was not found" };
+    if (!status || !canMoveQuoteToNewDeal(status, quoteIds.length)) {
+      return { error: "This quote cannot be moved" };
+    }
+    if (customers.length === 0) return { error: "This deal has no customers" };
+
+    const wasPrimary = deal.quoteId === quoteId;
+    const remaining = quoteIds.filter((id) => id !== quoteId);
     const created = await createDeal({ quoteId, source: deal.source });
     createdId = created.id;
     await createDealQuote({ dealId: created.id, quoteId });
@@ -690,7 +697,8 @@ export async function moveQuoteToNewDeal(input: {
         isPrimary: customer.isPrimary,
       });
     }
-    if (deal.quoteId === quoteId) {
+    const name = (await assignDefaultDealName(created.id)) ?? created.name ?? "";
+    if (wasPrimary) {
       await updateDeal(deal.id, { quoteId: remaining[0] ?? null });
     }
     await deleteDealQuote({ dealId: deal.id, quoteId });
@@ -704,13 +712,61 @@ export async function moveQuoteToNewDeal(input: {
     revalidatePath("/crm/conversations");
     revalidatePath("/crm/quotes");
     revalidatePath("/crm/deals");
-    return { success: true, data: { dealId: created.id, name: created.name ?? "" } };
+    return { success: true, data: { dealId: created.id, name, wasPrimary } };
   } catch (error) {
     if (createdId) await deleteDeal(createdId).catch(() => undefined);
     if (missingOptionalQuote(error)) {
       return { error: "Run supabase/migrate-crm-deal-optional-quote.sql in the Supabase SQL editor." };
     }
     const message = error instanceof Error ? error.message : "Could not move this quote";
+    return { error: message };
+  }
+}
+
+export async function undoMoveQuoteToNewDeal(input: {
+  quoteId: string;
+  sourceDealId: string;
+  createdDealId: string;
+  wasPrimary: boolean;
+}): Promise<{ success: true } | { error: string }> {
+  const parsed = undoMoveQuoteToNewDealSchema.safeParse(input);
+  if (!parsed.success) return { error: "A quote and its deals are required" };
+
+  try {
+    const [source, created, createdLinks, customers] = await Promise.all([
+      readDeal(parsed.data.sourceDealId),
+      readDeal(parsed.data.createdDealId),
+      readDealQuotes(parsed.data.createdDealId),
+      readDealCustomersForDeal(parsed.data.createdDealId),
+    ]);
+    if (!source || !created) return { error: "Deal was not found" };
+    const quoteId = parsed.data.quoteId;
+    const createdQuoteIds = [
+      ...new Set(
+        [created.quoteId, ...createdLinks.map((link) => link.quoteId)].filter((id): id is string => Boolean(id)),
+      ),
+    ];
+    if (createdQuoteIds.length !== 1 || createdQuoteIds[0] !== quoteId) {
+      return { error: "This quote cannot be moved back" };
+    }
+
+    await createDealQuote({ dealId: source.id, quoteId });
+    if (parsed.data.wasPrimary) await updateDeal(source.id, { quoteId });
+    await deleteDealQuote({ dealId: created.id, quoteId });
+    for (const customer of customers) {
+      const person = await readCustomer(customer.customerId);
+      if (person?.activeDealId === created.id) {
+        await updateCustomer(person.id, { activeDealId: source.id });
+      }
+      await deleteDealCustomer(customer.customerId, created.id);
+    }
+    await deleteDeal(created.id);
+    revalidatePath("/crm/conversations");
+    revalidatePath("/crm/quotes");
+    revalidatePath("/crm/deals");
+    return { success: true };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Could not move this quote back";
     return { error: message };
   }
 }

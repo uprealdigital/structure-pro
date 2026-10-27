@@ -1,16 +1,12 @@
 import { quoteStatuses } from "@/src/features/crm/quotes/config/status";
 import type { QuoteStatus } from "@/src/features/crm/quotes/types";
 
-export function QuoteStatusBadge({
-  status,
-  className = "px-1.5 py-0.5 text-[10px]",
-}: {
-  status: QuoteStatus;
-  className?: string;
-}) {
+export function QuoteStatusBadge({ status }: { status: QuoteStatus }) {
   const info = quoteStatuses[status];
   return (
-    <span className={`inline-flex items-center rounded-full font-medium ${info.badgeClass} ${className}`}>
+    <span
+      className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium whitespace-nowrap ${info.badgeClass}`}
+    >
       {info.label}
     </span>
   );

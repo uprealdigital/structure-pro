@@ -5,7 +5,7 @@ import { describeSelections } from "@/src/features/cpq/utils/pricing";
 import { readCustomers } from "@/src/features/crm/common/db/customer";
 import { readDealCustomers, readDealCustomersForDeals } from "@/src/features/crm/common/db/deal-customer";
 import { readDeals, readDealsByIds, readDealsByQuoteId } from "@/src/features/crm/deals/db/deal";
-import { readAllDealQuotes, readDealQuotesForQuote } from "@/src/features/crm/deals/db/deal-quote";
+import { readAllDealQuotes, readDealQuotes, readDealQuotesForQuote } from "@/src/features/crm/deals/db/deal-quote";
 import { readActiveRevisionId, readQuote, readQuoteStatus, readQuotes } from "@/src/features/crm/quotes/db/quote";
 import { readQuoteRevision } from "@/src/features/crm/quotes/db/quote-revision";
 import type { QuoteCustomer, QuoteListItem, QuotePortal, QuotePortalCustomer, QuotePortalRecipient } from "@/src/features/crm/quotes/types";
@@ -83,16 +83,14 @@ export async function getQuoteCount(): Promise<number> {
   return (await getQuoteList()).length;
 }
 
-export const getQuotePortal = cache(async (id: string, revisionId?: string): Promise<QuotePortal | undefined> => {
+export const getQuotePortal = cache(async (id: string): Promise<QuotePortal | undefined> => {
   const quoteId = id.trim();
   if (!quoteId) return undefined;
   const quote = await readQuote(quoteId);
   if (!quote) return undefined;
-  const requested = revisionId?.trim();
   const activeRevisionId = await readActiveRevisionId(quoteId);
-  const chosenId = requested || activeRevisionId;
-  if (!chosenId) return undefined;
-  const revision = await readQuoteRevision(chosenId);
+  if (!activeRevisionId) return undefined;
+  const revision = await readQuoteRevision(activeRevisionId);
   if (!revision || revision.quoteId !== quoteId) return undefined;
   const [directDeals, quoteLinks] = await Promise.all([
     readDealsByQuoteId(quoteId),
@@ -127,6 +125,11 @@ export const getQuotePortal = cache(async (id: string, revisionId?: string): Pro
     quoteCustomers.push({ id: customer.id, name: customer.fullName, primary: link.isPrimary });
   }
   const described = describeSelections(revision.selections);
+  const primaryDeal = deals[0];
+  const primaryLinks = primaryDeal ? await readDealQuotes(primaryDeal.id) : [];
+  const quoteCount = new Set(
+    [primaryDeal?.quoteId, ...primaryLinks.map((link) => link.quoteId)].filter((id): id is string => Boolean(id)),
+  ).size;
   return toQuotePortal({
     id: quote.id,
     invoiceId: quote.invoiceId,
@@ -148,6 +151,7 @@ export const getQuotePortal = cache(async (id: string, revisionId?: string): Pro
     customers: quoteCustomers,
     recipients,
     dealIds: deals.map((deal) => deal.id),
+    quoteCount,
     selections: revision.selections,
     communication: revision.communication,
     status: (await readQuoteStatus(quote.id)) ?? revision.status,

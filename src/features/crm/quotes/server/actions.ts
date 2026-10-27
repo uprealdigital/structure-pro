@@ -247,6 +247,7 @@ export async function createDealQuoteAction(input: {
 export async function duplicateQuote(input: {
   dealId: string;
   quoteId: string;
+  revisionId?: string;
 }): Promise<
   | {
       success: true;
@@ -454,6 +455,24 @@ export async function renewQuote(input: { quoteId: string }): Promise<{ success:
     return { success: true };
   } catch (error) {
     const message = error instanceof Error ? error.message : "Could not renew this quote";
+    return { error: message };
+  }
+}
+
+export async function signQuoteAgreement(
+  input: unknown,
+): Promise<{ success: true; data: { status: QuoteStatus } } | { error: string }> {
+  const parsed = payQuoteDepositSchema.safeParse(input);
+  if (!parsed.success) return { error: "A quote is required" };
+
+  try {
+    const status = await readQuoteStatus(parsed.data.quoteId);
+    if (status !== "sent" && status !== "viewed") return { error: "This quote cannot be signed" };
+    await setQuoteStatus(parsed.data.quoteId, "signed");
+    revalidateQuote(parsed.data.quoteId);
+    return { success: true, data: { status: "signed" } };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Could not sign this agreement";
     return { error: message };
   }
 }

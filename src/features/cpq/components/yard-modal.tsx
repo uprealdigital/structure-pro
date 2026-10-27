@@ -11,6 +11,8 @@ import {
   Trash2,
   X,
 } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { Toast } from "@/src/common/components/toast";
 import { useYardPreview } from "@/src/features/cpq/hooks/use-yard-preview";
 import type { BuildingCapture } from "@/src/features/cpq/components/building-scene";
 import { copy } from "@/src/features/cpq/locales/en";
@@ -336,7 +338,21 @@ function SendPanel({
   onSubmit: () => void;
   requiredPlaceholder: (label: string) => string;
 }) {
+  const [notice, setNotice] = useState<{ id: number; message: string } | null>(null);
+  const shown = useRef("");
+
+  useEffect(() => {
+    if (!errorMessage) {
+      shown.current = "";
+      return;
+    }
+    if (errorMessage === shown.current) return;
+    shown.current = errorMessage;
+    setNotice({ id: Date.now(), message: errorMessage });
+  }, [errorMessage]);
+
   return (
+    <>
     <div className="relative z-10 my-auto w-full max-w-xl rounded-xl border border-gray-200 bg-white p-6 text-gray-900 shadow-2xl sm:p-8">
       <div className="relative border-b border-gray-100 pb-4">
         <button
@@ -420,11 +436,6 @@ function SendPanel({
             disabled={submitting}
           />
         </div>
-        {errorMessage ? (
-          <p className="text-sm text-red-600" role="alert">
-            {errorMessage}
-          </p>
-        ) : null}
         <div className="pt-2">
           <button
             type="submit"
@@ -437,6 +448,16 @@ function SendPanel({
         </div>
       </form>
     </div>
+    {notice ? (
+      <Toast
+        key={notice.id}
+        message={notice.message}
+        tone="error"
+        dismissLabel={copy.dismiss}
+        onDismiss={() => setNotice(null)}
+      />
+    ) : null}
+    </>
   );
 }
 

@@ -132,7 +132,7 @@ export function QuoteList({ quotes, loadError }: { quotes: QuoteListItem[]; load
                           <div className="mt-0.5 text-[10px] text-gray-500">{quote.monthlyLabel}</div>
                         </td>
                         <td className="px-4 py-3 text-xs whitespace-nowrap">
-                          <QuoteStatusBadge status={quote.status} className="px-2 py-0.5 text-[11px]" />
+                          <QuoteStatusBadge status={quote.status} />
                         </td>
                         <td className="py-3 pr-6 pl-4 text-center">
                           <div className="flex items-center justify-end pr-2 text-gray-400 transition-colors group-hover:text-gray-900">

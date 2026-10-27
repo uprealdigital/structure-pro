@@ -47,7 +47,7 @@ export function formatQuoteCash(amount: number): string {
 }
 
 export function quoteVersionLabel(revisionNumber: number): string {
-  return `Version ${revisionNumber}`;
+  return `Revision ${revisionNumber}`;
 }
 
 export function quotePortalMode(value: string | string[] | undefined): QuotePortalMode {
