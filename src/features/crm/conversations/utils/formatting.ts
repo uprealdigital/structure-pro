@@ -258,6 +258,13 @@ export function revisionSummary(specs: { label: string; value: string }[]): stri
   return finish || specValue(specs, "Style");
 }
 
+export function revisionOptionsSummary(specs: { label: string; value: string }[]): string {
+  return specs
+    .filter((spec) => spec.value.trim())
+    .map((spec) => `${spec.label}: ${spec.value}`)
+    .join(", ");
+}
+
 export function formatUpdatedAgo(iso: string, now = new Date()): string {
   const date = new Date(iso);
   if (!iso || Number.isNaN(date.getTime())) return "";

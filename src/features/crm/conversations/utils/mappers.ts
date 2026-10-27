@@ -23,7 +23,12 @@ import {
 } from "@/src/features/crm/conversations/types";
 import { configChangesSummary } from "@/src/features/crm/conversations/utils/config-changes-summary";
 import { mostRelevantDeal } from "@/src/features/crm/conversations/utils/deals";
-import { formatDealMenuDate, productTitle, revisionSummary } from "@/src/features/crm/conversations/utils/formatting";
+import {
+  formatDealMenuDate,
+  productTitle,
+  revisionOptionsSummary,
+  revisionSummary,
+} from "@/src/features/crm/conversations/utils/formatting";
 import { changedConfig } from "@/src/features/crm/quotes/utils/config-changes";
 import type { ConfigChanges, QuoteRevisionRenders } from "@/src/features/crm/quotes/types";
 import type { Deal } from "@/src/features/crm/deals/types";
@@ -198,19 +203,23 @@ export function toConversationQuoteRevision(input: {
   sharedPhotosAt?: string | null;
   sharedQuoteAt?: string | null;
 }): ConversationQuoteRevision | undefined {
-  const summary = priceSummary(input.selections);
+  const priced = priceSummary(input.selections);
   const changes = configChangesSummary(input.configChanges ?? {});
+  const summary =
+    input.revisionNumber === 1
+      ? revisionOptionsSummary(priced.specs)
+      : changes || revisionSummary(priced.specs);
   const revision = conversationQuoteRevisionSchema.safeParse({
     id: input.id,
     revisionNumber: input.revisionNumber,
     status: input.status,
     createdAt: input.createdAt,
     updatedAt: input.updatedAt,
-    totalLabel: summary.totalLabel,
-    summary: changes || revisionSummary(summary.specs),
-    specs: summary.specs,
-    lines: summary.lines,
-    imageUrl: summary.imageUrl,
+    totalLabel: priced.totalLabel,
+    summary,
+    specs: priced.specs,
+    lines: priced.lines,
+    imageUrl: priced.imageUrl,
     renders: input.renders ?? null,
     selections: input.selections,
     configChanges: input.configChanges ?? {},

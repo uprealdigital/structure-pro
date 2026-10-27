@@ -13,6 +13,29 @@ function text(value: unknown): string {
   return typeof value === "string" ? value.trim() : "";
 }
 
+function leadActivity(value: unknown): {
+  role: "model";
+  channel: "system";
+  text: string;
+  generatedBy: "manual";
+  createdAt: string;
+  readAt: string;
+} | undefined {
+  if (!value || typeof value !== "object") return undefined;
+  const record = value as { text?: unknown; createdAt?: unknown };
+  const body = text(record.text);
+  const createdAt = text(record.createdAt);
+  if (!body || Number.isNaN(Date.parse(createdAt))) return undefined;
+  return {
+    role: "model",
+    channel: "system",
+    text: body,
+    generatedBy: "manual",
+    createdAt,
+    readAt: createdAt,
+  };
+}
+
 export async function POST(request: Request) {
   const denied = assertInternal(request);
   if (denied) return denied;
@@ -48,11 +71,14 @@ export async function POST(request: Request) {
   }
 
   const channelKey = chatId ?? phone;
+  const lead = leadActivity(payload.leadActivity);
+  const sentAt = new Date((lead ? Date.parse(lead.createdAt) : Date.now()) + 1).toISOString();
   const openingActivity = {
     role: "model" as const,
     text: openingMessage,
     channel: channel === "telegram" ? ("telegram" as const) : ("sms" as const),
     generatedBy: "ai" as const,
+    createdAt: sentAt,
   };
 
   let opened: { id: string; created: boolean };
@@ -63,7 +89,7 @@ export async function POST(request: Request) {
       chatId,
       customerId,
       contractSent: false,
-      activities: [openingActivity],
+      activities: lead ? [lead, openingActivity] : [openingActivity],
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Could not save conversation";
@@ -79,7 +105,10 @@ export async function POST(request: Request) {
     }
   } catch (error) {
     if (opened.created) await removeConversation(channelKey).catch(() => undefined);
-    else await removeLatestActivity(opened.id).catch(() => undefined);
+    else {
+      await removeLatestActivity(opened.id).catch(() => undefined);
+      if (lead) await removeLatestActivity(opened.id).catch(() => undefined);
+    }
     const message = error instanceof Error ? error.message : "Could not send message";
     return Response.json({ error: message }, { status: 502 });
   }
@@ -112,10 +141,18 @@ export async function DELETE(request: Request) {
       : "";
   const latestActivity =
     body && typeof body === "object" && (body as { latestActivity?: unknown }).latestActivity === true;
+  const latestCountRaw =
+    body && typeof body === "object" ? (body as { latestCount?: unknown }).latestCount : undefined;
+  const latestCount =
+    typeof latestCountRaw === "number" && Number.isInteger(latestCountRaw)
+      ? Math.min(Math.max(latestCountRaw, 1), 5)
+      : 1;
   if (latestActivity) {
     if (!conversationId) return Response.json({ error: "conversationId is required" }, { status: 400 });
     try {
-      await removeLatestActivity(conversationId);
+      for (let index = 0; index < latestCount; index += 1) {
+        await removeLatestActivity(conversationId);
+      }
       return Response.json({ ok: true });
     } catch (error) {
       const message = error instanceof Error ? error.message : "Could not delete activity";

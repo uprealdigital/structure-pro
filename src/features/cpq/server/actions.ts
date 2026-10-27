@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { callRouter, readJson } from "@/src/common/utils/internal-call";
 import { toE164 } from "@/src/common/utils/phone";
 import { openingSms } from "@/src/features/cpq/utils/system";
-import { recordSystemActivity } from "@/src/features/crm/conversations/server/actions";
+import { systemEventBody } from "@/src/features/crm/conversations/utils/formatting";
 import { defaultDealName } from "@/src/features/crm/deals/utils/naming";
 import { createConfiguration } from "@/src/features/cpq/db/configuration";
 import { createQuote, deleteQuote } from "@/src/features/crm/quotes/db/quote";
@@ -92,6 +92,8 @@ export async function createQuoteAction(input: {
       }),
     );
     dealId = deal.id;
+    const loggedAt = new Date();
+    const dealName = deal.name?.trim() || defaultDealName("quote", loggedAt.toISOString());
 
     const { POST: createCustomer } = await import("@/src/app/api/crm/customers/route");
     const savedCustomer = await readJson<{ id: string }>(
@@ -118,22 +120,16 @@ export async function createQuoteAction(input: {
           customerId: savedCustomer.id,
           dealId: deal.id,
           openingMessage,
+          leadActivity: {
+            text: systemEventBody("created", dealName, deal.id),
+            createdAt: loggedAt.toISOString(),
+          },
         },
       }),
     );
     lookupKey = started.lookupKey;
     conversationId = started.conversationId;
     createdConversation = started.created === true;
-
-    if (conversationId && dealId) {
-      const dealName = deal.name?.trim() || defaultDealName("quote", new Date().toISOString());
-      await recordSystemActivity({
-        conversationId,
-        kind: "created",
-        name: dealName,
-        dealId,
-      });
-    }
 
     revalidatePath("/");
     revalidatePath("/crm/conversations");
@@ -149,7 +145,7 @@ export async function createQuoteAction(input: {
       const { DELETE: removeConversation } = await import("@/src/app/api/ai/conversations/route");
       await callRouter(removeConversation, "/api/ai/conversations", {
         method: "DELETE",
-        body: { conversationId, latestActivity: true },
+        body: { conversationId, latestActivity: true, latestCount: 2 },
       }).catch(() => undefined);
     }
     if (dealId) {
