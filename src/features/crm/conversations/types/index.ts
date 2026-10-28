@@ -342,3 +342,27 @@ export const conversationSuggestionSchema = z.object({
 });
 
 export type ConversationSuggestion = z.infer<typeof conversationSuggestionSchema>;
+
+export const suggestionStreamEventSchema = z.discriminatedUnion("type", [
+  z.object({
+    type: z.literal("intent"),
+    intent: suggestionIntentSchema,
+    partial: z.boolean(),
+  }),
+  z.object({
+    type: z.literal("changes"),
+    intent: z.literal("revision"),
+    configChanges: configChangesSchema,
+    partial: z.boolean(),
+  }),
+  z.object({
+    type: z.literal("done"),
+    suggestions: z.array(conversationSuggestionSchema),
+  }),
+  z.object({
+    type: z.literal("error"),
+    error: z.string(),
+  }),
+]);
+
+export type SuggestionStreamEvent = z.infer<typeof suggestionStreamEventSchema>;

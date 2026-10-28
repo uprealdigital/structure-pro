@@ -19,7 +19,7 @@ import { newInvoiceId } from "@/src/features/cpq/utils/id";
 import { describeSelections } from "@/src/features/cpq/utils/pricing";
 import { createQuote, deleteQuote, readQuote, readQuotesByIds } from "@/src/features/crm/quotes/db/quote";
 import type { QuoteSelections } from "@/src/features/cpq/types";
-import type { ConfigChanges } from "@/src/features/crm/quotes/types";
+import { configChangesSchema, type ConfigChanges } from "@/src/features/crm/quotes/types";
 import { outboundTextTransport } from "@/src/features/crm/conversations/config/outbound-text";
 import { copy } from "@/src/features/crm/conversations/locales/en";
 import {
@@ -75,6 +75,7 @@ import {
   type ConversationParticipant,
   type ConversationSuggestion,
   type ConversationWorkspace,
+  type SuggestionStreamEvent,
 } from "@/src/features/crm/conversations/types";
 import { readCustomer, readCustomers, updateCustomer } from "@/src/features/crm/common/db/customer";
 import { createDealCustomer, deleteDealCustomer, readDealCustomer, readDealCustomersForCustomer, readDealCustomersForDeal } from "@/src/features/crm/common/db/deal-customer";
@@ -1167,8 +1168,10 @@ export async function summarizeConversationDeal(
   }
 }
 
-export async function syncConversationSuggestions(
+async function runConversationSuggestionSync(
   input: unknown,
+  signal?: AbortSignal,
+  emit?: (event: SuggestionStreamEvent) => void,
 ): Promise<{ success: true; data: ConversationSuggestion[] } | { error: string }> {
   const parsed = syncSuggestionsSchema.safeParse(input);
   if (!parsed.success) return { error: "A deal and its messages are required" };
@@ -1232,13 +1235,41 @@ export async function syncConversationSuggestions(
         .sort((left, right) => left.position - right.position)
         .slice(-40);
       const currentChanges = pending.find((row) => row.intent === "revision")?.configChanges ?? {};
-      const hits = await analyzeInboundIntent({
-        messages: analyzed.map((row) => row.body.trim()),
-        currentChanges,
-        revisions,
-        dealId: parsed.data.dealId,
-        activityIds: analyzed.map((row) => row.id),
-      });
+      if (signal?.aborted) return { success: true, data: await pendingSuggestions(parsed.data.dealId) };
+      const intentPartial = new Map<SuggestionIntent, boolean>();
+      let lastChanges = "";
+      const hits = await analyzeInboundIntent(
+        {
+          messages: analyzed.map((row) => row.body.trim()),
+          currentChanges,
+          revisions,
+          dealId: parsed.data.dealId,
+          activityIds: analyzed.map((row) => row.id),
+        },
+        {
+          signal,
+          onPartial: (snapshot) => {
+            if (signal?.aborted) return;
+            for (const intent of snapshot.intents) {
+              const suggestionIntent: SuggestionIntent = intent.kind === "configuration" ? "revision" : "new_quote";
+              const partial = !intent.changesClosed;
+              if (intentPartial.get(suggestionIntent) !== partial) {
+                intentPartial.set(suggestionIntent, partial);
+                emit?.({ type: "intent", intent: suggestionIntent, partial });
+              }
+              if (suggestionIntent !== "revision") continue;
+              const changes = configChangesSchema.safeParse(intent.configChanges);
+              if (!changes.success) continue;
+              if (Object.keys(changes.data).length === 0 && partial) continue;
+              const marker = `${JSON.stringify(changes.data)}:${partial}`;
+              if (marker === lastChanges) continue;
+              lastChanges = marker;
+              emit?.({ type: "changes", intent: "revision", configChanges: changes.data, partial });
+            }
+          },
+        },
+      );
+      if (signal?.aborted) return { success: true, data: await pendingSuggestions(parsed.data.dealId) };
       const order = new Map(analyzed.map((row) => [row.id, row.position]));
       for (const hit of hits) {
         const intent: SuggestionIntent = hit.kind === "configuration" ? "revision" : "new_quote";
@@ -1293,6 +1324,47 @@ export async function syncConversationSuggestions(
     const message = error instanceof Error ? error.message : "Could not read these messages";
     return { error: message };
   }
+}
+
+export async function syncConversationSuggestions(
+  input: unknown,
+): Promise<{ success: true; data: ConversationSuggestion[] } | { error: string }> {
+  return runConversationSuggestionSync(input);
+}
+
+export async function openConversationSuggestionStream(
+  input: unknown,
+  signal: AbortSignal,
+): Promise<ReadableStream<Uint8Array>> {
+  const encoder = new TextEncoder();
+  return new ReadableStream({
+    async start(controller) {
+      const emit = (event: SuggestionStreamEvent) => {
+        if (signal.aborted) return;
+        controller.enqueue(encoder.encode(`${JSON.stringify(event)}\n`));
+      };
+      try {
+        const result = await runConversationSuggestionSync(input, signal, emit);
+        if (signal.aborted) return;
+        if ("error" in result) emit({ type: "error", error: result.error });
+        else emit({ type: "done", suggestions: result.data });
+      } catch (error) {
+        if (signal.aborted) return;
+        const message = error instanceof Error ? error.message : "Could not read these messages";
+        try {
+          emit({ type: "error", error: message });
+        } catch {
+          // The client closed the stream.
+        }
+      } finally {
+        try {
+          controller.close();
+        } catch {
+          // The client closed the stream.
+        }
+      }
+    },
+  });
 }
 
 export async function saveSuggestionPreview(

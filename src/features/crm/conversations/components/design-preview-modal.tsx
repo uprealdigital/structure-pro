@@ -1,7 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { Check, Plus, RotateCw, X } from "lucide-react";
+import { Check, Plus, RotateCw, Sparkles, Undo2, X } from "lucide-react";
 import { useEffect, useRef, useState, type Ref } from "react";
 import { Toast } from "@/src/common/components/toast";
 import type { DesignAngle, DesignAngleView } from "@/src/features/cpq/components/building-view";
@@ -9,6 +9,7 @@ import type { QuoteSelections } from "@/src/features/cpq/types";
 import { toBuildingConfig } from "@/src/features/cpq/utils/mappers";
 import { UploadProgress } from "@/src/features/crm/conversations/components/composer-attachments";
 import { RevisionChangeList } from "@/src/features/crm/conversations/components/revision-change-list";
+import { useDesignPreviewBeautify } from "@/src/features/crm/conversations/hooks/use-design-preview-beautify";
 import { copy } from "@/src/features/crm/conversations/locales/en";
 import { reportCrmIssue } from "@/src/features/crm/common/server/actions";
 import type { ConversationQuoteRevision } from "@/src/features/crm/conversations/types";
@@ -110,6 +111,8 @@ function DesignAngleCard({
   placement,
   removable,
   modelReady,
+  imageUrl,
+  busy,
   onRemove,
 }: {
   label: string;
@@ -117,6 +120,8 @@ function DesignAngleCard({
   placement: "cell" | "full" | "center";
   removable: boolean;
   modelReady: boolean;
+  imageUrl?: string;
+  busy: boolean;
   onRemove: () => void;
 }) {
   const waitsForModel = useRef(!modelReady);
@@ -140,6 +145,24 @@ function DesignAngleCard({
           <UploadProgress progress={modelReady ? 100 : 0} speed={2} label={copy.designViewLoading} onFilled={() => setFilled(true)} />
         </div>
       ) : null}
+      {imageUrl ? (
+        <img
+          src={imageUrl}
+          alt={label}
+          draggable={false}
+          className="absolute inset-0 z-10 h-full w-full bg-white object-contain"
+          onPointerDown={(event) => event.stopPropagation()}
+          onWheel={(event) => event.stopPropagation()}
+        />
+      ) : null}
+      {busy ? (
+        <div
+          className="absolute inset-0 z-10 flex items-center justify-center bg-white/70"
+          onPointerDown={(event) => event.stopPropagation()}
+        >
+          <span className="text-[11px] font-medium text-gray-600">{copy.beautifying}</span>
+        </div>
+      ) : null}
       {removable ? (
         <button
           type="button"
@@ -160,6 +183,9 @@ export function DesignPreviewModal({ current, revisions, selections, suggested, 
   const [modelReady, setModelReady] = useState(false);
   const [attaching, setAttaching] = useState(false);
   const [error, setError] = useState<{ id: number; message: string } | null>(null);
+  const beautified = useDesignPreviewBeautify();
+  const showingPhotos = beautified.shots !== null;
+  const locked = attaching || beautified.beautifying || showingPhotos;
   const stageRef = useRef<HTMLDivElement>(null);
   const trackRefs = useRef(new Map<string, DesignAngleView["track"]>());
   const captureRefs = useRef(new Map<string, DesignAngleView["captureRef"]>());
@@ -182,11 +208,11 @@ export function DesignPreviewModal({ current, revisions, selections, suggested, 
 
   useEffect(() => {
     function onKey(event: KeyboardEvent) {
-      if (event.key === "Escape" && !attaching) onClose();
+      if (event.key === "Escape" && !attaching && !beautified.beautifying) onClose();
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [attaching, onClose]);
+  }, [attaching, beautified.beautifying, onClose]);
 
   useEffect(() => {
     if (views.length > viewCount.current) listEnd.current?.scrollIntoView({ block: "nearest" });
@@ -194,7 +220,7 @@ export function DesignPreviewModal({ current, revisions, selections, suggested, 
   }, [views.length]);
 
   function addView() {
-    if (views.length >= maxDesignViews) return;
+    if (locked || views.length >= maxDesignViews) return;
     const angle = defaultAngles[views.length % defaultAngles.length];
     setViews((currentViews) => [...currentViews, createView(angle)]);
   }
@@ -204,15 +230,23 @@ export function DesignPreviewModal({ current, revisions, selections, suggested, 
   }
 
   async function attach() {
-    if (attaching || views.length === 0) return;
+    if (attaching || beautified.beautifying || views.length === 0) return;
     setAttaching(true);
     setError(null);
     try {
       const blobs: Blob[] = [];
-      for (const view of views) {
-        const capture = captureRefs.current.get(view.id)?.current;
-        if (!capture) throw new Error(copy.designPreviewViewsLoading);
-        blobs.push(await capture());
+      if (beautified.shots) {
+        for (const view of views) {
+          const shot = beautified.shots[view.id];
+          if (!shot) throw new Error(copy.beautifyFailed);
+          blobs.push(shot.blob);
+        }
+      } else {
+        for (const view of views) {
+          const capture = captureRefs.current.get(view.id)?.current;
+          if (!capture) throw new Error(copy.designPreviewViewsLoading);
+          blobs.push(await capture());
+        }
       }
       await onAttach(await composeDesignPreview(blobs));
     } catch (caught) {
@@ -231,7 +265,7 @@ export function DesignPreviewModal({ current, revisions, selections, suggested, 
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-4 backdrop-blur-sm"
       role="presentation"
       onMouseDown={() => {
-        if (!attaching) onClose();
+        if (!attaching && !beautified.beautifying) onClose();
       }}
     >
       <div
@@ -248,7 +282,7 @@ export function DesignPreviewModal({ current, revisions, selections, suggested, 
           <button
             type="button"
             aria-label={copy.close}
-            disabled={attaching}
+            disabled={attaching || beautified.beautifying}
             onClick={onClose}
             className="flex h-8 w-8 items-center justify-center rounded-md text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-700 disabled:opacity-40"
           >
@@ -261,13 +295,21 @@ export function DesignPreviewModal({ current, revisions, selections, suggested, 
 
           <div className="mt-6 mb-3 flex items-center justify-between gap-3">
             <h3 className="text-[11px] font-semibold tracking-wider text-gray-500 uppercase">{copy.designPreviewAngles}</h3>
-            <span className="inline-flex items-center gap-1.5 text-[11px] font-medium text-gray-400">
-              <RotateCw className="h-3.5 w-3.5" strokeWidth={2} aria-hidden="true" />
-              {copy.designPreviewRotate}
-            </span>
+            {showingPhotos || beautified.beautifying ? null : (
+              <span className="inline-flex items-center gap-1.5 text-[11px] font-medium text-gray-400">
+                <RotateCw className="h-3.5 w-3.5" strokeWidth={2} aria-hidden="true" />
+                {copy.designPreviewRotate}
+              </span>
+            )}
           </div>
           <div ref={stageRef} className="relative">
-            <BuildingViews config={config} views={angleViews} stageRef={stageRef} onReady={() => setModelReady(true)} />
+            <BuildingViews
+              config={config}
+              views={angleViews}
+              stageRef={stageRef}
+              interactive={!showingPhotos && !beautified.beautifying}
+              onReady={() => setModelReady(true)}
+            />
             <ul className="relative z-10 grid grid-cols-2 gap-3">
               {angleViews.map((view, index) => (
                 <DesignAngleCard
@@ -275,8 +317,10 @@ export function DesignPreviewModal({ current, revisions, selections, suggested, 
                   label={view.label}
                   track={view.track}
                   placement={views.length === 1 ? "full" : views.length === 3 && index === 2 ? "center" : "cell"}
-                  removable={views.length > 1}
+                  removable={views.length > 1 && !locked}
                   modelReady={modelReady}
+                  imageUrl={beautified.shots?.[view.id]?.url}
+                  busy={beautified.beautifying}
                   onRemove={() => removeView(view.id)}
                 />
               ))}
@@ -286,21 +330,50 @@ export function DesignPreviewModal({ current, revisions, selections, suggested, 
         </div>
 
         <footer className="flex shrink-0 flex-wrap items-center justify-between gap-3 px-6 py-4">
-          <button
-            type="button"
-            onClick={addView}
-            disabled={attaching || views.length >= maxDesignViews}
-            title={views.length >= maxDesignViews ? copy.designPreviewViewLimit : undefined}
-            className="inline-flex items-center gap-1.5 rounded-full border border-dashed border-gray-300 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 transition-colors hover:bg-gray-50 disabled:opacity-40"
-          >
-            <Plus className="h-3.5 w-3.5 text-gray-500" strokeWidth={2} aria-hidden="true" />
-            {copy.addAnotherView}
-          </button>
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={addView}
+              disabled={locked || views.length >= maxDesignViews}
+              title={views.length >= maxDesignViews ? copy.designPreviewViewLimit : undefined}
+              className="inline-flex items-center gap-1.5 rounded-full border border-dashed border-gray-300 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 transition-colors hover:bg-gray-50 disabled:opacity-40"
+            >
+              <Plus className="h-3.5 w-3.5 text-gray-500" strokeWidth={2} aria-hidden="true" />
+              {copy.addAnotherView}
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                if (showingPhotos) {
+                  beautified.revert();
+                  return;
+                }
+                const captures = views.flatMap((view) => {
+                  const capture = captureRefs.current.get(view.id)?.current;
+                  return capture ? [{ id: view.id, capture }] : [];
+                });
+                if (captures.length !== views.length) {
+                  setError({ id: Date.now(), message: copy.designPreviewViewsLoading });
+                  return;
+                }
+                void beautified.beautify(captures);
+              }}
+              disabled={beautified.beautifying || attaching || !modelReady || views.length === 0}
+              className="inline-flex items-center gap-1.5 rounded-full border border-gray-200 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 transition-colors hover:bg-gray-50 disabled:opacity-40"
+            >
+              {showingPhotos ? (
+                <Undo2 className="h-3.5 w-3.5 text-gray-500" strokeWidth={2} aria-hidden="true" />
+              ) : (
+                <Sparkles className="h-3.5 w-3.5 text-gray-500" strokeWidth={2} aria-hidden="true" />
+              )}
+              {beautified.beautifying ? copy.beautifying : showingPhotos ? copy.revertBeautify : copy.beautify}
+            </button>
+          </div>
           <div className="flex items-center gap-2">
             <button
               type="button"
               onClick={onClose}
-              disabled={attaching}
+              disabled={attaching || beautified.beautifying}
               className="rounded-md px-3 py-2 text-xs font-medium text-gray-600 transition-colors hover:text-gray-900 disabled:opacity-40"
             >
               {copy.cancel}
@@ -308,7 +381,7 @@ export function DesignPreviewModal({ current, revisions, selections, suggested, 
             <button
               type="button"
               onClick={() => void attach()}
-              disabled={attaching || views.length === 0}
+              disabled={attaching || beautified.beautifying || views.length === 0}
               className="inline-flex items-center gap-1.5 rounded-lg bg-black px-3.5 py-2 text-xs font-semibold whitespace-nowrap text-white shadow-sm transition-colors hover:bg-gray-800 disabled:opacity-40"
             >
               <Check className="h-3.5 w-3.5" strokeWidth={2.4} aria-hidden="true" />
@@ -316,13 +389,16 @@ export function DesignPreviewModal({ current, revisions, selections, suggested, 
             </button>
           </div>
         </footer>
-        {error ? (
+        {error ?? beautified.error ? (
           <Toast
-            key={error.id}
-            message={error.message}
+            key={(error ?? beautified.error)?.id}
+            message={(error ?? beautified.error)?.message ?? ""}
             tone="error"
             dismissLabel={copy.dismiss}
-            onDismiss={() => setError(null)}
+            onDismiss={() => {
+              setError(null);
+              beautified.setError(null);
+            }}
           />
         ) : null}
       </div>

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { logLevelSchema } from "@/src/common/utils/log-level";
 
 export const CONFIGURATION_ID = /^[a-f0-9]{32}$/;
 export const LOCALE_CODE = /^[a-z]{2}(?:-[A-Z]{2})?$/;
@@ -14,6 +15,7 @@ export const cpqLogSchema = z.object({
   rawResponse: z.string().nullable(),
   parsedResponse: z.unknown(),
   status: cpqLogStatusSchema,
+  logLevel: logLevelSchema,
   errorMessage: z.string().nullable(),
   readAt: z.string().nullable(),
   createdAt: z.string(),
@@ -26,6 +28,7 @@ export const cpqLogWriteSchema = z.object({
   rawResponse: z.string().nullable(),
   parsedResponse: z.unknown(),
   status: cpqLogStatusSchema,
+  logLevel: logLevelSchema,
   errorMessage: z.string().nullable(),
 });
 

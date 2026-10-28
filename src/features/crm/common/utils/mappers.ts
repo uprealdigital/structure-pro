@@ -30,6 +30,7 @@ export type CrmLogRow = {
   raw_response: string | null;
   parsed_response: unknown;
   status: string;
+  log_level: string;
   error_message: string | null;
   read_at: string | null;
   created_at: string;
@@ -52,6 +53,7 @@ export function toCrmLog(row: CrmLogRow): CrmLog | undefined {
     rawResponse: row.raw_response,
     parsedResponse: jsonField(row.parsed_response),
     status: row.status,
+    logLevel: row.log_level,
     errorMessage: row.error_message,
     readAt: row.read_at,
     createdAt: row.created_at,

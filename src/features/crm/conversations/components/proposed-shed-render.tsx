@@ -176,7 +176,7 @@ export function ProposedShedRender({
     if (previewImageUrl) return;
     savedKey.current = "";
     if (pngRef.current?.key === selectionKey) void persistPreview(pngRef.current.file, selectionKey, saveRef, savedKey);
-  }, [previewImageUrl, selectionKey]);
+  }, [previewImageUrl, selectionKey, suggestionId]);
 
   useEffect(() => {
     if (url) onRenderUrl?.(url);

@@ -1652,8 +1652,38 @@ export function ConversationDetail({
       (channel === "email" && Boolean(emailSubject.trim())) ||
       attachments.some((item) => item.phase === "ready"));
 
-  const revisionSuggestion = detectedSuggestions.suggestions.find((suggestion) => suggestion.intent === "revision") ?? null;
-  const quoteSuggestion = detectedSuggestions.suggestions.find((suggestion) => suggestion.intent === "new_quote") ?? null;
+  const savedRevision = detectedSuggestions.suggestions.find((suggestion) => suggestion.intent === "revision") ?? null;
+  const savedQuote = detectedSuggestions.suggestions.find((suggestion) => suggestion.intent === "new_quote") ?? null;
+  const streamingRevision = detectedSuggestions.streaming.revision;
+  const streamingQuote = detectedSuggestions.streaming.quote;
+  const revisionSuggestion: ConversationSuggestion | null = savedRevision
+    ? streamingRevision
+      ? { ...savedRevision, configChanges: streamingRevision.configChanges }
+      : savedRevision
+    : streamingRevision
+      ? {
+          id: "streaming",
+          intent: "revision",
+          configChanges: streamingRevision.configChanges,
+          previewImageUrl: null,
+          summary: "",
+          messages: inboundMessages.map((message) => message.text),
+        }
+      : null;
+  const quoteSuggestion: ConversationSuggestion | null = savedQuote
+    ? savedQuote
+    : streamingQuote
+      ? {
+          id: "streaming",
+          intent: "new_quote",
+          configChanges: {},
+          previewImageUrl: null,
+          summary: "",
+          messages: inboundMessages.map((message) => message.text),
+        }
+      : null;
+  const revisionResolving = revisionSuggestion?.id === "streaming";
+  const quoteResolving = quoteSuggestion?.id === "streaming";
   const suggestionQuotes = listedQuotes.map((quote, index) => ({
     id: quote.id,
     name: quoteLabel(quote, index),
@@ -1729,7 +1759,7 @@ export function ConversationDetail({
 
   async function saveDetectedConfiguration() {
     const suggestionId = revisionSuggestion?.id;
-    if (!suggestionId || applyingIntent) return;
+    if (!suggestionId || suggestionId === "streaming" || applyingIntent) return;
     setApplyingIntent(true);
     try {
       const saved = await saveSuggestedRevision();
@@ -1744,7 +1774,7 @@ export function ConversationDetail({
 
   async function applyDetectedConfiguration(mode: "photos" | "quote") {
     const suggestion = revisionSuggestion;
-    if (!suggestion || !intentQuote || !intentRevision || !proposed || applyingIntent) return;
+    if (!suggestion || suggestion.id === "streaming" || !intentQuote || !intentRevision || !proposed || applyingIntent) return;
     setApplyingIntent(true);
     try {
       const saved = await saveSuggestedRevision();
@@ -2061,7 +2091,7 @@ export function ConversationDetail({
         className="shrink-0 border-t border-gray-200 bg-white p-4"
         onSubmit={submitMessage}
       >
-        {revisionSuggestion && intentRevision && proposed && totals && suggestedChanges.length > 0 ? (
+        {revisionSuggestion && intentRevision && proposed && totals && (suggestedChanges.length > 0 || revisionResolving) ? (
           <InboundIntentCard
             title={copy.configurationDetected}
             assistant
@@ -2077,7 +2107,7 @@ export function ConversationDetail({
                 <ProposedShedRender
                   selections={proposed}
                   alt={title || copy.quote}
-                  suggestionId={revisionSuggestion.id}
+                  suggestionId={revisionResolving ? undefined : revisionSuggestion.id}
                   previewImageUrl={revisionSuggestion.previewImageUrl}
                   renderCaptureRef={suggestionRenderCapture}
                   onRenderUrl={(url) => {
@@ -2093,11 +2123,18 @@ export function ConversationDetail({
               tone: change.kind === "added" ? ("add" as const) : ("change" as const),
             }))}
             actionLabel={copy.applyIntentAndShare(revisionMenuLabel(nextRevision))}
-            pending={applyingIntent}
-            onDismiss={() => void dismissDetectedSuggestion(revisionSuggestion)}
+            pending={applyingIntent || revisionResolving}
+            loading={revisionResolving && (streamingRevision?.partial !== false || suggestedChanges.length === 0)}
+            onDismiss={() => {
+              if (revisionResolving) {
+                detectedSuggestions.dismissStreaming("revision");
+                return;
+              }
+              void dismissDetectedSuggestion(revisionSuggestion);
+            }}
             onApply={() => void saveDetectedConfiguration()}
             onReview={() => {
-              if (!proposed || !intentQuote || !intentRevision) return;
+              if (revisionResolving || !proposed || !intentQuote || !intentRevision) return;
               showIntentQuote(intentQuote.id, intentRevision.id);
               setDetailsOpen(false);
               setSuggestedSelections(proposed);
@@ -2113,8 +2150,17 @@ export function ConversationDetail({
             assistant
             icon="quote"
             actionLabel={copy.shareQuote}
-            onDismiss={() => void dismissDetectedSuggestion(quoteSuggestion)}
+            pending={quoteResolving}
+            loading={quoteResolving && streamingQuote?.partial !== false}
+            onDismiss={() => {
+              if (quoteResolving) {
+                detectedSuggestions.dismissStreaming("new_quote");
+                return;
+              }
+              void dismissDetectedSuggestion(quoteSuggestion);
+            }}
             onShareQuote={() => {
+              if (quoteResolving) return;
               armedQuoteSuggestionId.current = quoteSuggestion.id;
               setReviewImageUrl(null);
               setReviewOpen(true);

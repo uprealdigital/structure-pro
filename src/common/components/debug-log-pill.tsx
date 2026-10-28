@@ -3,7 +3,9 @@
 import { Bug, Check, Filter } from "lucide-react";
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore, type PointerEvent as ReactPointerEvent } from "react";
 import { createPortal } from "react-dom";
+import { emptyLogLevelCounts, logLevels, type LogLevel, type LogLevelCounts } from "@/src/common/utils/log-level";
 import type { AiActivityStatus } from "@/src/features/ai/types";
+import { AiLogFixMenu, type AiLogFixTarget } from "@/src/features/crm/common/components/ai-log-fix-menu";
 
 const copy = {
   logs: "Logs",
@@ -16,6 +18,10 @@ const copy = {
   detected: "Detected",
   none: "Nothing needed",
   error: "Error",
+  warning: "Warning",
+  info: "Info",
+  statusGroup: "Status",
+  levelGroup: "Level",
   clear: "Clear",
   clearAll: "Clear all",
   clearing: "Clearing",
@@ -32,10 +38,12 @@ const copy = {
   parsed: "Parsed response",
   migration: "Run supabase/migrate-feature-logs.sql in the Supabase SQL editor.",
   readAtMigration: "Run supabase/migrate-feature-log-read-at.sql in the Supabase SQL editor.",
+  levelMigration: "Run supabase/migrate-feature-log-level.sql in the Supabase SQL editor.",
 };
 
 const storageKey = "structure-pro-debug-logs";
-const statusStorageKey = "structure-pro-debug-log-statuses";
+const statusStorageKey = "structure-pro-debug-log-statuses-v2";
+const levelStorageKey = "structure-pro-debug-log-levels";
 const margin = 16;
 const kinds = [
   { id: "ai", label: copy.ai },
@@ -49,6 +57,7 @@ type DebugLog = {
   id: string;
   feature: string;
   status: AiActivityStatus;
+  logLevel: LogLevel;
   errorMessage: string | null;
   createdAt: string;
   rawResponse: string | null;
@@ -64,6 +73,7 @@ type LogSection = {
   kind: LogKind;
   logs: DebugLog[];
   unreadCount: number;
+  unreadByLevel: LogLevelCounts;
   error: string | null;
 };
 
@@ -71,11 +81,13 @@ const emptySections: LogSection[] = kinds.map((kind) => ({
   kind: kind.id,
   logs: [],
   unreadCount: 0,
+  unreadByLevel: emptyLogLevelCounts(),
   error: null,
 }));
 
 const statusOptions: AiActivityStatus[] = ["error", "detected", "none"];
-const defaultStatuses: AiActivityStatus[] = ["error"];
+const defaultStatuses: AiActivityStatus[] = ["error", "detected", "none"];
+const defaultLevels: LogLevel[] = ["error"];
 
 type Edge = "left" | "right" | "top" | "bottom";
 type Dock = { edge: Edge; ratio: number };
@@ -88,10 +100,22 @@ const statusLabel: Record<AiActivityStatus, string> = {
   error: copy.error,
 };
 
-const statusClass: Record<AiActivityStatus, string> = {
-  detected: "bg-emerald-50 text-emerald-700",
-  none: "bg-gray-100 text-gray-600",
+const levelLabel: Record<LogLevel, string> = {
+  error: copy.error,
+  warning: copy.warning,
+  info: copy.info,
+};
+
+const levelClass: Record<LogLevel, string> = {
   error: "bg-red-50 text-red-700",
+  warning: "bg-yellow-50 text-yellow-800",
+  info: "bg-gray-100 text-gray-600",
+};
+
+const levelBadgeClass: Record<LogLevel, string> = {
+  error: "bg-red-500 text-white",
+  warning: "bg-yellow-400 text-gray-950",
+  info: "bg-gray-500 text-white",
 };
 
 function savedDock(): Dock {
@@ -165,6 +189,7 @@ function pretty(value: unknown): string {
 }
 
 function loadErrorText(message: string): string {
+  if (/log_level/i.test(message)) return `${message} ${copy.levelMigration}`;
   if (/read_at/i.test(message)) return `${message} ${copy.readAtMigration}`;
   if (/could not find the table|schema cache|does not exist/i.test(message)) {
     return `${message} ${copy.migration}`;
@@ -174,6 +199,33 @@ function loadErrorText(message: string): string {
 
 function sameStatuses(left: AiActivityStatus[], right: AiActivityStatus[]): boolean {
   return left.length === right.length && left.every((status, index) => status === right[index]);
+}
+
+function countsFrom(value: unknown): LogLevelCounts {
+  const counts = emptyLogLevelCounts();
+  if (!value || typeof value !== "object") return counts;
+  const record = value as Record<string, unknown>;
+  for (const level of logLevels) {
+    const count = record[level];
+    if (typeof count === "number" && Number.isFinite(count)) counts[level] = count;
+  }
+  return counts;
+}
+
+function sameLevels(left: LogLevel[], right: LogLevel[]): boolean {
+  return left.length === right.length && left.every((level, index) => level === right[index]);
+}
+
+function savedLevels(): LogLevel[] {
+  try {
+    const raw = window.localStorage.getItem(levelStorageKey);
+    if (!raw) return defaultLevels;
+    const parsed = JSON.parse(raw) as unknown;
+    if (!Array.isArray(parsed)) return defaultLevels;
+    return logLevels.filter((level) => parsed.includes(level));
+  } catch {
+    return defaultLevels;
+  }
 }
 
 function savedStatuses(): AiActivityStatus[] {
@@ -245,7 +297,9 @@ export function DebugLogPill() {
   const [sections, setSections] = useState<LogSection[]>(emptySections);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [statuses, setStatuses] = useState<AiActivityStatus[]>(defaultStatuses);
+  const [levels, setLevels] = useState<LogLevel[]>(defaultLevels);
   const [filtersOpen, setFiltersOpen] = useState(false);
+  const [fixTarget, setFixTarget] = useState<AiLogFixTarget | null>(null);
   const [clearing, setClearing] = useState<LogKind | "all" | null>(null);
   const [clearError, setClearError] = useState<string | null>(null);
   const root = useRef<HTMLDivElement>(null);
@@ -266,12 +320,16 @@ export function DebugLogPill() {
   }, []);
 
   const statusKey = statuses.join(",");
+  const levelKey = levels.join(",");
   const requestId = useRef(0);
 
   const load = useCallback(async () => {
     const id = ++requestId.current;
     try {
-      const response = await fetch(`/api/ai/activity-logs?statuses=${encodeURIComponent(statusKey)}`, { cache: "no-store" });
+      const response = await fetch(
+        `/api/ai/activity-logs?statuses=${encodeURIComponent(statusKey)}&levels=${encodeURIComponent(levelKey)}`,
+        { cache: "no-store" },
+      );
       const body = (await response.json()) as { sections?: LogSection[]; error?: string };
       if (id !== requestId.current) return;
       setShown(true);
@@ -282,6 +340,7 @@ export function DebugLogPill() {
           kind: kind.id,
           logs: Array.isArray(found?.logs) ? found.logs : [],
           unreadCount: typeof found?.unreadCount === "number" ? found.unreadCount : 0,
+          unreadByLevel: countsFrom(found?.unreadByLevel),
           error: found?.error ?? null,
         };
       });
@@ -290,13 +349,23 @@ export function DebugLogPill() {
       if (id !== requestId.current) return;
       setShown(true);
       const message = error instanceof Error ? error.message : "Could not load logs";
-      setSections(kinds.map((kind) => ({ kind: kind.id, logs: [], unreadCount: 0, error: message })));
+      setSections(
+        kinds.map((kind) => ({
+          kind: kind.id,
+          logs: [],
+          unreadCount: 0,
+          unreadByLevel: emptyLogLevelCounts(),
+          error: message,
+        })),
+      );
     }
-  }, [statusKey]);
+  }, [statusKey, levelKey]);
 
   useEffect(() => {
     const saved = savedStatuses();
+    const savedLevel = savedLevels();
     setStatuses((current) => (sameStatuses(saved, current) ? current : saved));
+    setLevels((current) => (sameLevels(savedLevel, current) ? current : savedLevel));
   }, []);
 
   useEffect(() => {
@@ -309,6 +378,11 @@ export function DebugLogPill() {
       window.clearInterval(timer);
     };
   }, [load]);
+
+  useEffect(() => {
+    if (open) return;
+    setFixTarget(null);
+  }, [open]);
 
   useEffect(() => {
     if (!open) return;
@@ -335,7 +409,12 @@ export function DebugLogPill() {
   const point = measured && drag ? drag : measured ? place(dock, viewport, pillSize) : { x: margin, y: margin };
   const placed = drag ? dockFor(point, viewport, pillSize) : dock;
   const unreadCount = sections.reduce((sum, section) => sum + section.unreadCount, 0);
-  const loadError = sections.some((section) => section.error);
+  const levelCounts = sections.reduce((sum, section) => {
+    for (const level of logLevels) sum[level] += section.unreadByLevel[level] ?? 0;
+    return sum;
+  }, emptyLogLevelCounts());
+  const visibleLevels = logLevels.filter((level) => levels.includes(level));
+  const loadError = sections.some((section) => section.error != null && section.error !== "");
   const panelWidth = Math.min(420, Math.max(280, viewport.width - margin * 2));
   const space =
     placed.edge === "bottom"
@@ -397,6 +476,16 @@ export function DebugLogPill() {
     button.addEventListener("pointercancel", up);
   }
 
+  function toggleLevel(level: LogLevel) {
+    setLevels((current) => {
+      const next = current.includes(level)
+        ? current.filter((item) => item !== level)
+        : logLevels.filter((item) => item === level || current.includes(item));
+      window.localStorage.setItem(levelStorageKey, JSON.stringify(next));
+      return next;
+    });
+  }
+
   function toggleStatus(status: AiActivityStatus) {
     setStatuses((current) => {
       const next = current.includes(status)
@@ -416,7 +505,7 @@ export function DebugLogPill() {
       const response = await fetch("/api/ai/activity-logs", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ kind, statuses }),
+        body: JSON.stringify({ kind, statuses, levels }),
       });
       const body = (await response.json()) as { error?: string };
       if (!response.ok) throw new Error(body.error || "Could not clear logs");
@@ -434,7 +523,7 @@ export function DebugLogPill() {
     if (!filterRoot.current?.contains(event.target as Node)) setFiltersOpen(false);
   }
 
-  const filtersChanged = !sameStatuses(statuses, defaultStatuses);
+  const filtersChanged = !sameStatuses(statuses, defaultStatuses) || !sameLevels(levels, defaultLevels);
   const actionClass =
     "cursor-pointer rounded-md px-1.5 py-0.5 text-[11px] font-semibold text-gray-600 hover:bg-gray-100 disabled:cursor-default disabled:text-gray-300 disabled:hover:bg-transparent";
 
@@ -476,8 +565,11 @@ export function DebugLogPill() {
                 <div
                   role="menu"
                   aria-label={copy.filters}
-                  className="absolute top-full left-0 z-30 mt-1 w-44 rounded-lg border border-gray-200 bg-white p-1 shadow-lg"
+                  className="absolute top-full left-0 z-30 mt-1 w-48 rounded-lg border border-gray-200 bg-white p-1 shadow-lg"
                 >
+                  <p className="px-2 pt-1 pb-0.5 text-[10px] font-semibold tracking-wide text-gray-400 uppercase">
+                    {copy.statusGroup}
+                  </p>
                   {statusOptions.map((status) => {
                     const selected = statuses.includes(status);
                     return (
@@ -497,6 +589,31 @@ export function DebugLogPill() {
                           {selected ? <Check className="h-2.5 w-2.5" strokeWidth={3} aria-hidden="true" /> : null}
                         </span>
                         {statusLabel[status]}
+                      </button>
+                    );
+                  })}
+                  <p className="mt-1 border-t border-gray-100 px-2 pt-2 pb-0.5 text-[10px] font-semibold tracking-wide text-gray-400 uppercase">
+                    {copy.levelGroup}
+                  </p>
+                  {logLevels.map((level) => {
+                    const selected = levels.includes(level);
+                    return (
+                      <button
+                        key={level}
+                        type="button"
+                        role="menuitemcheckbox"
+                        aria-checked={selected}
+                        onClick={() => toggleLevel(level)}
+                        className="flex w-full cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs text-gray-800 hover:bg-gray-50"
+                      >
+                        <span
+                          className={`flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded border ${
+                            selected ? "border-gray-950 bg-gray-950 text-white" : "border-gray-300 bg-white"
+                          }`}
+                        >
+                          {selected ? <Check className="h-2.5 w-2.5" strokeWidth={3} aria-hidden="true" /> : null}
+                        </span>
+                        {levelLabel[level]}
                       </button>
                     );
                   })}
@@ -550,7 +667,19 @@ export function DebugLogPill() {
                   {section.logs.map((log) => {
                     const expanded = expandedId === log.id;
                     return (
-                      <li key={log.id} className="border-b border-gray-100 last:border-b-0">
+                      <li
+                        key={log.id}
+                        className="border-b border-gray-100 last:border-b-0"
+                        onContextMenu={
+                          section.kind === "ai"
+                            ? (event) => {
+                                event.preventDefault();
+                                setFiltersOpen(false);
+                                setFixTarget({ log, x: event.clientX, y: event.clientY });
+                              }
+                            : undefined
+                        }
+                      >
                         <button
                           type="button"
                           aria-expanded={expanded}
@@ -558,16 +687,23 @@ export function DebugLogPill() {
                           className="flex w-full cursor-pointer flex-col gap-1 px-3 py-2.5 text-left hover:bg-gray-50"
                         >
                           <span className="flex items-center justify-between gap-3">
-                            <span className="min-w-0 truncate font-mono text-[11px] font-medium text-gray-950">
-                              {log.feature}
+                            <span className="flex min-w-0 items-center gap-2">
+                              <span className="min-w-0 truncate font-mono text-[11px] font-medium text-gray-950">
+                                {log.feature}
+                              </span>
+                              <span className="shrink-0 rounded-full bg-gray-100 px-1.5 py-0.5 text-[10px] font-medium text-gray-600">
+                                {statusLabel[log.status]}
+                              </span>
                             </span>
                             {typeof log.executionTimeMs === "number" ? (
                               <span className="shrink-0 text-[11px] text-gray-500">{duration(log.executionTimeMs)}</span>
                             ) : null}
                           </span>
                           <span className="flex items-center justify-between gap-3">
-                            <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-medium ${statusClass[log.status]}`}>
-                              {statusLabel[log.status]}
+                            <span
+                              className={`rounded-full px-1.5 py-0.5 text-[10px] font-medium ${levelClass[log.logLevel] ?? levelClass.info}`}
+                            >
+                              {levelLabel[log.logLevel] ?? log.logLevel}
                             </span>
                             <span className="shrink-0 text-[11px] text-gray-400">{clock(log.createdAt)}</span>
                           </span>
@@ -615,14 +751,26 @@ export function DebugLogPill() {
       >
         <Bug className="h-3.5 w-3.5 shrink-0" strokeWidth={2} aria-hidden="true" />
         <span className="text-xs font-semibold">{copy.logs}</span>
-        <span
-          className={`inline-flex min-w-5 items-center justify-center rounded-full px-1.5 py-0.5 text-[11px] font-semibold ${
-            loadError || unreadCount > 0 ? "bg-red-500 text-white" : "bg-white/15 text-white"
-          }`}
-        >
-          {loadError ? "!" : unreadCount}
-        </span>
+        {loadError ? (
+          <span className="inline-flex min-w-5 items-center justify-center rounded-full bg-red-500 px-1.5 py-0.5 text-[11px] font-semibold text-white">
+            !
+          </span>
+        ) : visibleLevels.length === 0 ? (
+          <span className="inline-flex min-w-5 items-center justify-center rounded-full bg-white/15 px-1.5 py-0.5 text-[11px] font-semibold text-white">
+            0
+          </span>
+        ) : (
+          visibleLevels.map((level) => (
+            <span
+              key={level}
+              className={`inline-flex min-w-5 items-center justify-center rounded-full px-1.5 py-0.5 text-[11px] font-semibold ${levelBadgeClass[level]}`}
+            >
+              {levelCounts[level]}
+            </span>
+          ))
+        )}
       </button>
+      <AiLogFixMenu target={fixTarget} onClose={() => setFixTarget(null)} />
     </div>,
     document.body,
   );

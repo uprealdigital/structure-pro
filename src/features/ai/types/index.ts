@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { logLevelSchema } from "@/src/common/utils/log-level";
 
 export const chatMessageSchema = z.object({
   role: z.enum(["user", "model"]),
@@ -206,6 +207,7 @@ export const aiActivityLogSchema = z.object({
   rawResponse: z.string().nullable(),
   parsedResponse: z.unknown(),
   status: aiActivityStatusSchema,
+  logLevel: logLevelSchema,
   errorMessage: z.string().nullable(),
   executionTimeMs: z.number().int().nonnegative(),
   readAt: z.string().nullable(),
@@ -223,6 +225,7 @@ export const aiActivityLogWriteSchema = z.object({
   rawResponse: z.string().nullable(),
   parsedResponse: z.unknown(),
   status: aiActivityStatusSchema,
+  logLevel: logLevelSchema,
   errorMessage: z.string().nullable(),
   executionTimeMs: z.number().int().nonnegative(),
 });

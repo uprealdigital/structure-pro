@@ -1,3 +1,4 @@
+import { logLevelFor } from "@/src/common/utils/log-level";
 import { createActivityLog } from "@/src/features/ai/db/activity-log";
 import {
   aiActivityLogWriteSchema,
@@ -58,6 +59,7 @@ export async function recordAiActivityLog(input: AiActivityDraft): Promise<void>
     rawResponse: input.rawResponse ?? null,
     parsedResponse: input.parsedResponse ?? null,
     status: input.status,
+    logLevel: logLevelFor(input.status, input.errorMessage),
     errorMessage: input.errorMessage?.trim() || null,
     executionTimeMs: Math.max(0, Math.round(input.executionTimeMs)),
   };

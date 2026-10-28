@@ -1,5 +1,6 @@
 import { GoogleGenAI } from "@google/genai";
 import { errorText, recordAiActivityLog } from "@/src/features/ai/services/activity-log.service";
+import { readPartialIntents } from "@/src/features/ai/utils/inbound-intent-stream";
 import { CATALOG } from "@/src/features/cpq/utils/catalog";
 import type { QuoteSelections } from "@/src/features/cpq/types";
 import {
@@ -70,8 +71,9 @@ ${catalogOptions}
 If nothing matches, return an empty intents array.
 Do not invent prices or products they did not mention.
 
+In each intent, write kind first, then configChanges, then messageIndexes, then summary.
 Reply with JSON only:
-{"intents":[{"kind":"configuration"|"quote_request","summary":"","configChanges":{},"messageIndexes":[1]}]}`;
+{"intents":[{"kind":"configuration"|"quote_request","configChanges":{},"messageIndexes":[1],"summary":""}]}`;
 
 export type InboundAnalysis = {
   messages: string[];
@@ -79,6 +81,19 @@ export type InboundAnalysis = {
   revisions: Array<{ name: string; selections: QuoteSelections }>;
   dealId?: string | null;
   activityIds?: number[];
+};
+
+export type InboundIntentSnapshot = {
+  intents: Array<{
+    kind: InboundIntentKind;
+    configChanges: SuggestionConfigChanges;
+    changesClosed: boolean;
+  }>;
+};
+
+export type InboundIntentOptions = {
+  signal?: AbortSignal;
+  onPartial?: (snapshot: InboundIntentSnapshot) => void;
 };
 
 function namedOptions(items: Array<{ id: string; label: string }>): string {
@@ -89,22 +104,6 @@ function client(): GoogleGenAI | null {
   const apiKey = process.env.GEMINI_API_KEY?.trim();
   if (!apiKey) return null;
   return new GoogleGenAI({ apiKey });
-}
-
-function withTimeout<T>(work: Promise<T>, ms: number): Promise<T> {
-  return new Promise((resolve, reject) => {
-    const timer = setTimeout(() => reject(new Error("Gemini request timed out")), ms);
-    work.then(
-      (value) => {
-        clearTimeout(timer);
-        resolve(value);
-      },
-      (error: unknown) => {
-        clearTimeout(timer);
-        reject(error);
-      },
-    );
-  });
 }
 
 function requestText(input: InboundAnalysis): string {
@@ -261,22 +260,77 @@ function parseIntents(text: string, count: number): InboundIntent[] {
   return [...byKind.values()];
 }
 
-async function ask(ai: GoogleGenAI, model: string, input: InboundAnalysis, timeoutMs: number): Promise<string> {
-  const response = await withTimeout(
-    ai.models.generateContent({
+function intentsFromSnapshot(snapshot: InboundIntentSnapshot | null, count: number): InboundIntent[] {
+  if (!snapshot) return [];
+  const usable = snapshot.intents.filter(
+    (intent) => intent.kind === "quote_request" || intent.changesClosed || Object.keys(intent.configChanges).length > 0,
+  );
+  if (usable.length === 0) return [];
+  const messageIndexes = Array.from({ length: count }, (_, index) => index);
+  return usable.map((intent) => ({
+    kind: intent.kind,
+    summary: "",
+    configChanges: intent.kind === "configuration" ? intent.configChanges : {},
+    messageIndexes,
+  }));
+}
+
+function snapshotFrom(text: string): InboundIntentSnapshot | null {
+  const read = readPartialIntents(text);
+  if (!read) return null;
+  return {
+    intents: read.intents.map((intent) => ({
+      kind: intent.kind,
+      configChanges: acceptedConfigChanges(intent.configChanges),
+      changesClosed: intent.changesClosed,
+    })),
+  };
+}
+
+async function readModel(
+  ai: GoogleGenAI,
+  model: string,
+  input: InboundAnalysis,
+  timeoutMs: number,
+  signal: AbortSignal | undefined,
+  onText: (text: string) => void,
+): Promise<{ text: string; timedOut: boolean }> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  const onAbort = () => controller.abort();
+  signal?.addEventListener("abort", onAbort);
+  let text = "";
+  try {
+    const stream = await ai.models.generateContentStream({
       model,
       contents: [{ role: "user", parts: [{ text: requestText(input) }] }],
       config: {
         systemInstruction: instruction,
         responseMimeType: "application/json",
+        abortSignal: controller.signal,
       },
-    }),
-    timeoutMs,
-  );
-  return response.text?.trim() ?? "";
+    });
+    for await (const chunk of stream) {
+      const piece = chunk.text ?? "";
+      if (!piece) continue;
+      text += piece;
+      onText(text);
+    }
+    return { text: text.trim(), timedOut: false };
+  } catch (error) {
+    if (signal?.aborted) throw error;
+    if (controller.signal.aborted) return { text: text.trim(), timedOut: true };
+    throw error;
+  } finally {
+    clearTimeout(timer);
+    signal?.removeEventListener("abort", onAbort);
+  }
 }
 
-export async function analyzeInboundIntent(input: InboundAnalysis): Promise<InboundIntent[]> {
+export async function analyzeInboundIntent(
+  input: InboundAnalysis,
+  options?: InboundIntentOptions,
+): Promise<InboundIntent[]> {
   const started = Date.now();
   const messages = input.messages.map((message) => message.trim()).filter(Boolean).slice(-40);
   const request = { ...input, messages };
@@ -285,8 +339,13 @@ export async function analyzeInboundIntent(input: InboundAnalysis): Promise<Inbo
   let parsedResponse: unknown = null;
   let status: "detected" | "none" | "error" = "none";
   let errorMessage: string | null = null;
+  let aborted = false;
 
   try {
+    if (options?.signal?.aborted) {
+      aborted = true;
+      return [];
+    }
     if (messages.length === 0) {
       parsedResponse = [];
       return [];
@@ -302,7 +361,14 @@ export async function analyzeInboundIntent(input: InboundAnalysis): Promise<Inbo
     const models = [...new Set([preferred, FALLBACK_MODEL])];
     const deadline = Date.now() + BUDGET_MS;
     let lastError: unknown;
+    let lastSnapshot = "";
+    let latest: InboundIntentSnapshot | null = null;
+    let published = false;
     for (const candidate of models) {
+      if (options?.signal?.aborted) {
+        aborted = true;
+        return [];
+      }
       model = candidate;
       const remaining = Math.min(ATTEMPT_MS, deadline - Date.now());
       if (remaining < 1_000) {
@@ -310,19 +376,45 @@ export async function analyzeInboundIntent(input: InboundAnalysis): Promise<Inbo
         break;
       }
       try {
-        rawResponse = await ask(ai, candidate, request, remaining);
-        const parsed = readModelIntents(rawResponse, messages.length);
+        const read = await readModel(ai, candidate, request, remaining, options?.signal, (text) => {
+          const snapshot = snapshotFrom(text);
+          if (!snapshot) return;
+          const key = JSON.stringify(snapshot);
+          if (key === lastSnapshot) return;
+          lastSnapshot = key;
+          latest = snapshot;
+          published = true;
+          options?.onPartial?.(snapshot);
+        });
+        rawResponse = read.text;
+        if (!read.text) {
+          if (read.timedOut) lastError = new Error("Gemini request timed out");
+          if (published) break;
+          continue;
+        }
+        const parsed = readModelIntents(read.text, messages.length);
         parsedResponse = parsed.intents;
         if (!parsed.ok) {
-          status = "error";
-          errorMessage = "Could not parse the model response";
-          return [];
+          const partial = intentsFromSnapshot(latest, messages.length);
+          if (partial.length > 0) {
+            parsedResponse = partial;
+            status = "detected";
+            return partial;
+          }
+          lastError = new Error(read.timedOut ? "Gemini request timed out" : "Could not parse the model response");
+          if (published) break;
+          continue;
         }
         status = parsed.intents.length > 0 ? "detected" : "none";
         return parsed.intents;
       } catch (error) {
+        if (options?.signal?.aborted) {
+          aborted = true;
+          return [];
+        }
         lastError = error;
         console.error(error);
+        if (published) break;
       }
     }
     status = "error";
@@ -330,25 +422,31 @@ export async function analyzeInboundIntent(input: InboundAnalysis): Promise<Inbo
     if (lastError) console.error(lastError);
     return [];
   } catch (error) {
+    if (options?.signal?.aborted) {
+      aborted = true;
+      return [];
+    }
     status = "error";
     errorMessage = errorText(error);
     console.error(error);
     return [];
   } finally {
-    await recordAiActivityLog({
-      dealId: input.dealId,
-      activityIds: input.activityIds,
-      feature: "inbound-intent-analyzer",
-      promptPayload: {
-        systemInstruction: instruction,
-        request: messages.length > 0 ? requestText(request) : "",
-      },
-      model,
-      rawResponse,
-      parsedResponse,
-      status,
-      errorMessage,
-      executionTimeMs: Date.now() - started,
-    });
+    if (!aborted) {
+      await recordAiActivityLog({
+        dealId: input.dealId,
+        activityIds: input.activityIds,
+        feature: "inbound-intent-analyzer",
+        promptPayload: {
+          systemInstruction: instruction,
+          request: messages.length > 0 ? requestText(request) : "",
+        },
+        model,
+        rawResponse,
+        parsedResponse,
+        status,
+        errorMessage,
+        executionTimeMs: Date.now() - started,
+      });
+    }
   }
 }

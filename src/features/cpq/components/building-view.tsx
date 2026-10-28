@@ -31,6 +31,7 @@ type BuildingViewsProps = {
   views: DesignAngleView[];
   stageRef: RefObject<HTMLElement | null>;
   onReady: () => void;
+  interactive?: boolean;
 };
 
 const CAPTURE_WIDTH = 960;
@@ -154,11 +155,14 @@ function SharedStage({
   config,
   views,
   stageRef,
+  interactive = true,
 }: Omit<BuildingViewsProps, "onReady">) {
   const gl = useThree((state) => state.gl);
   const scene = useThree((state) => state.scene);
   const viewsRef = useRef(views);
+  const interactiveRef = useRef(interactive);
   viewsRef.current = views;
+  interactiveRef.current = interactive;
   const cameras = useRef(new Map<string, PerspectiveCamera>());
   const controls = useRef(new Map<string, OrbitControls>());
   const placed = useRef(new Map<string, string>());
@@ -258,7 +262,10 @@ function SharedStage({
     for (const view of viewsRef.current) {
       if (!controls.current.has(view.id) || view.captureRef.current == null) ensure(view);
     }
-    for (const control of controls.current.values()) control.update();
+    for (const control of controls.current.values()) {
+      control.enabled = interactiveRef.current;
+      if (interactiveRef.current) control.update();
+    }
 
     const canvasRect = gl.domElement.getBoundingClientRect();
     const scaleX = canvasRect.width > 0 ? gl.domElement.width / canvasRect.width : 1;
@@ -311,7 +318,7 @@ function ReadySignal({ onReady }: { onReady: () => void }) {
   return null;
 }
 
-export default function BuildingViews({ config, views, stageRef, onReady }: BuildingViewsProps) {
+export default function BuildingViews({ config, views, stageRef, onReady, interactive = true }: BuildingViewsProps) {
   return (
     <Canvas
       shadows
@@ -342,7 +349,7 @@ export default function BuildingViews({ config, views, stageRef, onReady }: Buil
         <DesignShadow key={`${config.styleId}:${config.width}:${config.length}:${config.height}`} />
         <ReadySignal onReady={onReady} />
       </Suspense>
-      <SharedStage config={config} views={views} stageRef={stageRef} />
+      <SharedStage config={config} views={views} stageRef={stageRef} interactive={interactive} />
     </Canvas>
   );
 }

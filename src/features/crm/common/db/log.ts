@@ -1,9 +1,10 @@
 import { db } from "@/src/common/lib/supabase/supabase.service";
 import { throwIfError } from "@/src/common/utils/error-handling";
+import { emptyLogLevelCounts, logLevelFor, type LogLevel, type LogLevelCounts } from "@/src/common/utils/log-level";
 import { crmLogWriteSchema, type CrmLog, type FeatureLogStatus } from "@/src/features/crm/common/types";
 import { toCrmLog, type CrmLogRow } from "@/src/features/crm/common/utils/mappers";
 
-const columns = "id, feature, raw_response, parsed_response, status, error_message, read_at, created_at";
+const columns = "id, feature, raw_response, parsed_response, status, log_level, error_message, read_at, created_at";
 
 function crm() {
   return db("crm");
@@ -30,12 +31,15 @@ export async function recordCrmLog(input: {
   rawResponse?: string | null;
   parsedResponse?: unknown;
 }): Promise<void> {
+  const status = input.status ?? "error";
+  const errorMessage = messageOf(input.error);
   const draft = crmLogWriteSchema.safeParse({
     feature: input.feature,
     rawResponse: input.rawResponse ?? null,
     parsedResponse: input.parsedResponse ?? null,
-    status: input.status ?? "error",
-    errorMessage: messageOf(input.error),
+    status,
+    logLevel: logLevelFor(status, errorMessage),
+    errorMessage,
   });
   if (!draft.success) {
     console.error(draft.error);
@@ -47,6 +51,7 @@ export async function recordCrmLog(input: {
       raw_response: draft.data.rawResponse,
       parsed_response: jsonValue(draft.data.parsedResponse),
       status: draft.data.status,
+      log_level: draft.data.logLevel,
       error_message: draft.data.errorMessage,
     });
     throwIfError(error);
@@ -55,36 +60,72 @@ export async function recordCrmLog(input: {
   }
 }
 
+async function unreadByLevel(statuses: FeatureLogStatus[], levels: LogLevel[]): Promise<LogLevelCounts> {
+  const counts = emptyLogLevelCounts();
+  await Promise.all(
+    levels.map(async (level) => {
+      const result = await crm()
+        .from("logs")
+        .select("id", { count: "exact", head: true })
+        .is("read_at", null)
+        .in("status", statuses)
+        .eq("log_level", level);
+      if (!result.error) {
+        counts[level] = result.count ?? 0;
+        return;
+      }
+      if (result.error.message?.trim()) throwIfError(result.error);
+      const probe = await crm()
+        .from("logs")
+        .select("id")
+        .limit(1)
+        .is("read_at", null)
+        .in("status", statuses)
+        .eq("log_level", level);
+      throwIfError(probe.error ?? result.error);
+    }),
+  );
+  return counts;
+}
+
 export async function readCrmLogs(
   limit: number,
   statuses: FeatureLogStatus[],
-): Promise<{ logs: CrmLog[]; unreadCount: number }> {
-  if (statuses.length === 0) return { logs: [], unreadCount: 0 };
-  const unread = crm().from("logs").select("id", { count: "exact", head: true }).is("read_at", null).in("status", statuses);
-  const [listed, counted] = await Promise.all([
+  levels: LogLevel[],
+): Promise<{ logs: CrmLog[]; unreadCount: number; unreadByLevel: LogLevelCounts }> {
+  if (statuses.length === 0 || levels.length === 0) {
+    return { logs: [], unreadCount: 0, unreadByLevel: emptyLogLevelCounts() };
+  }
+  const [listed, counts] = await Promise.all([
     crm()
       .from("logs")
       .select(columns)
       .is("read_at", null)
       .in("status", statuses)
+      .in("log_level", levels)
       .order("created_at", { ascending: false })
       .limit(limit),
-    unread,
+    unreadByLevel(statuses, levels),
   ]);
   throwIfError(listed.error);
-  throwIfError(counted.error);
   const rows = Array.isArray(listed.data) ? listed.data : [];
   return {
     logs: rows.flatMap((row) => {
       const log = toCrmLog(row as CrmLogRow);
       return log ? [log] : [];
     }),
-    unreadCount: counted.count ?? 0,
+    unreadCount: levels.reduce((sum, level) => sum + counts[level], 0),
+    unreadByLevel: counts,
   };
 }
 
-export async function updateCrmLogsRead(statuses: FeatureLogStatus[]): Promise<void> {
-  if (statuses.length === 0) return;
-  const { error } = await crm().from("logs").update({ read_at: new Date().toISOString() }).is("read_at", null).in("status", statuses);
+export async function updateCrmLogsRead(statuses: FeatureLogStatus[], levels: LogLevel[]): Promise<void> {
+  if (statuses.length === 0 || levels.length === 0) return;
+  const { error } = await crm()
+    .from("logs")
+    .update({ read_at: new Date().toISOString() })
+    .is("read_at", null)
+    .in("status", statuses)
+    .in("log_level", levels);
   throwIfError(error);
 }

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { logLevelSchema } from "@/src/common/utils/log-level";
 
 export const customerSchema = z.object({
   id: z.string(),
@@ -44,6 +45,7 @@ export const crmLogSchema = z.object({
   rawResponse: z.string().nullable(),
   parsedResponse: z.unknown(),
   status: featureLogStatusSchema,
+  logLevel: logLevelSchema,
   errorMessage: z.string().nullable(),
   readAt: z.string().nullable(),
   createdAt: z.string(),
@@ -56,6 +58,7 @@ export const crmLogWriteSchema = z.object({
   rawResponse: z.string().nullable(),
   parsedResponse: z.unknown(),
   status: featureLogStatusSchema,
+  logLevel: logLevelSchema,
   errorMessage: z.string().nullable(),
 });
 

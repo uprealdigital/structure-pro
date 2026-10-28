@@ -21,6 +21,7 @@ export function InboundIntentCard({
   changes,
   actionLabel,
   pending,
+  loading,
   onDismiss,
   onApply,
   onReview,
@@ -44,6 +45,7 @@ export function InboundIntentCard({
   changes: IntentChangeRow[];
   actionLabel: string;
   pending?: boolean;
+  loading?: boolean;
   onDismiss: () => void;
   onApply?: () => void;
   onReview?: () => void;
@@ -76,7 +78,9 @@ export function InboundIntentCard({
           <X className="h-3.5 w-3.5" aria-hidden="true" />
         </button>
       </div>
-      {draft ? (
+      {loading && draft && changes.length === 0 ? (
+        <SuggestionSkeleton />
+      ) : draft ? (
         <div className="mt-3 w-5/8 rounded-lg border border-gray-200 bg-gray-50 p-2.5">
           {quotes && quotes.length > 0 && selectedQuoteId ? (
             <QuoteTarget
@@ -119,11 +123,16 @@ export function InboundIntentCard({
                       <span>{change.label}</span>
                     </li>
                   ))}
+                  {loading ? (
+                    <li className="text-xs leading-5 text-gray-500">{copy.loadingSuggestion}</li>
+                  ) : null}
                 </ul>
               </div>
             ) : null}
           </div>
         </div>
+      ) : loading ? (
+        <p className="mt-3 text-xs text-gray-500">{copy.loadingSuggestion}</p>
       ) : null}
       <div className="mt-3 flex flex-wrap items-center gap-2">
         <IntentShareMenu label={actionLabel} pending={pending} onSharePhotos={onSharePhotos} onShareQuote={onShareQuote} />
@@ -150,6 +159,23 @@ export function InboundIntentCard({
         ) : null}
       </div>
     </section>
+  );
+}
+
+function SuggestionSkeleton() {
+  return (
+    <div className="mt-3 w-5/8 animate-pulse rounded-lg border border-gray-200 bg-gray-50 p-2.5">
+      <div className="h-3 w-28 rounded bg-gray-200" />
+      <div className="mt-3 flex items-start gap-4">
+        <div className="h-20 w-24 shrink-0 rounded-lg bg-gray-200" />
+        <div className="min-w-0 flex-1 space-y-2 pt-1">
+          <div className="h-3 w-32 rounded bg-gray-200" />
+          <div className="h-3 w-40 rounded bg-gray-200" />
+          <div className="h-3 w-36 rounded bg-gray-200" />
+        </div>
+      </div>
+      <p className="mt-3 text-[11px] text-gray-500">{copy.loadingSuggestion}</p>
+    </div>
   );
 }
 

@@ -68,6 +68,7 @@ export type AiActivityLogRow = {
   raw_response: string | null;
   parsed_response: unknown;
   status: string;
+  log_level: string;
   error_message: string | null;
   execution_time_ms: number;
   read_at: string | null;
@@ -104,6 +105,7 @@ export function toAiActivityLog(row: AiActivityLogRow): AiActivityLog | undefine
     rawResponse: row.raw_response,
     parsedResponse: jsonValue(row.parsed_response),
     status: row.status,
+    logLevel: row.log_level,
     errorMessage: row.error_message,
     executionTimeMs,
     readAt: row.read_at,

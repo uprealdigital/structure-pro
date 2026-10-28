@@ -1,9 +1,10 @@
 import { db } from "@/src/common/lib/supabase/supabase.service";
 import { throwIfError } from "@/src/common/utils/error-handling";
+import { emptyLogLevelCounts, logLevelFor, type LogLevel, type LogLevelCounts } from "@/src/common/utils/log-level";
 import { cpqLogWriteSchema, type CpqLog, type CpqLogWrite } from "@/src/features/cpq/types";
 import { toCpqLog, type CpqLogRow } from "@/src/features/cpq/utils/mappers";
 
-const columns = "id, feature, raw_response, parsed_response, status, error_message, read_at, created_at";
+const columns = "id, feature, raw_response, parsed_response, status, log_level, error_message, read_at, created_at";
 
 function cpq() {
   return db("cpq");
@@ -30,12 +31,15 @@ export async function recordCpqLog(input: {
   rawResponse?: string | null;
   parsedResponse?: unknown;
 }): Promise<void> {
+  const status = input.status ?? "error";
+  const errorMessage = messageOf(input.error);
   const draft = cpqLogWriteSchema.safeParse({
     feature: input.feature,
     rawResponse: input.rawResponse ?? null,
     parsedResponse: input.parsedResponse ?? null,
-    status: input.status ?? "error",
-    errorMessage: messageOf(input.error),
+    status,
+    logLevel: logLevelFor(status, errorMessage),
+    errorMessage,
   });
   if (!draft.success) {
     console.error(draft.error);
@@ -47,6 +51,7 @@ export async function recordCpqLog(input: {
       raw_response: draft.data.rawResponse,
       parsed_response: jsonValue(draft.data.parsedResponse),
       status: draft.data.status,
+      log_level: draft.data.logLevel,
       error_message: draft.data.errorMessage,
     });
     throwIfError(error);
@@ -55,35 +60,72 @@ export async function recordCpqLog(input: {
   }
 }
 
+async function unreadByLevel(statuses: CpqLogWrite["status"][], levels: LogLevel[]): Promise<LogLevelCounts> {
+  const counts = emptyLogLevelCounts();
+  await Promise.all(
+    levels.map(async (level) => {
+      const result = await cpq()
+        .from("logs")
+        .select("id", { count: "exact", head: true })
+        .is("read_at", null)
+        .in("status", statuses)
+        .eq("log_level", level);
+      if (!result.error) {
+        counts[level] = result.count ?? 0;
+        return;
+      }
+      if (result.error.message?.trim()) throwIfError(result.error);
+      const probe = await cpq()
+        .from("logs")
+        .select("id")
+        .limit(1)
+        .is("read_at", null)
+        .in("status", statuses)
+        .eq("log_level", level);
+      throwIfError(probe.error ?? result.error);
+    }),
+  );
+  return counts;
+}
+
 export async function readCpqLogs(
   limit: number,
   statuses: CpqLogWrite["status"][],
-): Promise<{ logs: CpqLog[]; unreadCount: number }> {
-  if (statuses.length === 0) return { logs: [], unreadCount: 0 };
-  const [listed, counted] = await Promise.all([
+  levels: LogLevel[],
+): Promise<{ logs: CpqLog[]; unreadCount: number; unreadByLevel: LogLevelCounts }> {
+  if (statuses.length === 0 || levels.length === 0) {
+    return { logs: [], unreadCount: 0, unreadByLevel: emptyLogLevelCounts() };
+  }
+  const [listed, counts] = await Promise.all([
     cpq()
       .from("logs")
       .select(columns)
       .is("read_at", null)
       .in("status", statuses)
+      .in("log_level", levels)
       .order("created_at", { ascending: false })
       .limit(limit),
-    cpq().from("logs").select("id", { count: "exact", head: true }).is("read_at", null).in("status", statuses),
+    unreadByLevel(statuses, levels),
   ]);
   throwIfError(listed.error);
-  throwIfError(counted.error);
   const rows = Array.isArray(listed.data) ? listed.data : [];
   return {
     logs: rows.flatMap((row) => {
       const log = toCpqLog(row as CpqLogRow);
       return log ? [log] : [];
     }),
-    unreadCount: counted.count ?? 0,
+    unreadCount: levels.reduce((sum, level) => sum + counts[level], 0),
+    unreadByLevel: counts,
   };
 }
 
-export async function updateCpqLogsRead(statuses: CpqLogWrite["status"][]): Promise<void> {
-  if (statuses.length === 0) return;
-  const { error } = await cpq().from("logs").update({ read_at: new Date().toISOString() }).is("read_at", null).in("status", statuses);
+export async function updateCpqLogsRead(statuses: CpqLogWrite["status"][], levels: LogLevel[]): Promise<void> {
+  if (statuses.length === 0 || levels.length === 0) return;
+  const { error } = await cpq()
+    .from("logs")
+    .update({ read_at: new Date().toISOString() })
+    .is("read_at", null)
+    .in("status", statuses)
+    .in("log_level", levels);
   throwIfError(error);
 }
