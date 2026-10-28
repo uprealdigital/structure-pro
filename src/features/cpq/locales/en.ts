@@ -102,6 +102,7 @@ export const copy = {
     "We'll send your backyard preview to {email} as soon as the render is ready.",
   yardPreviewDone: "Done",
   quoteTitle: "Submit For Quote",
+  quoteSample: "Sample",
   quoteRequiredHint: "Required fields are marked with a",
   fullName: "Full Name",
   phone: "Phone",

@@ -836,6 +836,14 @@ function QuoteModal({
     return `${label}*`;
   }
 
+  function fillSample() {
+    setFullName("Daniel Rainville");
+    setPhone("646-284-0831");
+    setEmail("arthamas@gmail.com");
+    setAgreedToTerms(true);
+    setFieldErrors({});
+  }
+
   function clearFieldError(field: keyof QuoteFieldErrors) {
     setFieldErrors((current) =>
       current[field] ? { ...current, [field]: undefined } : current,
@@ -918,9 +926,19 @@ function QuoteModal({
           <>
             <div className="flex items-start justify-between border-b border-gray-100 pb-4">
               <div className="space-y-0.5">
-                <h2 className="font-serif text-xl font-bold tracking-tight text-gray-950">
-                  {copy.quoteTitle}
-                </h2>
+                <div className="flex items-center gap-2">
+                  <h2 className="font-serif text-xl font-bold tracking-tight text-gray-950">
+                    {copy.quoteTitle}
+                  </h2>
+                  <button
+                    type="button"
+                    onClick={fillSample}
+                    disabled={submitting}
+                    className="cursor-pointer rounded border border-gray-200 px-1.5 py-0.5 text-[10px] leading-none font-medium text-gray-500 transition-colors hover:bg-gray-50 hover:text-gray-800 disabled:opacity-50"
+                  >
+                    {copy.quoteSample}
+                  </button>
+                </div>
                 <p className="text-xs text-gray-500">
                   {copy.quoteRequiredHint}{" "}
                   <span className="font-medium text-stone-800">*</span>
