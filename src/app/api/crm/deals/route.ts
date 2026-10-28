@@ -1,4 +1,5 @@
 import { assertInternal } from "@/src/common/utils/internal-call";
+import { recordCrmLog } from "@/src/features/crm/common/db/log";
 import { createDeal } from "@/src/features/crm/deals/db/deal";
 import { createDealQuote } from "@/src/features/crm/deals/db/deal-quote";
 import type { DealSource } from "@/src/features/crm/deals/types";
@@ -50,6 +51,7 @@ export async function POST(request: Request) {
     }
     return Response.json(deal);
   } catch (error) {
+    void recordCrmLog({ feature: "deals", error });
     const message = error instanceof Error ? error.message : "Could not save deal";
     return Response.json({ error: message }, { status: 500 });
   }

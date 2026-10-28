@@ -61,7 +61,7 @@ export function QuoteList({ quotes, loadError }: { quotes: QuoteListItem[]; load
             </button>
           </div>
           <Link
-            href="/"
+            href="/cpq"
             className="ml-auto inline-flex shrink-0 items-center gap-1.5 rounded bg-[#121314] px-3 py-1.5 text-xs font-semibold text-white shadow-xs transition-colors hover:bg-black"
           >
             <Plus className="h-3.5 w-3.5" strokeWidth={2.2} aria-hidden="true" />

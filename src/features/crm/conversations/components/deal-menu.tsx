@@ -1,14 +1,39 @@
 "use client";
 
-import { ArrowLeftRight, Check, ChevronDown, ChevronRight, EllipsisVertical, Eye, Pencil, Plus, RotateCcw, UserPlus, X } from "lucide-react";
-import Link from "next/link";
+import { ArrowLeftRight, Check, ChevronDown, ChevronRight, EllipsisVertical, Eye, Pencil, Plus, RotateCcw, Search, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import type { Customer } from "@/src/features/crm/common/types";
 import { copy } from "@/src/features/crm/conversations/locales/en";
 import type { ConversationDealListItem, ConversationDealOption } from "@/src/features/crm/conversations/types";
 import { orderedDealMenu } from "@/src/features/crm/conversations/utils/deals";
+import { peopleMatchingName } from "@/src/features/crm/conversations/utils/people";
 import { DealStatusBadge } from "@/src/features/crm/deals/components/deal-status-badge";
 import { canMarkDealLost } from "@/src/features/crm/deals/utils/status";
 import { dealNameMaxLength, type DealStatus } from "@/src/features/crm/deals/types";
+
+function SwitchCustomersIcon() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      className="h-3.5 w-3.5 shrink-0 text-gray-500"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
+      <circle cx="9" cy="7" r="4" />
+      <g transform="translate(15.2 7.2) scale(0.32)" strokeWidth="6">
+        <path d="M8 3 4 7l4 4" />
+        <path d="M4 7h16" />
+        <path d="m16 21 4-4-4-4" />
+        <path d="M20 17H4" />
+      </g>
+    </svg>
+  );
+}
 
 function menuItems(deals: ConversationDealOption[]): ConversationDealListItem[] {
   return deals.map((deal) => ({
@@ -123,6 +148,95 @@ function DealNameEditor({
           <X className="h-3 w-3" strokeWidth={2.5} aria-hidden="true" />
         </button>
       </span>
+    </div>
+  );
+}
+
+function DealPeopleList({
+  customers,
+  linkedIds,
+  primaryId,
+  loading,
+  error,
+  pendingId,
+  onToggle,
+}: {
+  customers: Customer[];
+  linkedIds: string[];
+  primaryId: string;
+  loading: boolean;
+  error: string;
+  pendingId: string;
+  onToggle: (customerId: string) => void;
+}) {
+  const [query, setQuery] = useState("");
+  const search = useRef<HTMLInputElement>(null);
+  const linked = new Set(linkedIds);
+  const visible = peopleMatchingName(customers, query, linked, primaryId);
+
+  useEffect(() => {
+    search.current?.focus();
+  }, []);
+
+  return (
+    <div className="w-72 max-w-[calc(100vw-2.5rem)]">
+      <div className="border-b border-gray-200 px-2.5 py-2">
+        <label className="relative block">
+          <span className="sr-only">{copy.searchCustomers}</span>
+          <span className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
+            <Search className="h-3.5 w-3.5 text-gray-400" aria-hidden="true" />
+          </span>
+          <input
+            ref={search}
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder={copy.searchCustomers}
+            className="w-full rounded-md border border-gray-200 bg-gray-50 py-1.5 pr-3 pl-8 text-xs text-gray-900 transition-colors outline-none placeholder:text-gray-400 focus:border-black focus:ring-1 focus:ring-black"
+          />
+        </label>
+      </div>
+      <ul role="menu" aria-label={copy.addPersonToDeal} className="max-h-80 overflow-y-auto p-1">
+        {loading && customers.length === 0 ? (
+          <li className="px-2.5 py-2 text-xs text-gray-500">{copy.customersLoading}</li>
+        ) : visible.length === 0 ? (
+          <li className="px-2.5 py-2 text-xs text-gray-500">{copy.noCustomerMatch}</li>
+        ) : (
+          visible.map((customer) => {
+            const checked = linked.has(customer.id);
+            return (
+              <li key={customer.id}>
+                <button
+                  type="button"
+                  role="menuitemcheckbox"
+                  aria-checked={checked}
+                  disabled={pendingId === customer.id}
+                  onClick={() => onToggle(customer.id)}
+                  className="flex w-full cursor-pointer items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-xs transition-colors hover:bg-gray-50 disabled:opacity-50"
+                >
+                  <span className="flex h-3.5 w-3.5 shrink-0 items-center justify-center">
+                    {checked ? (
+                      <Check className="h-3.5 w-3.5 text-gray-950" strokeWidth={2.5} aria-hidden="true" />
+                    ) : null}
+                  </span>
+                  <span className="flex min-w-0 flex-1 items-center gap-1.5">
+                    <span
+                      className={`truncate ${checked ? "font-bold text-gray-950" : "font-medium text-gray-800"}`}
+                    >
+                      {customer.fullName}
+                    </span>
+                    {customer.id === primaryId ? (
+                      <span className="shrink-0 rounded-full bg-gray-200 px-1.5 py-0.5 text-[9px] leading-none font-semibold text-gray-800">
+                        {copy.primary}
+                      </span>
+                    ) : null}
+                  </span>
+                </button>
+              </li>
+            );
+          })
+        )}
+      </ul>
+      {error ? <p className="px-3 pt-1 pb-2 text-[11px] text-red-600">{error}</p> : null}
     </div>
   );
 }
@@ -248,6 +362,16 @@ export function DealHeading({
   pending,
   onSelectDeal,
   onRename,
+  onCreateDeal,
+  creating,
+  customers,
+  customersLoading,
+  customersError,
+  linkedCustomerIds,
+  primaryCustomerId,
+  pendingCustomerId,
+  onLoadCustomers,
+  onToggleCustomer,
   onMarkLost,
   onReopen,
 }: {
@@ -257,14 +381,30 @@ export function DealHeading({
   selectedStage: DealStatus;
   lost: boolean;
   pending: boolean;
+  creating: boolean;
+  customers: Customer[];
+  customersLoading: boolean;
+  customersError: string;
+  linkedCustomerIds: string[];
+  primaryCustomerId: string;
+  pendingCustomerId: string;
   onSelectDeal: (dealId: string) => void;
   onRename: (name: string) => Promise<{ success: true } | { error: string }>;
+  onCreateDeal: () => void;
+  onLoadCustomers: () => void;
+  onToggleCustomer: (customerId: string) => void;
   onMarkLost: () => void;
   onReopen: () => void;
 }) {
   const [actionsOpen, setActionsOpen] = useState(false);
   const [switchOpen, setSwitchOpen] = useState(false);
+  const [peopleOpen, setPeopleOpen] = useState(false);
+  const [peopleDealId, setPeopleDealId] = useState(selectedId);
   const [dealsOpen, setDealsOpen] = useState(false);
+  if (peopleDealId !== selectedId) {
+    setPeopleDealId(selectedId);
+    setPeopleOpen(false);
+  }
   const [showLost, setShowLost] = useState(false);
   const [renaming, setRenaming] = useState(false);
   const [renamePending, setRenamePending] = useState(false);
@@ -282,6 +422,7 @@ export function DealHeading({
       if (!menu.current?.contains(event.target as Node)) {
         setActionsOpen(false);
         setSwitchOpen(false);
+        setPeopleOpen(false);
         setDealsOpen(false);
       }
     }
@@ -289,6 +430,7 @@ export function DealHeading({
       if (event.key === "Escape") {
         setActionsOpen(false);
         setSwitchOpen(false);
+        setPeopleOpen(false);
         setDealsOpen(false);
       }
     }
@@ -310,6 +452,7 @@ export function DealHeading({
     setDealsOpen(false);
     setActionsOpen((value) => {
       setSwitchOpen(false);
+      setPeopleOpen(false);
       return !value;
     });
   }
@@ -317,6 +460,7 @@ export function DealHeading({
   function toggleDeals() {
     setActionsOpen(false);
     setSwitchOpen(false);
+    setPeopleOpen(false);
     setDealsOpen((value) => {
       if (value) return false;
       setShowLost(selectedStage === "deal_lost");
@@ -325,6 +469,7 @@ export function DealHeading({
   }
 
   function toggleSwitch() {
+    setPeopleOpen(false);
     setSwitchOpen((value) => {
       if (value) return false;
       setShowLost(selectedStage === "deal_lost");
@@ -332,9 +477,19 @@ export function DealHeading({
     });
   }
 
+  function togglePeople() {
+    setSwitchOpen(false);
+    setPeopleOpen((value) => {
+      if (value) return false;
+      onLoadCustomers();
+      return true;
+    });
+  }
+
   function beginRename() {
     setActionsOpen(false);
     setSwitchOpen(false);
+    setPeopleOpen(false);
     setDealsOpen(false);
     setRenameError("");
     setRenaming(true);
@@ -361,6 +516,7 @@ export function DealHeading({
   function choose(dealId: string) {
     setActionsOpen(false);
     setSwitchOpen(false);
+    setPeopleOpen(false);
     setDealsOpen(false);
     if (dealId === selectedId) return;
     onSelectDeal(dealId);
@@ -485,30 +641,52 @@ export function DealHeading({
               <Pencil className="h-3.5 w-3.5 shrink-0 text-gray-500" aria-hidden="true" />
               <span>{copy.renameDeal}</span>
             </button>
+            <div className="relative">
+              <button
+                type="button"
+                role="menuitem"
+                aria-expanded={peopleOpen}
+                aria-haspopup="menu"
+                onClick={togglePeople}
+                className={`flex w-full cursor-pointer items-center justify-between rounded-lg px-2.5 py-1.5 text-left text-xs font-medium transition-colors ${
+                  peopleOpen ? "bg-gray-100 text-black" : "text-gray-700 hover:bg-gray-50 hover:text-black"
+                }`}
+              >
+                <span className="flex items-center gap-2">
+                  <SwitchCustomersIcon />
+                  <span>{copy.addPersonToDeal}</span>
+                </span>
+                <ChevronRight className="h-3 w-3 shrink-0 text-gray-500" aria-hidden="true" />
+              </button>
+              {peopleOpen ? (
+                <div className="absolute top-full left-0 z-50 mt-1 overflow-hidden rounded-xl border border-gray-200/90 bg-white shadow-2xl md:top-0 md:left-full md:mt-0 md:ml-1.5">
+                  <DealPeopleList
+                    customers={customers}
+                    linkedIds={linkedCustomerIds}
+                    primaryId={primaryCustomerId}
+                    loading={customersLoading}
+                    error={customersError}
+                    pendingId={pendingCustomerId}
+                    onToggle={onToggleCustomer}
+                  />
+                </div>
+              ) : null}
+            </div>
             <button
               type="button"
               role="menuitem"
+              disabled={creating}
               onClick={() => {
                 setActionsOpen(false);
                 setSwitchOpen(false);
+                setPeopleOpen(false);
+                onCreateDeal();
               }}
-              className="flex w-full cursor-pointer items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-xs font-medium text-gray-700 transition-colors hover:bg-gray-50 hover:text-black"
-            >
-              <UserPlus className="h-3.5 w-3.5 shrink-0 text-gray-500" aria-hidden="true" />
-              <span>{copy.addPersonToDeal}</span>
-            </button>
-            <Link
-              href="/"
-              role="menuitem"
-              onClick={() => {
-                setActionsOpen(false);
-                setSwitchOpen(false);
-              }}
-              className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-xs font-medium text-gray-700 transition-colors hover:bg-gray-50 hover:text-black"
+              className="flex w-full cursor-pointer items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-xs font-medium text-gray-700 transition-colors hover:bg-gray-50 hover:text-black disabled:opacity-50"
             >
               <Plus className="h-3.5 w-3.5 shrink-0 text-gray-500" aria-hidden="true" />
               <span>{copy.createDeal}</span>
-            </Link>
+            </button>
             {canMarkLost || lost ? (
               <>
                 <div className="my-1 border-t border-gray-100" />
@@ -519,6 +697,7 @@ export function DealHeading({
                   onClick={() => {
                     setActionsOpen(false);
                     setSwitchOpen(false);
+                    setPeopleOpen(false);
                     if (lost) onReopen();
                     else onMarkLost();
                   }}

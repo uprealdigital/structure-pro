@@ -1,11 +1,13 @@
 import {
   buildingConfigSchema,
+  cpqLogSchema,
   quoteRecordSchema,
   quoteSelectionsSchema,
   storedConfigurationSchema,
+  type BuildingConfig,
+  type CpqLog,
   type ListedQuote,
   type QuoteSelections,
-  type BuildingConfig,
   type StoredConfiguration,
 } from "@/src/features/cpq/types";
 import { quoteNumberValue } from "@/src/features/crm/quotes/utils/formatting";
@@ -44,4 +46,37 @@ export function toStoredConfiguration(
   lng: string,
 ): StoredConfiguration {
   return storedConfigurationSchema.parse({ ...selections, lng });
+}
+
+export type CpqLogRow = {
+  id: string;
+  feature: string;
+  raw_response: string | null;
+  parsed_response: unknown;
+  status: string;
+  error_message: string | null;
+  created_at: string;
+};
+
+function jsonField(value: unknown): unknown {
+  if (value == null) return null;
+  if (typeof value !== "string") return value;
+  try {
+    return JSON.parse(value) as unknown;
+  } catch {
+    return value;
+  }
+}
+
+export function toCpqLog(row: CpqLogRow): CpqLog | undefined {
+  const log = cpqLogSchema.safeParse({
+    id: row.id,
+    feature: row.feature,
+    rawResponse: row.raw_response,
+    parsedResponse: jsonField(row.parsed_response),
+    status: row.status,
+    errorMessage: row.error_message,
+    createdAt: row.created_at,
+  });
+  return log.success ? log.data : undefined;
 }

@@ -11,7 +11,7 @@ function loadSummary(dealId: string, fingerprint: string, request: DealSummaryRe
   const key = `${dealId}:${fingerprint}`;
   const current = inflight.get(key);
   if (current) return current;
-  const requestPromise = summarizeConversationDeal(request).finally(() => {
+  const requestPromise = summarizeConversationDeal({ ...request, dealId }).finally(() => {
     inflight.delete(key);
   });
   inflight.set(key, requestPromise);

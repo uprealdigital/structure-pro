@@ -2,6 +2,7 @@ import type { RouteContext } from "@/src/common/types";
 import { assertInternal } from "@/src/common/utils/internal-call";
 import { updateCustomer } from "@/src/features/crm/common/db/customer";
 import { getCustomer } from "@/src/features/crm/common/server/queries";
+import { recordCrmLog } from "@/src/features/crm/common/db/log";
 
 export const runtime = "nodejs";
 
@@ -24,6 +25,7 @@ export async function GET(request: Request, context: RouteContext) {
     if (!customer) return Response.json({ error: "Customer not found" }, { status: 404 });
     return Response.json(customer);
   } catch (error) {
+    void recordCrmLog({ feature: "customers", error });
     const message = error instanceof Error ? error.message : "Could not load customer";
     return Response.json({ error: message }, { status: 500 });
   }
@@ -43,6 +45,7 @@ export async function PATCH(request: Request, context: RouteContext) {
     if (!customer) return Response.json({ error: "Customer not found" }, { status: 404 });
     return Response.json(customer);
   } catch (error) {
+    void recordCrmLog({ feature: "customers", error });
     const message = error instanceof Error ? error.message : "Could not update customer";
     return Response.json({ error: message }, { status: 500 });
   }

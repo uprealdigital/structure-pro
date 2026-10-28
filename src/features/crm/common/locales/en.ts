@@ -17,4 +17,5 @@ export const copy = {
   navigation: "CRM",
   requiresAttention: "Requires your attention",
   loading: "Loading",
+  primary: "Primary",
 };

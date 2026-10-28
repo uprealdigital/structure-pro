@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
 import { Domine, Inter } from "next/font/google";
+import { ConfiguratorShareRedirect } from "@/src/common/components/configurator-share-redirect";
+import { DebugLogPill } from "@/src/common/components/debug-log-pill";
 import "./globals.css";
 
 const inter = Inter({
@@ -23,7 +25,11 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       lang="en"
       className={`${inter.variable} ${domine.variable} h-full antialiased`}
     >
-      <body className="flex h-full min-h-full flex-col">{children}</body>
+      <body className="flex h-full min-h-full flex-col">
+        {children}
+        <ConfiguratorShareRedirect />
+        {process.env.NODE_ENV === "development" ? <DebugLogPill /> : null}
+      </body>
     </html>
   );
 }

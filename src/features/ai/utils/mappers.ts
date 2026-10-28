@@ -1,4 +1,11 @@
-import { suggestionSchema, yardPreviewSchema, type Suggestion, type YardPreview } from "@/src/features/ai/types";
+import {
+  aiActivityLogSchema,
+  suggestionSchema,
+  yardPreviewSchema,
+  type AiActivityLog,
+  type Suggestion,
+  type YardPreview,
+} from "@/src/features/ai/types";
 
 export type YardPreviewRow = {
   id: string;
@@ -49,6 +56,58 @@ function parsedJson(value: string): unknown {
   } catch {
     return value;
   }
+}
+
+export type AiActivityLogRow = {
+  id: string;
+  deal_id: string | null;
+  activity_ids: unknown;
+  feature: string;
+  prompt_payload: unknown;
+  model: string | null;
+  raw_response: string | null;
+  parsed_response: unknown;
+  status: string;
+  error_message: string | null;
+  execution_time_ms: number;
+  created_at: string;
+};
+
+function activityIds(value: unknown): number[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((item) => {
+    const id = typeof item === "number" ? item : typeof item === "string" ? Number(item) : Number.NaN;
+    return Number.isInteger(id) && id > 0 ? [id] : [];
+  });
+}
+
+function jsonValue(value: unknown): unknown {
+  if (value == null) return null;
+  if (typeof value === "string") {
+    const parsed = parsedJson(value);
+    return parsed === value ? value : parsed;
+  }
+  return value;
+}
+
+export function toAiActivityLog(row: AiActivityLogRow): AiActivityLog | undefined {
+  const executionTimeMs =
+    typeof row.execution_time_ms === "number" ? row.execution_time_ms : Number(row.execution_time_ms);
+  const log = aiActivityLogSchema.safeParse({
+    id: row.id,
+    dealId: row.deal_id,
+    activityIds: activityIds(row.activity_ids),
+    feature: row.feature,
+    promptPayload: jsonValue(row.prompt_payload) ?? {},
+    model: row.model,
+    rawResponse: row.raw_response,
+    parsedResponse: jsonValue(row.parsed_response),
+    status: row.status,
+    errorMessage: row.error_message,
+    executionTimeMs,
+    createdAt: row.created_at,
+  });
+  return log.success ? log.data : undefined;
 }
 
 export function toSuggestion(row: SuggestionRow): Suggestion | undefined {

@@ -5,6 +5,7 @@ import { callRouter, readJson } from "@/src/common/utils/internal-call";
 import { toE164 } from "@/src/common/utils/phone";
 import { sendWebsiteQuoteMessage } from "@/src/features/crm/conversations/server/actions";
 import { createConfiguration } from "@/src/features/cpq/db/configuration";
+import { recordCpqLog } from "@/src/features/cpq/db/log";
 import { createQuote, deleteQuote } from "@/src/features/crm/quotes/db/quote";
 import { getConfiguration } from "@/src/features/cpq/server/queries";
 import {
@@ -20,6 +21,12 @@ export type ActionResult<T> = { success: true; data: T } | { error: string };
 
 function quoteChannel(): "twilio" | "telegram" {
   return process.env.QUOTE_CHANNEL?.trim().toLowerCase() === "telegram" ? "telegram" : "twilio";
+}
+
+export async function reportCpqIssue(message: string): Promise<void> {
+  const text = message.trim().slice(0, 500);
+  if (!text) return;
+  await recordCpqLog({ feature: "configurator", error: text });
 }
 
 export async function getConfigurationAction(
@@ -46,9 +53,10 @@ export async function saveConfigAction(input: {
 
   try {
     const id = await createConfiguration(toStoredConfiguration(quote.data, locale.data));
-    revalidatePath("/");
+    revalidatePath("/cpq");
     return { success: true, data: { id } };
   } catch (error) {
+    void recordCpqLog({ feature: "configurations", error });
     const message = error instanceof Error ? error.message : "Could not save configuration";
     return { error: message };
   }
@@ -104,10 +112,11 @@ export async function createQuoteAction(input: {
       customerId: savedCustomer.id,
     });
 
-    revalidatePath("/");
-    revalidatePath("/crm/conversations");
+    revalidatePath("/cpq");
+    revalidatePath("/conversations");
     return { success: true, data: { invoiceId, channel: notified.channel } };
   } catch (error) {
+    void recordCpqLog({ feature: "quotes", error });
     if (dealId) {
       const { DELETE: removeDeal } = await import("@/src/app/api/crm/deals/[id]/route");
       await callRouter(removeDeal, `/api/crm/deals/${dealId}`, {

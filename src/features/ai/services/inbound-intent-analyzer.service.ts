@@ -1,4 +1,5 @@
 import { GoogleGenAI } from "@google/genai";
+import { errorText, recordAiActivityLog } from "@/src/features/ai/services/activity-log.service";
 import { CATALOG } from "@/src/features/cpq/utils/catalog";
 import type { QuoteSelections } from "@/src/features/cpq/types";
 import {
@@ -76,6 +77,8 @@ export type InboundAnalysis = {
   messages: string[];
   currentChanges: SuggestionConfigChanges;
   revisions: Array<{ name: string; selections: QuoteSelections }>;
+  dealId?: string | null;
+  activityIds?: number[];
 };
 
 function namedOptions(items: Array<{ id: string; label: string }>): string {
@@ -204,6 +207,18 @@ function indexesFor(raw: number[] | undefined, count: number): number[] {
   return [...new Set(indexes.filter((index) => index >= 0 && index < count))];
 }
 
+function readModelIntents(text: string, count: number): { ok: boolean; intents: InboundIntent[] } {
+  const start = text.indexOf("{");
+  const end = text.lastIndexOf("}");
+  if (start < 0 || end <= start) return { ok: false, intents: [] };
+  try {
+    JSON.parse(text.slice(start, end + 1));
+  } catch {
+    return { ok: false, intents: [] };
+  }
+  return { ok: true, intents: parseIntents(text, count) };
+}
+
 function parseIntents(text: string, count: number): InboundIntent[] {
   const start = text.indexOf("{");
   const end = text.lastIndexOf("}");
@@ -262,26 +277,78 @@ async function ask(ai: GoogleGenAI, model: string, input: InboundAnalysis, timeo
 }
 
 export async function analyzeInboundIntent(input: InboundAnalysis): Promise<InboundIntent[]> {
+  const started = Date.now();
   const messages = input.messages.map((message) => message.trim()).filter(Boolean).slice(-40);
-  if (messages.length === 0) return [];
-  const ai = client();
-  if (!ai) return [];
-
-  const preferred = process.env.GEMINI_MODEL?.trim() || PRIMARY_MODEL;
-  const models = [...new Set([preferred, FALLBACK_MODEL])];
   const request = { ...input, messages };
-  const deadline = Date.now() + BUDGET_MS;
-  let lastError: unknown;
-  for (const model of models) {
-    const remaining = Math.min(ATTEMPT_MS, deadline - Date.now());
-    if (remaining < 1_000) break;
-    try {
-      return parseIntents(await ask(ai, model, request, remaining), messages.length);
-    } catch (error) {
-      lastError = error;
-      console.error(error);
+  let model: string | null = null;
+  let rawResponse: string | null = null;
+  let parsedResponse: unknown = null;
+  let status: "detected" | "none" | "error" = "none";
+  let errorMessage: string | null = null;
+
+  try {
+    if (messages.length === 0) {
+      parsedResponse = [];
+      return [];
     }
+    const ai = client();
+    if (!ai) {
+      status = "error";
+      errorMessage = "GEMINI_API_KEY is not set";
+      return [];
+    }
+
+    const preferred = process.env.GEMINI_MODEL?.trim() || PRIMARY_MODEL;
+    const models = [...new Set([preferred, FALLBACK_MODEL])];
+    const deadline = Date.now() + BUDGET_MS;
+    let lastError: unknown;
+    for (const candidate of models) {
+      model = candidate;
+      const remaining = Math.min(ATTEMPT_MS, deadline - Date.now());
+      if (remaining < 1_000) {
+        lastError = new Error("Gemini request timed out");
+        break;
+      }
+      try {
+        rawResponse = await ask(ai, candidate, request, remaining);
+        const parsed = readModelIntents(rawResponse, messages.length);
+        parsedResponse = parsed.intents;
+        if (!parsed.ok) {
+          status = "error";
+          errorMessage = "Could not parse the model response";
+          return [];
+        }
+        status = parsed.intents.length > 0 ? "detected" : "none";
+        return parsed.intents;
+      } catch (error) {
+        lastError = error;
+        console.error(error);
+      }
+    }
+    status = "error";
+    errorMessage = errorText(lastError);
+    if (lastError) console.error(lastError);
+    return [];
+  } catch (error) {
+    status = "error";
+    errorMessage = errorText(error);
+    console.error(error);
+    return [];
+  } finally {
+    await recordAiActivityLog({
+      dealId: input.dealId,
+      activityIds: input.activityIds,
+      feature: "inbound-intent-analyzer",
+      promptPayload: {
+        systemInstruction: instruction,
+        request: messages.length > 0 ? requestText(request) : "",
+      },
+      model,
+      rawResponse,
+      parsedResponse,
+      status,
+      errorMessage,
+      executionTimeMs: Date.now() - started,
+    });
   }
-  if (lastError) console.error(lastError);
-  return [];
 }

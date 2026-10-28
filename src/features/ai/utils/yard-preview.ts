@@ -1,4 +1,5 @@
 import { GoogleGenAI } from "@google/genai";
+import { errorText, recordAiActivityLog } from "@/src/features/ai/services/activity-log.service";
 import type { YardPreviewEvent } from "@/src/features/ai/types";
 
 const PROMPT_SPEC_LABELS = new Set([
@@ -169,52 +170,88 @@ export async function compositeYardPreview(input: {
   yardPhoto: YardImage;
   buildingRender: YardImage;
   specLines: string;
+  dealId?: string | null;
 }): Promise<YardImage> {
-  const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey) {
-    throw new Error("Missing GEMINI_API_KEY");
-  }
+  const started = Date.now();
+  const model = imageModel();
+  const prompt = previewPrompt(input.specLines);
+  let status: "detected" | "none" | "error" = "none";
+  let errorMessage: string | null = null;
+  let rawResponse: string | null = null;
+  let parsedResponse: unknown = null;
 
-  const size = readImageSize(input.yardPhoto.bytes);
-  const aspectRatio = size ? closestAspectRatio(size.width, size.height) : "4:3";
-  const ai = new GoogleGenAI({ apiKey });
-  const response = await ai.models.generateContent({
-    model: imageModel(),
-    contents: [
-      {
-        role: "user",
-        parts: [
-          { text: previewPrompt(input.specLines) },
-          {
-            inlineData: {
-              mimeType: input.yardPhoto.mimeType,
-              data: input.yardPhoto.bytes.toString("base64"),
+  try {
+    const apiKey = process.env.GEMINI_API_KEY;
+    if (!apiKey) throw new Error("Missing GEMINI_API_KEY");
+
+    const size = readImageSize(input.yardPhoto.bytes);
+    const aspectRatio = size ? closestAspectRatio(size.width, size.height) : "4:3";
+    const ai = new GoogleGenAI({ apiKey });
+    const response = await ai.models.generateContent({
+      model,
+      contents: [
+        {
+          role: "user",
+          parts: [
+            { text: prompt },
+            {
+              inlineData: {
+                mimeType: input.yardPhoto.mimeType,
+                data: input.yardPhoto.bytes.toString("base64"),
+              },
             },
-          },
-          {
-            inlineData: {
-              mimeType: input.buildingRender.mimeType,
-              data: input.buildingRender.bytes.toString("base64"),
+            {
+              inlineData: {
+                mimeType: input.buildingRender.mimeType,
+                data: input.buildingRender.bytes.toString("base64"),
+              },
             },
-          },
-        ],
+          ],
+        },
+      ],
+      config: {
+        responseModalities: ["IMAGE"],
+        imageConfig: { aspectRatio },
       },
-    ],
-    config: {
-      responseModalities: ["IMAGE"],
-      imageConfig: { aspectRatio },
-    },
-  });
+    });
 
-  const parts = response.candidates?.[0]?.content?.parts ?? [];
-  for (const part of parts) {
-    const data = part.inlineData?.data;
-    if (!data) continue;
-    return {
-      bytes: Buffer.from(data, "base64"),
-      mimeType: part.inlineData?.mimeType || "image/png",
-    };
+    const parts = response.candidates?.[0]?.content?.parts ?? [];
+    for (const part of parts) {
+      const data = part.inlineData?.data;
+      if (!data) continue;
+      const image = {
+        bytes: Buffer.from(data, "base64"),
+        mimeType: part.inlineData?.mimeType || "image/png",
+      };
+      status = "detected";
+      rawResponse = "image";
+      parsedResponse = { mimeType: image.mimeType, byteLength: image.bytes.byteLength };
+      return image;
+    }
+
+    throw new Error("Gemini did not return a backyard preview image");
+  } catch (error) {
+    status = "error";
+    errorMessage = errorText(error);
+    throw error;
+  } finally {
+    await recordAiActivityLog({
+      dealId: input.dealId,
+      feature: "yard-preview",
+      promptPayload: {
+        request: prompt,
+        yardPhoto: { mimeType: input.yardPhoto.mimeType, byteLength: input.yardPhoto.bytes.byteLength },
+        buildingRender: {
+          mimeType: input.buildingRender.mimeType,
+          byteLength: input.buildingRender.bytes.byteLength,
+        },
+      },
+      model,
+      rawResponse,
+      parsedResponse,
+      status,
+      errorMessage,
+      executionTimeMs: Date.now() - started,
+    });
   }
-
-  throw new Error("Gemini did not return a backyard preview image");
 }

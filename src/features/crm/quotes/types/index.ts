@@ -83,12 +83,14 @@ export const quoteRevisionActivateSchema = z.object({
 export const createDealQuoteSchema = z.object({
   dealId: z.string().trim().min(1),
   selections: quoteSelectionsSchema,
+  conversationId: z.string().trim().min(1).optional(),
 });
 
 export const duplicateQuoteSchema = z.object({
   dealId: z.string().trim().min(1),
   quoteId: z.string().trim().min(1),
   revisionId: z.string().trim().min(1).optional(),
+  conversationId: z.string().trim().min(1).optional(),
 });
 
 export const cancelQuoteSchema = z.object({

@@ -80,13 +80,13 @@ function NavItem({
 export function CrmNav() {
   const counts = useNavCounts();
   const pathname = usePathname();
-  const dealsActive = pathname === "/crm/deals" || pathname.startsWith("/crm/deals/");
+  const dealsActive = pathname === "/deals" || pathname.startsWith("/deals/");
   const conversationsActive =
-    pathname === "/crm/conversations" || pathname.startsWith("/crm/conversations/");
-  const customersActive = pathname === "/crm/customers" || pathname.startsWith("/crm/customers/");
-  const quotesActive = pathname === "/crm/quotes" || pathname.startsWith("/crm/quotes/");
-  const settingsActive = pathname === "/crm/settings" || pathname.startsWith("/crm/settings/");
-  const supportActive = pathname === "/crm/support" || pathname.startsWith("/crm/support/");
+    pathname === "/conversations" || pathname.startsWith("/conversations/");
+  const customersActive = pathname === "/customers" || pathname.startsWith("/customers/");
+  const quotesActive = pathname === "/quotes" || pathname.startsWith("/quotes/");
+  const settingsActive = pathname === "/settings" || pathname.startsWith("/settings/");
+  const supportActive = pathname === "/support" || pathname.startsWith("/support/");
   const iconClass = "h-4 w-4";
 
   return (
@@ -116,7 +116,7 @@ export function CrmNav() {
 
         <nav aria-label={copy.navigation} className="space-y-1 pr-1">
           <NavItem
-            href="/crm/conversations"
+            href="/conversations"
             current={conversationsActive}
             countStyle="pill"
             count={counts && counts.unreadActivityCount > 0 ? counts.unreadActivityCount : undefined}
@@ -125,21 +125,21 @@ export function CrmNav() {
           />
           <div className="mx-2 my-3 border-t border-white/10" />
           <NavItem
-            href="/crm/deals"
+            href="/deals"
             current={dealsActive}
             count={counts?.dealCount}
             icon={<Handshake className={iconClass} strokeWidth={1.8} />}
             label={copy.deals}
           />
           <NavItem
-            href="/crm/customers"
+            href="/customers"
             current={customersActive}
             count={counts?.customerCount}
             icon={<Users className={iconClass} strokeWidth={1.8} />}
             label={copy.customers}
           />
           <NavItem
-            href="/crm/quotes"
+            href="/quotes"
             current={quotesActive}
             count={counts?.quoteCount}
             icon={<Calculator className={iconClass} strokeWidth={quotesActive ? 2 : 1.8} />}
@@ -165,13 +165,13 @@ export function CrmNav() {
         </button>
         <div className="space-y-1.5 border-t border-[#232528] pt-4 text-sm">
           <NavItem
-            href="/crm/settings"
+            href="/settings"
             current={settingsActive}
             icon={<Settings className={iconClass} strokeWidth={1.8} />}
             label={copy.settings}
           />
           <NavItem
-            href="/crm/support"
+            href="/support"
             current={supportActive}
             icon={<CircleHelp className={iconClass} strokeWidth={supportActive ? 2 : 1.8} />}
             label={copy.help}

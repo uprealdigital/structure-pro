@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { copy } from "@/src/features/cpq/locales/en";
 import {
   getConfigurationAction,
+  reportCpqIssue,
   saveConfigAction,
 } from "@/src/features/cpq/server/actions";
 import {
@@ -104,7 +105,7 @@ export function useBuildingSelection(initial?: QuoteSelections) {
       if ("error" in result) throw new Error(result.error);
 
       const href = configurationShareUrl(
-        initial ? `${window.location.origin}/` : window.location.href,
+        initial ? `${window.location.origin}/cpq` : window.location.href,
         result.data.id,
       );
       if (!initial) {
@@ -112,8 +113,15 @@ export function useBuildingSelection(initial?: QuoteSelections) {
         window.history.replaceState(null, "", `${url.pathname}${url.search}${url.hash}`);
       }
       setShareUrl(href);
-      await navigator.clipboard.writeText(href);
-      setShareStatus("copied");
+      try {
+        await navigator.clipboard.writeText(href);
+        setShareStatus("copied");
+      } catch (error) {
+        const message = error instanceof Error ? error.message : copy.shareError;
+        void reportCpqIssue(message);
+        setShareStatus("error");
+        setShareError(message);
+      }
     } catch (error) {
       setShareStatus("error");
       setShareError(error instanceof Error ? error.message : copy.shareError);

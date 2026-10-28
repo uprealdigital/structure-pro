@@ -1,4 +1,5 @@
 import { isValidTelegramWebhook, type TelegramUpdate } from "@/src/common/lib/telegram/telegram.service";
+import { recordAiIssue } from "@/src/features/ai/services/activity-log.service";
 import { recordInboundActivity } from "@/src/features/ai/services/inbound-activities.service";
 
 export const runtime = "nodejs";
@@ -18,11 +19,16 @@ export async function POST(request: Request) {
   const chatId = update.message?.chat?.id;
   if (chatId == null) return Response.json({ ok: true });
 
-  await recordInboundActivity({
-    channel: "telegram",
-    channelKey: String(chatId),
-    text: update.message?.text ?? "",
-  });
+  try {
+    await recordInboundActivity({
+      channel: "telegram",
+      channelKey: String(chatId),
+      text: update.message?.text ?? "",
+    });
+  } catch (error) {
+    void recordAiIssue("telegram", error);
+    return Response.json({ ok: true });
+  }
 
   return Response.json({ ok: true });
 }

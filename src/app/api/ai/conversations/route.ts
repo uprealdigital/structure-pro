@@ -1,4 +1,5 @@
 import { assertInternal } from "@/src/common/utils/internal-call";
+import { recordAiIssue } from "@/src/features/ai/services/activity-log.service";
 import {
   openConversation,
   removeConversation,
@@ -66,6 +67,7 @@ export async function POST(request: Request) {
   try {
     chatId = channel === "telegram" ? demoChatId() : undefined;
   } catch (error) {
+    void recordAiIssue("conversations", error);
     const message = error instanceof Error ? error.message : "Could not start conversation";
     return Response.json({ error: message }, { status: 502 });
   }
@@ -92,6 +94,7 @@ export async function POST(request: Request) {
       activities: lead ? [lead, openingActivity] : [openingActivity],
     });
   } catch (error) {
+    void recordAiIssue("conversations", error);
     const message = error instanceof Error ? error.message : "Could not save conversation";
     return Response.json({ error: message }, { status: 500 });
   }
@@ -104,6 +107,7 @@ export async function POST(request: Request) {
       await sendSms(phone, openingMessage);
     }
   } catch (error) {
+    void recordAiIssue("conversations", error);
     if (opened.created) await removeConversation(channelKey).catch(() => undefined);
     else {
       await removeLatestActivity(opened.id).catch(() => undefined);
@@ -155,6 +159,7 @@ export async function DELETE(request: Request) {
       }
       return Response.json({ ok: true });
     } catch (error) {
+      void recordAiIssue("conversations", error);
       const message = error instanceof Error ? error.message : "Could not delete activity";
       return Response.json({ error: message }, { status: 500 });
     }
@@ -165,6 +170,7 @@ export async function DELETE(request: Request) {
     await removeConversation(lookupKey);
     return Response.json({ ok: true });
   } catch (error) {
+    void recordAiIssue("conversations", error);
     const message = error instanceof Error ? error.message : "Could not delete conversation";
     return Response.json({ error: message }, { status: 500 });
   }

@@ -1,4 +1,5 @@
 import { after } from "next/server";
+import { recordAiIssue } from "@/src/features/ai/services/activity-log.service";
 import { callRouter, readJson } from "@/src/common/utils/internal-call";
 import { sendMail } from "@/src/common/utils/mail";
 import { toE164 } from "@/src/common/utils/phone";
@@ -171,6 +172,7 @@ export async function POST(request: Request) {
           yardPhoto: { bytes: yardBytes, mimeType: yardMime },
           buildingRender: { bytes: buildingBytes, mimeType: buildingMime },
           specLines,
+          dealId: deal.id,
         });
 
         const previewPath = await storeYardPreviewImage({
@@ -223,6 +225,7 @@ export async function POST(request: Request) {
         );
         await updateYardPreview(previewId, { status: "emailed", events, error: null });
       } catch (error) {
+        void recordAiIssue("yard-preview", error);
         console.error(error);
         events.push(previewEvent("failed", errorDetail(error)));
         await updateYardPreview(previewId, {
@@ -230,6 +233,7 @@ export async function POST(request: Request) {
           error: errorDetail(error),
           events,
         }).catch((saveError) => {
+          void recordAiIssue("yard-preview", saveError);
           console.error(saveError);
         });
       }
@@ -237,6 +241,7 @@ export async function POST(request: Request) {
 
     return Response.json({ ok: true });
   } catch (error) {
+    void recordAiIssue("yard-preview", error);
     if (dealId) {
       const { DELETE: removeDeal } = await import("@/src/app/api/crm/deals/[id]/route");
       await callRouter(removeDeal, `/api/crm/deals/${dealId}`, {

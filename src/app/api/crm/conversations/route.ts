@@ -1,6 +1,7 @@
 import { assertInternal } from "@/src/common/utils/internal-call";
 import { createConversation } from "@/src/features/crm/conversations/db/conversation";
 import { activityInsertSchema, type ActivityInsert } from "@/src/features/crm/conversations/types";
+import { recordCrmLog } from "@/src/features/crm/common/db/log";
 
 export const runtime = "nodejs";
 
@@ -57,6 +58,7 @@ export async function POST(request: Request) {
     });
     return Response.json({ id: saved.id });
   } catch (error) {
+    void recordCrmLog({ feature: "conversations", error });
     const message = error instanceof Error ? error.message : "Could not save conversation";
     return Response.json({ error: message }, { status: 500 });
   }

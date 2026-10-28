@@ -1,4 +1,5 @@
 import { GoogleGenAI } from "@google/genai";
+import { errorText, recordAiActivityLog } from "@/src/features/ai/services/activity-log.service";
 import { dealSummaryRequestSchema, type DealSummaryRequest } from "@/src/features/ai/types";
 
 const PRIMARY_MODEL = "gemini-3.1-flash-lite";
@@ -116,29 +117,79 @@ async function ask(ai: GoogleGenAI, model: string, input: DealSummaryRequest, ti
     }),
     timeoutMs,
   );
-  return summaryLines(response.text?.trim() ?? "");
+  return response.text?.trim() ?? "";
 }
 
-export async function summarizeDeal(input: DealSummaryRequest): Promise<string> {
+export async function summarizeDeal(
+  input: DealSummaryRequest,
+  context: { dealId?: string | null; activityIds?: number[] } = {},
+): Promise<string> {
+  const started = Date.now();
   const parsed = dealSummaryRequestSchema.safeParse(input);
-  if (!parsed.success) return "";
-  const ai = client();
-  if (!ai) return "";
+  let model: string | null = null;
+  let rawResponse: string | null = null;
+  let parsedResponse: unknown = null;
+  let status: "detected" | "none" | "error" = "none";
+  let errorMessage: string | null = null;
 
-  const preferred = process.env.GEMINI_MODEL?.trim() || PRIMARY_MODEL;
-  const models = [...new Set([preferred, FALLBACK_MODEL])];
-  const deadline = Date.now() + BUDGET_MS;
-  let lastError: unknown;
-  for (const model of models) {
-    const remaining = Math.min(ATTEMPT_MS, deadline - Date.now());
-    if (remaining < 1_000) break;
-    try {
-      return await ask(ai, model, parsed.data, remaining);
-    } catch (error) {
-      lastError = error;
-      console.error(error);
+  try {
+    if (!parsed.success) {
+      status = "error";
+      errorMessage = "A deal summary needs the current deal";
+      return "";
     }
+    const ai = client();
+    if (!ai) {
+      status = "error";
+      errorMessage = "GEMINI_API_KEY is not set";
+      return "";
+    }
+
+    const preferred = process.env.GEMINI_MODEL?.trim() || PRIMARY_MODEL;
+    const models = [...new Set([preferred, FALLBACK_MODEL])];
+    const deadline = Date.now() + BUDGET_MS;
+    let lastError: unknown;
+    for (const candidate of models) {
+      model = candidate;
+      const remaining = Math.min(ATTEMPT_MS, deadline - Date.now());
+      if (remaining < 1_000) {
+        lastError = new Error("Gemini request timed out");
+        break;
+      }
+      try {
+        rawResponse = await ask(ai, candidate, parsed.data, remaining);
+        const summary = summaryLines(rawResponse);
+        parsedResponse = { summary };
+        status = summary ? "detected" : "none";
+        return summary;
+      } catch (error) {
+        lastError = error;
+        console.error(error);
+      }
+    }
+    status = "error";
+    errorMessage = errorText(lastError);
+    if (lastError) console.error(lastError);
+    return "";
+  } catch (error) {
+    status = "error";
+    errorMessage = errorText(error);
+    console.error(error);
+    return "";
+  } finally {
+    await recordAiActivityLog({
+      dealId: context.dealId,
+      activityIds: context.activityIds,
+      feature: "deal-summary",
+      promptPayload: parsed.success
+        ? { systemInstruction: instruction, request: brief(parsed.data) }
+        : { systemInstruction: instruction, request: "" },
+      model,
+      rawResponse,
+      parsedResponse,
+      status,
+      errorMessage,
+      executionTimeMs: Date.now() - started,
+    });
   }
-  if (lastError) console.error(lastError);
-  return "";
 }

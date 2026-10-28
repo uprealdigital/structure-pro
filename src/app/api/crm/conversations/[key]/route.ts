@@ -2,6 +2,7 @@ import type { RouteContext } from "@/src/common/types";
 import { assertInternal } from "@/src/common/utils/internal-call";
 import { deleteConversation, updateConversation } from "@/src/features/crm/conversations/db/conversation";
 import { getConversation } from "@/src/features/crm/conversations/server/queries";
+import { recordCrmLog } from "@/src/features/crm/common/db/log";
 
 export const runtime = "nodejs";
 
@@ -26,6 +27,7 @@ export async function GET(request: Request, context: RouteContext) {
     if (!conversation) return Response.json({ error: "Conversation not found" }, { status: 404 });
     return Response.json(conversation);
   } catch (error) {
+    void recordCrmLog({ feature: "conversations", error });
     const message = error instanceof Error ? error.message : "Could not load conversation";
     return Response.json({ error: message }, { status: 500 });
   }
@@ -45,6 +47,7 @@ export async function PATCH(request: Request, context: RouteContext) {
     await updateConversation(key, { contractSent });
     return Response.json({ ok: true });
   } catch (error) {
+    void recordCrmLog({ feature: "conversations", error });
     const message = error instanceof Error ? error.message : "Could not update conversation";
     return Response.json({ error: message }, { status: 500 });
   }
@@ -60,6 +63,7 @@ export async function DELETE(request: Request, context: RouteContext) {
     await deleteConversation(key);
     return Response.json({ ok: true });
   } catch (error) {
+    void recordCrmLog({ feature: "conversations", error });
     const message = error instanceof Error ? error.message : "Could not delete conversation";
     return Response.json({ error: message }, { status: 500 });
   }

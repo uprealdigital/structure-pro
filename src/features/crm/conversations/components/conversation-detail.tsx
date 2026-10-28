@@ -18,11 +18,12 @@ import { InboundIntentCard } from "@/src/features/crm/conversations/components/i
 import { ProposedShedRender, RevisionRenderSlot } from "@/src/features/crm/conversations/components/proposed-shed-render";
 import { ReviewSendModal } from "@/src/features/crm/conversations/components/review-send-modal";
 import { useConversationActivities } from "@/src/features/crm/conversations/hooks/use-conversation-activities";
+import { useDealPeople } from "@/src/features/crm/conversations/hooks/use-deal-people";
 import { useDealSummary } from "@/src/features/crm/conversations/hooks/use-deal-summary";
 import { useConversationSuggestions } from "@/src/features/crm/conversations/hooks/use-conversation-suggestions";
 import { useVisibleActivityReads } from "@/src/features/crm/conversations/hooks/use-visible-activity-reads";
 import { copy } from "@/src/features/crm/conversations/locales/en";
-import { sendQuoteMessages, sendManualActivity, sendStoredAttachment, discardStoredAttachment, recordSystemActivity, deleteConversationActivity, loadConversationDeal, markDealViewed, moveQuoteToNewDeal, undoMoveQuoteToNewDeal } from "@/src/features/crm/conversations/server/actions";
+import { sendQuoteMessages, sendManualActivity, sendStoredAttachment, discardStoredAttachment, recordSystemActivity, deleteConversationActivity, loadConversationDeal, markDealViewed, createConnectedDeal, moveQuoteToNewDeal, undoMoveQuoteToNewDeal } from "@/src/features/crm/conversations/server/actions";
 import type {
   Activity,
   ComposerChannel,
@@ -255,6 +256,7 @@ export function ConversationDetail({
   const [viewingQuoteIds, setViewingQuoteIds] = useState<Record<string, string>>({});
   const [addedQuotes, setAddedQuotes] = useState<Record<string, ConversationQuote[]>>({});
   const [addingQuote, setAddingQuote] = useState(false);
+  const [creatingDeal, setCreatingDeal] = useState(false);
   const [quoteAction, setQuoteAction] = useState<"move" | "duplicate" | "cancel" | "delete" | "renew" | "deposit" | null>(null);
   const [removedQuoteIds, setRemovedQuoteIds] = useState<Record<string, true>>({});
   const [quoteToast, setQuoteToast] = useState<{ id: number; message: string; tone?: ToastTone } | null>(null);
@@ -309,8 +311,14 @@ export function ConversationDetail({
   const listedQuotes = focusedOption ? quotesForDeal(focusedOption, {}, [], removedQuoteIds) : [];
   const viewingQuote =
     listedQuotes.find((quote) => quote.id === viewingQuoteIds[focusedOption?.id ?? ""]) ?? listedQuotes[0] ?? null;
-  const participants = participantsForDeal(workspace.participants, focusedOption?.id ?? workspace.deal.id, {
-    dealId: focusedOption?.id ?? workspace.deal.id,
+  const dealId = focusedOption?.id ?? workspace.deal.id;
+  const people = useDealPeople({
+    dealId,
+    participants: workspace.participants,
+    lockedCustomerId: workspace.customer.id,
+  });
+  const participants = participantsForDeal(people.members, dealId, {
+    dealId,
     isPrimary: true,
     conversationId: workspace.id,
     customer: workspace.customer,
@@ -368,7 +376,10 @@ export function ConversationDetail({
   const threadId = workspace.id;
   const threadActivities = workspace.activities;
   const { activities, setActivities } = useConversationActivities(threadId, threadActivities, incoming);
-  const inboundMessages = useMemo(() => customerInboundMessages(activities), [activities]);
+  const inboundMessages = useMemo(
+    () => customerInboundMessages(activities, focused.deal.createdAt),
+    [activities, focused.deal.createdAt],
+  );
   const summarySnapshot = dealSummarySnapshot({
     deal: focused.deal,
     title: focusedOption?.title ?? "",
@@ -827,6 +838,37 @@ export function ConversationDetail({
     setEditing(false);
   }
 
+  async function createNewDeal() {
+    const dealId = focusedOption?.id;
+    if (!dealId || creatingDeal) return;
+    setCreatingDeal(true);
+    setRevisionError("");
+    const result = await createConnectedDeal({ dealId });
+    if ("error" in result) {
+      setCreatingDeal(false);
+      setRevisionError(copy.createDealError);
+      return;
+    }
+    const createdDealId = result.data.dealId;
+    const loaded = await onFocusDeal(createdDealId);
+    const stage = loaded?.deals.find((deal) => deal.id === createdDealId)?.stage ?? "new_lead";
+    setFocusedDealId(createdDealId);
+    setViewingQuoteIds((current) => ({ ...current, [createdDealId]: result.data.quoteId }));
+    setSelectedRevisionId(null);
+    setEditing(false);
+    setSeenDealIds((current) => (current.includes(createdDealId) ? current : [...current, createdDealId]));
+    void markDealViewed(createdDealId);
+    onActivateDeal(createdDealId, stage);
+    const recorded = await recordSystemActivity({
+      conversationId: workspace.id,
+      kind: "created",
+      name: result.data.name.trim() || copy.createDeal,
+      dealId: createdDealId,
+    });
+    if (!("error" in recorded)) publishActivity(recorded.data);
+    setCreatingDeal(false);
+  }
+
   async function addQuote() {
     const quote = focused.quote;
     const dealId = focusedOption?.id;
@@ -834,7 +876,11 @@ export function ConversationDetail({
     setAddingQuote(true);
     setRevisionError("");
     const selections = DEFAULT_QUOTE_SELECTIONS;
-    const result = await createDealQuoteAction({ dealId, selections });
+    const result = await createDealQuoteAction({
+      dealId,
+      selections,
+      conversationId: workspace.id,
+    });
     setAddingQuote(false);
     if ("error" in result) {
       setRevisionError(copy.addQuoteError);
@@ -869,6 +915,7 @@ export function ConversationDetail({
     setSelectedRevisionId(next.activeRevisionId);
     setEditing(false);
     setQuoteToast({ id: Date.now(), message: copy.quoteCreatedToast(quoteLabel(next, -1)) });
+    if (result.data.activity) publishActivity(result.data.activity);
   }
 
   function forgetLoadedDeals(dealIds: string[]) {
@@ -946,6 +993,7 @@ export function ConversationDetail({
       dealId,
       quoteId: quote.id,
       revisionId: viewed?.id,
+      conversationId: workspace.id,
     });
     setQuoteAction(null);
     if ("error" in result) {
@@ -981,7 +1029,9 @@ export function ConversationDetail({
     setViewingQuoteIds((current) => ({ ...current, [dealId]: next.id }));
     setSelectedRevisionId(next.activeRevisionId);
     setEditing(false);
-    setQuoteToast({ id: Date.now(), message: copy.quoteDuplicatedToast(quoteLabel(next, -1)) });
+    const name = quoteLabel(next, -1);
+    setQuoteToast({ id: Date.now(), message: copy.quoteDuplicatedToast(name) });
+    if (result.data.activity) publishActivity(result.data.activity);
   }
 
   function patchQuoteStatus(quote: ConversationQuote, status: QuoteStatus) {
@@ -1805,6 +1855,16 @@ export function ConversationDetail({
               pending={updatingStatus}
               onSelectDeal={selectDeal}
               onRename={rename}
+              creating={creatingDeal}
+              onCreateDeal={() => void createNewDeal()}
+              customers={people.customers}
+              customersLoading={people.loading}
+              customersError={people.error}
+              linkedCustomerIds={participants.map((person) => person.customer.id)}
+              primaryCustomerId={participants.find((person) => person.isPrimary)?.customer.id ?? ""}
+              pendingCustomerId={people.pendingId}
+              onLoadCustomers={() => void people.load()}
+              onToggleCustomer={(customerId) => void people.toggle(customerId)}
               onMarkLost={() => void markLost()}
               onReopen={() => void reopen()}
             />
@@ -1961,7 +2021,7 @@ export function ConversationDetail({
         >
           <div className={`min-h-0 ${detailsOpen && detailsSettled ? "overflow-visible" : "overflow-hidden"}`}>
             <div className="grid grid-cols-1 gap-6 bg-white px-6 py-4 lg:grid-cols-2">
-              <DealSummary workspace={focused} summary={generatedSummary} />
+              <DealSummary workspace={focused} participants={participants} summary={generatedSummary} />
               <QuotePanel revision={viewed} />
             </div>
           </div>
@@ -2137,6 +2197,7 @@ export function ConversationDetail({
               key={`${focused.quote.id}:${viewed.id}:${suggestedSelections ? "suggestion" : "saved"}`}
               mode="internal"
               selections={suggestedSelections ?? viewed.selections}
+              savedSelections={viewed.selections}
               onSave={saveFocusedQuote}
               onSaveAndShare={saveAndShareFocusedQuote}
               onSaveAndReview={saveAndReviewFocusedQuote}

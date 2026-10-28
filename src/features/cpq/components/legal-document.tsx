@@ -33,7 +33,7 @@ export function LegalDocument({ document }: { document: LegalDocument }) {
       <header className="w-full border-b border-[#c5c6c9]/30 bg-[#f9f9fb]">
         <div className="mx-auto flex h-16 max-w-4xl items-center px-6">
           <Link
-            href="/"
+            href="/cpq"
             className="inline-flex items-center gap-2 text-sm text-[#655d55] transition-colors hover:text-[#1a1c1d]"
           >
             <ArrowLeft className="size-[18px]" aria-hidden />

@@ -34,6 +34,32 @@ export const dealCustomerWriteSchema = z.object({
   isPrimary: z.boolean(),
 });
 
+export const featureLogStatusSchema = z.enum(["detected", "none", "error"]);
+
+export type FeatureLogStatus = z.infer<typeof featureLogStatusSchema>;
+
+export const crmLogSchema = z.object({
+  id: z.string(),
+  feature: z.string(),
+  rawResponse: z.string().nullable(),
+  parsedResponse: z.unknown(),
+  status: featureLogStatusSchema,
+  errorMessage: z.string().nullable(),
+  createdAt: z.string(),
+});
+
+export type CrmLog = z.infer<typeof crmLogSchema>;
+
+export const crmLogWriteSchema = z.object({
+  feature: z.string().trim().min(1),
+  rawResponse: z.string().nullable(),
+  parsedResponse: z.unknown(),
+  status: featureLogStatusSchema,
+  errorMessage: z.string().nullable(),
+});
+
+export type CrmLogWrite = z.infer<typeof crmLogWriteSchema>;
+
 export const customerPatchSchema = z.object({
   fullName: z.string().optional(),
   email: z.string().optional(),

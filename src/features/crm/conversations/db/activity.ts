@@ -243,6 +243,7 @@ export type ActivityRef = {
   role: string;
   channel: string;
   body: string;
+  createdAt: string;
 };
 
 function activityRef(row: {
@@ -251,19 +252,27 @@ function activityRef(row: {
   role?: unknown;
   channel?: unknown;
   body?: unknown;
+  created_at?: unknown;
 }): ActivityRef | undefined {
   const id = typeof row.id === "number" ? row.id : typeof row.id === "string" ? Number(row.id) : Number.NaN;
   const position = typeof row.position === "number" ? row.position : Number(row.position);
   if (!Number.isInteger(id) || id <= 0 || !Number.isInteger(position)) return undefined;
   if (typeof row.role !== "string" || typeof row.channel !== "string" || typeof row.body !== "string") return undefined;
-  return { id, position, role: row.role, channel: row.channel, body: row.body };
+  return {
+    id,
+    position,
+    role: row.role,
+    channel: row.channel,
+    body: row.body,
+    createdAt: typeof row.created_at === "string" ? row.created_at : "",
+  };
 }
 
 export async function readActivityRefs(conversationId: string, positions: number[]): Promise<ActivityRef[]> {
   if (positions.length === 0) return [];
   const { data, error } = await crm()
     .from("activities")
-    .select("id, position, role, channel, body")
+    .select("id, position, role, channel, body, created_at")
     .eq("conversation_id", conversationId)
     .in("position", positions);
   throwIfError(error);
@@ -277,7 +286,7 @@ export async function readActivityRefsByIds(ids: number[]): Promise<ActivityRef[
   if (ids.length === 0) return [];
   const { data, error } = await crm()
     .from("activities")
-    .select("id, position, role, channel, body")
+    .select("id, position, role, channel, body, created_at")
     .in("id", ids);
   throwIfError(error);
   return (data ?? []).flatMap((row) => {

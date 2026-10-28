@@ -161,9 +161,19 @@ export const activeDealRequestSchema = z.object({
   dealId: dealIdSchema,
 });
 
+export const setDealPersonSchema = z.object({
+  customerId: z.string().trim().min(1),
+  dealId: dealIdSchema,
+  included: z.boolean(),
+});
+
 export const moveQuoteToNewDealSchema = z.object({
   dealId: dealIdSchema,
   quoteId: z.string().trim().min(1),
+});
+
+export const createConnectedDealSchema = z.object({
+  dealId: dealIdSchema,
 });
 
 export const undoMoveQuoteToNewDealSchema = z.object({

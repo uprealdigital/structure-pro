@@ -6,6 +6,30 @@ export const LOCALE_CODE = /^[a-z]{2}(?:-[A-Z]{2})?$/;
 export const configurationIdSchema = z.string().regex(CONFIGURATION_ID);
 export const localeCodeSchema = z.string().trim().regex(LOCALE_CODE);
 
+export const cpqLogStatusSchema = z.enum(["detected", "none", "error"]);
+
+export const cpqLogSchema = z.object({
+  id: z.string(),
+  feature: z.string(),
+  rawResponse: z.string().nullable(),
+  parsedResponse: z.unknown(),
+  status: cpqLogStatusSchema,
+  errorMessage: z.string().nullable(),
+  createdAt: z.string(),
+});
+
+export type CpqLog = z.infer<typeof cpqLogSchema>;
+
+export const cpqLogWriteSchema = z.object({
+  feature: z.string().trim().min(1),
+  rawResponse: z.string().nullable(),
+  parsedResponse: z.unknown(),
+  status: cpqLogStatusSchema,
+  errorMessage: z.string().nullable(),
+});
+
+export type CpqLogWrite = z.infer<typeof cpqLogWriteSchema>;
+
 export const buildingConfigSchema = z.object({
   styleId: z.string(),
   width: z.number(),

@@ -3,6 +3,7 @@ import { assertInternal } from "@/src/common/utils/internal-call";
 import { deleteDeal, updateDeal } from "@/src/features/crm/deals/db/deal";
 import { getDeal } from "@/src/features/crm/deals/server/queries";
 import { dealStatusSchema, type DealStatus } from "@/src/features/crm/deals/types";
+import { recordCrmLog } from "@/src/features/crm/common/db/log";
 
 export const runtime = "nodejs";
 
@@ -30,6 +31,7 @@ export async function GET(request: Request, context: RouteContext) {
     if (!deal) return Response.json({ error: "Deal not found" }, { status: 404 });
     return Response.json(deal);
   } catch (error) {
+    void recordCrmLog({ feature: "deals", error });
     const message = error instanceof Error ? error.message : "Could not load deal";
     return Response.json({ error: message }, { status: 500 });
   }
@@ -48,6 +50,7 @@ export async function PATCH(request: Request, context: RouteContext) {
     if (!deal) return Response.json({ error: "Deal not found" }, { status: 404 });
     return Response.json(deal);
   } catch (error) {
+    void recordCrmLog({ feature: "deals", error });
     const message = error instanceof Error ? error.message : "Could not update deal";
     return Response.json({ error: message }, { status: 500 });
   }
@@ -61,6 +64,7 @@ export async function DELETE(request: Request, context: RouteContext) {
     await deleteDeal(id);
     return Response.json({ ok: true });
   } catch (error) {
+    void recordCrmLog({ feature: "deals", error });
     const message = error instanceof Error ? error.message : "Could not delete deal";
     return Response.json({ error: message }, { status: 500 });
   }

@@ -3,6 +3,7 @@ import { createQuote } from "@/src/features/crm/quotes/db/quote";
 import { getQuoteForPage } from "@/src/features/cpq/server/queries";
 import { quoteSelectionsSchema } from "@/src/features/cpq/types";
 import { newInvoiceId } from "@/src/features/cpq/utils/id";
+import { recordCpqLog } from "@/src/features/cpq/db/log";
 
 export const runtime = "nodejs";
 
@@ -30,6 +31,7 @@ export async function POST(request: Request) {
     if (!quote) return Response.json({ error: "Quote was not saved" }, { status: 500 });
     return Response.json(quote);
   } catch (error) {
+    void recordCpqLog({ feature: "quotes", error });
     const message = error instanceof Error ? error.message : "Could not save quote";
     return Response.json({ error: message }, { status: 500 });
   }

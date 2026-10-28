@@ -1,4 +1,5 @@
 import { getConfiguration } from "@/src/features/cpq/server/queries";
+import { recordCpqLog } from "@/src/features/cpq/db/log";
 
 export const runtime = "nodejs";
 
@@ -15,6 +16,7 @@ export async function GET(
     }
     return Response.json({ selections: configuration.selections });
   } catch (error) {
+    void recordCpqLog({ feature: "configurations", error });
     const message = error instanceof Error ? error.message : "Could not load configuration";
     return Response.json({ error: message }, { status: 500 });
   }

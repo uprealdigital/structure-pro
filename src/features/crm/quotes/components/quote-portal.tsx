@@ -8,7 +8,7 @@ import { useEffect, useRef, useState } from "react";
 import { BuildingConfigurator } from "@/src/features/cpq/components/building-configurator";
 import type { QuoteRevisionRenderFiles } from "@/src/features/cpq/components/building-scene";
 import type { QuoteSelections } from "@/src/features/cpq/types";
-import { contactInitials } from "@/src/features/crm/common/utils/formatting";
+import { CustomerPills, type CustomerPill } from "@/src/features/crm/common/components/customer-pills";
 import { QuoteStatusActions } from "@/src/features/crm/conversations/components/quote-status-actions";
 import { ReviewSendModal } from "@/src/features/crm/conversations/components/review-send-modal";
 import type { ConversationParticipant } from "@/src/features/crm/conversations/types";
@@ -17,6 +17,7 @@ import { useSaveQuoteRevision } from "@/src/features/crm/quotes/hooks/use-save-q
 import { useSendQuote } from "@/src/features/crm/quotes/hooks/use-send-quote";
 import { quoteStatuses, type QuoteStatusActionId } from "@/src/features/crm/quotes/config/status";
 import { QuoteStatusBadge } from "@/src/features/crm/quotes/components/quote-status-badge";
+import { reportCrmIssue } from "@/src/features/crm/common/server/actions";
 import { portalCopy } from "@/src/features/crm/quotes/locales/en";
 import {
   duplicateQuote,
@@ -121,6 +122,21 @@ export function QuotePortal({
     isPrimary: recipient.isPrimary,
     customer: recipient.customer,
   }));
+  const people = new Map<string, CustomerPill>();
+  for (const recipient of quote.recipients) {
+    const existing = people.get(recipient.customer.id);
+    if (existing) {
+      if (recipient.isPrimary) existing.primary = true;
+      continue;
+    }
+    people.set(recipient.customer.id, {
+      id: recipient.customer.id,
+      fullName: recipient.customer.fullName,
+      phone: recipient.customer.phone,
+      email: recipient.customer.email,
+      primary: recipient.isPrimary,
+    });
+  }
 
   async function saveRevision(selections: QuoteSelections, renders: QuoteRevisionRenderFiles) {
     await save(selections, renders);
@@ -212,7 +228,8 @@ export function QuotePortal({
   async function onDownload() {
     try {
       downloadQuotePdf(quote);
-    } catch {
+    } catch (error) {
+      void reportCrmIssue("quotes", error instanceof Error ? error.message : portalCopy.pdfError);
       showError(portalCopy.pdfError);
     }
   }
@@ -223,6 +240,7 @@ export function QuotePortal({
       await shareQuotePdf(quote);
     } catch (shareFailure) {
       if (shareFailure instanceof DOMException && shareFailure.name === "AbortError") return;
+      void reportCrmIssue("quotes", shareFailure instanceof Error ? shareFailure.message : portalCopy.shareError);
       showError(portalCopy.shareError);
     }
   }
@@ -242,6 +260,7 @@ export function QuotePortal({
       const copiedLink = document.execCommand("copy");
       field.remove();
       if (!copiedLink) {
+        void reportCrmIssue("quotes", portalCopy.shareError);
         showError(portalCopy.shareError);
         return;
       }
@@ -252,32 +271,13 @@ export function QuotePortal({
 
   return (
     <main className="flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-[#f9f9fb] text-[#1a1c1d]">
-      <header className="shrink-0 border-b border-[#e2e2e4] bg-white px-6 py-6 lg:px-12">
-        <div className="mx-auto flex max-w-7xl flex-col justify-between gap-4 lg:flex-row lg:items-start lg:gap-6">
+      <header className="shrink-0 border-b border-[#e2e2e4] bg-white py-6">
+        <div className="mx-auto flex w-full max-w-7xl flex-col gap-4 px-4 sm:px-6 lg:px-10">
+          <div className="flex flex-col justify-between gap-4 lg:flex-row lg:items-start lg:gap-6">
           <div className="flex min-w-0 flex-col gap-2">
             <h1 className="font-serif text-2xl font-semibold tracking-tight text-[#1a1c1d] lg:text-3xl">
               {quote.dealName}
             </h1>
-            {internal ? (
-              <div className="flex flex-wrap items-center gap-3">
-                {quote.customers.map((customer) => (
-                  <div
-                    key={customer.id}
-                    className="flex items-center gap-3 rounded-full border border-[#c5c6c9]/40 bg-white px-4 py-1 shadow-xs"
-                  >
-                    <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[#e8e8ea] text-xs font-semibold text-[#44474a]">
-                      {contactInitials(customer.name)}
-                    </div>
-                    <span className="text-sm text-[#1a1c1d]">{customer.name}</span>
-                    {customer.primary ? (
-                      <span className="rounded-full bg-[#e2e8f0] px-2 py-0.5 text-[11px] font-medium text-[#475569]">
-                        {portalCopy.primary}
-                      </span>
-                    ) : null}
-                  </div>
-                ))}
-              </div>
-            ) : null}
             <div className="flex flex-wrap items-center gap-3">
               {internal ? (
                 <QuoteStatusBadge status={quote.status} />
@@ -347,6 +347,8 @@ export function QuotePortal({
             ) : null}
             {copied && !shareOpen ? <p className="text-xs text-[#44474a]">{portalCopy.linkCopied}</p> : null}
           </div>
+          </div>
+          {internal ? <CustomerPills people={[...people.values()]} /> : null}
         </div>
       </header>
 

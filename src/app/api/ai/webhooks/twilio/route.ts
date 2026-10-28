@@ -1,4 +1,5 @@
 import { emptyTwiml, isValidTwilioRequest } from "@/src/common/lib/twilio/twilio.service";
+import { recordAiIssue } from "@/src/features/ai/services/activity-log.service";
 import { recordInboundActivity } from "@/src/features/ai/services/inbound-activities.service";
 
 export const runtime = "nodejs";
@@ -21,11 +22,15 @@ export async function POST(request: Request) {
   const from = params.From ?? "";
   if (!from) return xml(emptyTwiml());
 
-  await recordInboundActivity({
-    channel: "sms",
-    channelKey: from,
-    text: params.Body ?? "",
-  });
+  try {
+    await recordInboundActivity({
+      channel: "sms",
+      channelKey: from,
+      text: params.Body ?? "",
+    });
+  } catch (error) {
+    void recordAiIssue("sms", error);
+  }
 
   return xml(emptyTwiml());
 }

@@ -192,6 +192,42 @@ export const dealSummaryRequestSchema = z.object({
 
 export type DealSummaryRequest = z.infer<typeof dealSummaryRequestSchema>;
 
+export const aiActivityStatusSchema = z.enum(["detected", "none", "error"]);
+
+export type AiActivityStatus = z.infer<typeof aiActivityStatusSchema>;
+
+export const aiActivityLogSchema = z.object({
+  id: z.string(),
+  dealId: z.string().nullable(),
+  activityIds: z.array(z.number().int().positive()),
+  feature: z.string(),
+  promptPayload: z.unknown(),
+  model: z.string().nullable(),
+  rawResponse: z.string().nullable(),
+  parsedResponse: z.unknown(),
+  status: aiActivityStatusSchema,
+  errorMessage: z.string().nullable(),
+  executionTimeMs: z.number().int().nonnegative(),
+  createdAt: z.string(),
+});
+
+export type AiActivityLog = z.infer<typeof aiActivityLogSchema>;
+
+export const aiActivityLogWriteSchema = z.object({
+  dealId: z.string().uuid().nullable(),
+  activityIds: z.array(z.number().int().positive()).max(40),
+  feature: z.string().trim().min(1),
+  promptPayload: z.unknown(),
+  model: z.string().trim().min(1).nullable(),
+  rawResponse: z.string().nullable(),
+  parsedResponse: z.unknown(),
+  status: aiActivityStatusSchema,
+  errorMessage: z.string().nullable(),
+  executionTimeMs: z.number().int().nonnegative(),
+});
+
+export type AiActivityLogWrite = z.infer<typeof aiActivityLogWriteSchema>;
+
 export const yardPreviewPatchSchema = z.object({
   status: yardPreviewStatusSchema.optional(),
   error: z.string().nullable().optional(),

@@ -2,6 +2,11 @@
 
 import { revalidatePath } from "next/cache";
 import { quoteSelectionsSchema } from "@/src/features/cpq/types";
+import { describeSelections } from "@/src/features/cpq/utils/pricing";
+import type { Activity } from "@/src/features/crm/conversations/types";
+import { recordDuplicatedQuoteActivity } from "@/src/features/crm/conversations/server/status-activity";
+import { portalCopy } from "@/src/features/crm/quotes/locales/en";
+import { quoteDisplayName } from "@/src/features/crm/quotes/utils/formatting";
 import { readDeal, readDealsByIds, readDealsByQuoteId, updateDeal } from "@/src/features/crm/deals/db/deal";
 import { createDealQuote, readDealQuotes, readDealQuotesForQuote } from "@/src/features/crm/deals/db/deal-quote";
 import { newInvoiceId } from "@/src/features/cpq/utils/id";
@@ -27,6 +32,7 @@ import {
   type QuoteStatus,
 } from "@/src/features/crm/quotes/types";
 import { quoteWindowExpired } from "@/src/features/crm/quotes/utils/status";
+import { recordCrmLog } from "@/src/features/crm/common/db/log";
 
 export async function saveQuoteSelections(input: {
   quoteId: string;
@@ -63,9 +69,9 @@ export async function saveQuoteSelections(input: {
     const stored = renders
       ? await storeRevisionRenders(revision.id, renders.data)
       : null;
-    revalidatePath("/crm/conversations");
-    revalidatePath("/crm/quotes");
-    revalidatePath("/crm/deals");
+    revalidatePath("/conversations");
+    revalidatePath("/quotes");
+    revalidatePath("/deals");
     revalidatePath(`/quote/${quoteId}`);
     return {
       success: true,
@@ -78,6 +84,7 @@ export async function saveQuoteSelections(input: {
       },
     };
   } catch (error) {
+    void recordCrmLog({ feature: "quotes", error });
     const message = error instanceof Error ? error.message : "Could not save quote";
     return { error: message };
   }
@@ -128,11 +135,12 @@ export async function saveQuoteRevisionRenders(input: {
     if (!revision) return { error: "Quote revision was not found" };
     if (revision.renders) return { success: true, data: revision.renders };
     const stored = await storeRevisionRenders(revision.id, renders.data);
-    revalidatePath("/crm/conversations");
-    revalidatePath("/crm/quotes");
+    revalidatePath("/conversations");
+    revalidatePath("/quotes");
     revalidatePath(`/quote/${revision.quoteId}`);
     return { success: true, data: stored };
   } catch (error) {
+    void recordCrmLog({ feature: "quotes", error });
     const message = error instanceof Error ? error.message : "Could not save the render";
     return { error: message };
   }
@@ -151,6 +159,7 @@ export async function saveQuoteCommunication(input: {
     await updateQuoteRevisionCommunication(parsed.data.revisionId, parsed.data.communication);
     return { success: true };
   } catch (error) {
+    void recordCrmLog({ feature: "quotes", error });
     const message = error instanceof Error ? error.message : "Could not save the message";
     return { error: message };
   }
@@ -167,11 +176,12 @@ export async function shareQuoteRevisionPhotos(
     if (!revision) return { error: "Quote revision was not found" };
     const sharedPhotosAt = new Date().toISOString();
     const saved = await updateQuoteRevisionPhotosShare({ revisionId: revision.id, sharedPhotosAt });
-    revalidatePath("/crm/conversations");
-    revalidatePath("/crm/quotes");
+    revalidatePath("/conversations");
+    revalidatePath("/quotes");
     revalidatePath(`/quote/${revision.quoteId}`);
     return { success: true, data: { sharedPhotosAt: saved.sharedPhotosAt ?? sharedPhotosAt } };
   } catch (error) {
+    void recordCrmLog({ feature: "quotes", error });
     const message = error instanceof Error ? error.message : "Could not record the shared photos";
     return { error: message };
   }
@@ -192,6 +202,7 @@ function missingDealQuotes(error: unknown): boolean {
 export async function createDealQuoteAction(input: {
   dealId: string;
   selections: unknown;
+  conversationId?: string;
 }): Promise<
   | {
       success: true;
@@ -203,6 +214,7 @@ export async function createDealQuoteAction(input: {
         revisionNumber: number;
         createdAt: string;
         updatedAt: string;
+        activity?: Activity;
       };
     }
   | { error: string }
@@ -221,9 +233,16 @@ export async function createDealQuoteAction(input: {
     const revisionId = await readActiveRevisionId(quoteId);
     const revision = revisionId ? await readQuoteRevision(revisionId) : undefined;
     if (!revision) return { error: "Could not add a quote" };
-    revalidatePath("/crm/conversations");
-    revalidatePath("/crm/quotes");
-    revalidatePath("/crm/deals");
+    const activity = await recordDuplicatedQuoteActivity({
+      dealId: deal.id,
+      name: savedQuote?.quoteNumber
+        ? quoteDisplayName(savedQuote.quoteNumber, describeSelections(savedQuote.selections).specs)
+        : portalCopy.quote,
+      conversationId: parsed.data.conversationId,
+    });
+    revalidatePath("/conversations");
+    revalidatePath("/quotes");
+    revalidatePath("/deals");
     return {
       success: true,
       data: {
@@ -234,9 +253,11 @@ export async function createDealQuoteAction(input: {
         revisionNumber: revision.revisionNumber,
         createdAt: revision.createdAt,
         updatedAt: revision.updatedAt,
+        activity,
       },
     };
   } catch (error) {
+    void recordCrmLog({ feature: "quotes", error });
     if (quoteId) await deleteQuote(quoteId).catch(() => undefined);
     if (missingDealQuotes(error)) return { error: "Could not add a quote yet" };
     const message = error instanceof Error ? error.message : "Could not add a quote";
@@ -248,6 +269,7 @@ export async function duplicateQuote(input: {
   dealId: string;
   quoteId: string;
   revisionId?: string;
+  conversationId?: string;
 }): Promise<
   | {
       success: true;
@@ -260,6 +282,7 @@ export async function duplicateQuote(input: {
         createdAt: string;
         updatedAt: string;
         renders: QuoteRevisionRenders | null;
+        activity?: Activity;
       };
     }
   | { error: string }
@@ -300,9 +323,16 @@ export async function duplicateQuote(input: {
       : null;
     await createDealQuote({ dealId: deal.id, quoteId });
     const saved = await readQuote(quoteId);
-    revalidatePath("/crm/conversations");
-    revalidatePath("/crm/quotes");
-    revalidatePath("/crm/deals");
+    const activity = await recordDuplicatedQuoteActivity({
+      dealId: deal.id,
+      name: saved?.quoteNumber
+        ? quoteDisplayName(saved.quoteNumber, describeSelections(saved.selections).specs)
+        : portalCopy.quote,
+      conversationId: parsed.data.conversationId,
+    });
+    revalidatePath("/conversations");
+    revalidatePath("/quotes");
+    revalidatePath("/deals");
     return {
       success: true,
       data: {
@@ -314,9 +344,11 @@ export async function duplicateQuote(input: {
         createdAt: revision.createdAt,
         updatedAt: revision.updatedAt,
         renders,
+        activity,
       },
     };
   } catch (error) {
+    void recordCrmLog({ feature: "quotes", error });
     if (quoteId) await deleteQuote(quoteId).catch(() => undefined);
     if (missingDealQuotes(error)) return { error: "Could not duplicate this quote" };
     const message = error instanceof Error ? error.message : "Could not duplicate this quote";
@@ -332,12 +364,13 @@ export async function cancelQuote(input: { quoteId: string }): Promise<{ success
     const quote = await readQuote(parsed.data.quoteId);
     if (!quote) return { error: "Quote was not found" };
     await setQuoteStatus(quote.id, "voided");
-    revalidatePath("/crm/conversations");
-    revalidatePath("/crm/quotes");
-    revalidatePath("/crm/deals");
+    revalidatePath("/conversations");
+    revalidatePath("/quotes");
+    revalidatePath("/deals");
     revalidatePath(`/quote/${quote.id}`);
     return { success: true };
   } catch (error) {
+    void recordCrmLog({ feature: "quotes", error });
     const message = error instanceof Error ? error.message : "Could not cancel this quote";
     return { error: message };
   }
@@ -356,11 +389,12 @@ export async function activateQuoteRevision(input: {
       return { error: "Quote revision was not found" };
     }
     await updateQuote(parsed.data.quoteId, { activeRevisionId: revision.id });
-    revalidatePath("/crm/conversations");
-    revalidatePath("/crm/quotes");
-    revalidatePath("/crm/deals");
+    revalidatePath("/conversations");
+    revalidatePath("/quotes");
+    revalidatePath("/deals");
     return { success: true, data: { revisionId: revision.id } };
   } catch (error) {
+    void recordCrmLog({ feature: "quotes", error });
     const message = error instanceof Error ? error.message : "Could not update the active revision";
     return { error: message };
   }
@@ -388,21 +422,22 @@ export async function payQuoteDeposit(
       await updateDeal(deal.id, { status: "deal_won" });
     }
     await setQuoteStatus(parsed.data.quoteId, "deposit_paid");
-    revalidatePath("/crm/conversations");
-    revalidatePath("/crm/quotes");
-    revalidatePath("/crm/deals");
+    revalidatePath("/conversations");
+    revalidatePath("/quotes");
+    revalidatePath("/deals");
     revalidatePath(`/quote/${parsed.data.quoteId}`);
     return { success: true };
   } catch (error) {
+    void recordCrmLog({ feature: "quotes", error });
     const message = error instanceof Error ? error.message : "Could not record this deposit";
     return { error: message };
   }
 }
 
 function revalidateQuote(quoteId: string) {
-  revalidatePath("/crm/conversations");
-  revalidatePath("/crm/quotes");
-  revalidatePath("/crm/deals");
+  revalidatePath("/conversations");
+  revalidatePath("/quotes");
+  revalidatePath("/deals");
   revalidatePath(`/quote/${quoteId}`);
 }
 
@@ -438,6 +473,7 @@ export async function deleteDraftQuote(input: { quoteId: string }): Promise<{ su
     revalidateQuote(parsed.data.quoteId);
     return { success: true };
   } catch (error) {
+    void recordCrmLog({ feature: "quotes", error });
     const message = error instanceof Error ? error.message : "Could not delete this draft";
     return { error: message };
   }
@@ -454,6 +490,7 @@ export async function renewQuote(input: { quoteId: string }): Promise<{ success:
     revalidateQuote(parsed.data.quoteId);
     return { success: true };
   } catch (error) {
+    void recordCrmLog({ feature: "quotes", error });
     const message = error instanceof Error ? error.message : "Could not renew this quote";
     return { error: message };
   }
@@ -472,6 +509,7 @@ export async function signQuoteAgreement(
     revalidateQuote(parsed.data.quoteId);
     return { success: true, data: { status: "signed" } };
   } catch (error) {
+    void recordCrmLog({ feature: "quotes", error });
     const message = error instanceof Error ? error.message : "Could not sign this agreement";
     return { error: message };
   }
@@ -500,6 +538,7 @@ export async function refreshQuoteLifecycle(
     }
     return { success: true, data: { status } };
   } catch (error) {
+    void recordCrmLog({ feature: "quotes", error });
     const message = error instanceof Error ? error.message : "Could not update this quote";
     return { error: message };
   }

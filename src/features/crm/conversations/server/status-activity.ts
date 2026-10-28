@@ -1,9 +1,10 @@
 import { db } from "@/src/common/lib/supabase/supabase.service";
 import { throwIfError } from "@/src/common/utils/error-handling";
 import { readDealCustomersForDeals } from "@/src/features/crm/common/db/deal-customer";
-import { createActivities } from "@/src/features/crm/conversations/db/activity";
+import { createActivities, readActivities } from "@/src/features/crm/conversations/db/activity";
 import { readConversationSummaryByCustomer } from "@/src/features/crm/conversations/db/conversation";
-import { statusEventBody } from "@/src/features/crm/conversations/utils/formatting";
+import type { Activity } from "@/src/features/crm/conversations/types";
+import { statusEventBody, systemEventBody } from "@/src/features/crm/conversations/utils/formatting";
 import { readDealQuotesForQuote } from "@/src/features/crm/deals/db/deal-quote";
 
 function crm() {
@@ -64,6 +65,28 @@ export async function recordDealStatusActivity(input: {
     await writeStatus(conversations, statusEventBody("dealStatus", name, status));
   } catch {
     // The status is already saved. A missing conversation should not undo it.
+  }
+}
+
+export async function recordDuplicatedQuoteActivity(input: {
+  dealId: string;
+  name: string;
+  conversationId?: string;
+}): Promise<Activity | undefined> {
+  const name = input.name.trim();
+  const focus = input.conversationId?.trim();
+  if (!input.dealId || !name) return undefined;
+  try {
+    const ids = new Set(await conversationIdsForDeals([input.dealId]));
+    if (focus) ids.add(focus);
+    const text = systemEventBody("duplicatedQuote", name);
+    await writeStatus([...ids], text);
+    if (!focus) return undefined;
+    return (await readActivities(focus))
+      .reverse()
+      .find((item) => item.channel === "system" && item.text === text);
+  } catch {
+    return undefined;
   }
 }
 

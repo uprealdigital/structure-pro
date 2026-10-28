@@ -22,9 +22,10 @@ import { BuildingControls, QuoteActions } from "@/src/features/cpq/components/bu
 import { ShareModal } from "@/src/features/cpq/components/share-modal";
 import { YardModal } from "@/src/features/cpq/components/yard-modal";
 import { useBuildingSelection } from "@/src/features/cpq/hooks/use-building-selection";
-import { createQuoteAction } from "@/src/features/cpq/server/actions";
+import { createQuoteAction, reportCpqIssue } from "@/src/features/cpq/server/actions";
 import type { ConfiguratorMode, QuoteSelections } from "@/src/features/cpq/types";
 import { CATALOG, type BuildingConfig } from "@/src/features/cpq/utils/catalog";
+import { sameQuoteSelections } from "@/src/features/cpq/utils/selections";
 import { copy } from "@/src/features/cpq/locales/en";
 import { formatUsd } from "@/src/features/cpq/utils/pricing";
 
@@ -39,6 +40,7 @@ const BuildingScene = dynamic(() => import("@/src/features/cpq/components/buildi
 
 export function BuildingConfigurator({
   selections: initialSelections,
+  savedSelections,
   mode = "external",
   onSave,
   onSaveAndShare,
@@ -46,6 +48,7 @@ export function BuildingConfigurator({
   onCancel,
 }: {
   selections?: QuoteSelections;
+  savedSelections?: QuoteSelections;
   mode?: ConfiguratorMode;
   onSave?: (selections: QuoteSelections, renders: QuoteRevisionRenderFiles) => Promise<void>;
   onSaveAndShare?: (selections: QuoteSelections, renders: QuoteRevisionRenderFiles) => Promise<void>;
@@ -78,10 +81,13 @@ export function BuildingConfigurator({
     submitPrompt,
     zip,
   } = useBuildingSelection(initialSelections);
+  const baselineSelections = savedSelections ?? initialSelections;
+  const quoteChanged =
+    !internal || !baselineSelections || !sameQuoteSelections(selections, baselineSelections);
 
   async function saveInternalQuote(next: "close" | "share" | "review" = "close") {
     const save = next === "share" ? onSaveAndShare : next === "review" ? onSaveAndReview : onSave;
-    if (!save || savingRef.current) return;
+    if (!save || savingRef.current || !quoteChanged) return;
     savingRef.current = true;
     setSaving(true);
     setSaveError(null);
@@ -90,9 +96,11 @@ export function BuildingConfigurator({
       if (!capture) throw new Error(copy.saveQuoteError);
       await save(selections, await capture());
     } catch (error) {
+      const message = error instanceof Error && error.message ? error.message : copy.saveQuoteError;
+      if (message === copy.saveQuoteError) void reportCpqIssue(message);
       setSaveError({
         id: Date.now(),
-        message: error instanceof Error && error.message ? error.message : copy.saveQuoteError,
+        message,
       });
     } finally {
       savingRef.current = false;
@@ -229,6 +237,7 @@ export function BuildingConfigurator({
           onShare={onSaveAndShare ? shareQuote : undefined}
           onReview={onSaveAndReview ? reviewQuote : undefined}
           pending={saving}
+          changed={quoteChanged}
           mode={mode}
           estimate={estimate}
           zip={zip}
@@ -256,6 +265,7 @@ export function BuildingConfigurator({
                 mode={mode}
                 variant="header"
                 pending={saving}
+                changed={quoteChanged}
                 onPrimary={submitQuote}
                 onCancel={onCancel}
                 onShare={onSaveAndShare ? shareQuote : undefined}
@@ -328,6 +338,7 @@ export function BuildingConfigurator({
               mode={mode}
               variant="panel"
               pending={saving}
+              changed={quoteChanged}
               onPrimary={submitQuote}
               onCancel={onCancel}
               onShare={onSaveAndShare ? shareQuote : undefined}

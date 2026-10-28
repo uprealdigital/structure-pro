@@ -1,5 +1,6 @@
 "use server";
 
+import { recordCrmLog } from "@/src/features/crm/common/db/log";
 import { getConversationInbox, getUnreadActivityCount } from "@/src/features/crm/conversations/server/queries";
 import { getCustomerCount } from "@/src/features/crm/customers/server/queries";
 import { getDealCount } from "@/src/features/crm/deals/server/queries";
@@ -13,6 +14,13 @@ export type NavCounts = {
   quoteCount: number;
 };
 
+export async function reportCrmIssue(feature: string, message: string): Promise<void> {
+  const name = feature.trim().slice(0, 80);
+  const text = message.trim().slice(0, 500);
+  if (!name || !text) return;
+  await recordCrmLog({ feature: name, error: text });
+}
+
 export async function loadNavCounts(): Promise<{ success: true; data: NavCounts } | { error: string }> {
   try {
     const [inbox, unread, deals, customers, quotes] = await Promise.allSettled([
@@ -22,6 +30,9 @@ export async function loadNavCounts(): Promise<{ success: true; data: NavCounts 
       getCustomerCount(),
       getQuoteCount(),
     ]);
+    for (const result of [inbox, unread, deals, customers, quotes]) {
+      if (result.status === "rejected") void recordCrmLog({ feature: "navigation", error: result.reason });
+    }
 
     return {
       success: true,
@@ -34,6 +45,7 @@ export async function loadNavCounts(): Promise<{ success: true; data: NavCounts 
       },
     };
   } catch (error) {
+    void recordCrmLog({ feature: "navigation", error });
     const message = error instanceof Error ? error.message : "Could not load navigation";
     return { error: message };
   }

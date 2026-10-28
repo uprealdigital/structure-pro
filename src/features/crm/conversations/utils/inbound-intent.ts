@@ -10,9 +10,23 @@ export type InboundMessageRef = {
   text: string;
 };
 
-export function customerInboundMessages(activities: Activity[]): InboundMessageRef[] {
+export function activitySinceDeal(createdAt: string | undefined, dealCreatedAt: string | undefined): boolean {
+  if (!dealCreatedAt) return true;
+  const dealMs = Date.parse(dealCreatedAt);
+  if (Number.isNaN(dealMs)) return true;
+  const activityMs = createdAt ? Date.parse(createdAt) : Number.NaN;
+  if (Number.isNaN(activityMs)) return false;
+  return activityMs >= dealMs;
+}
+
+export function customerInboundMessages(activities: Activity[], dealCreatedAt?: string): InboundMessageRef[] {
   return activities
-    .filter((activity) => activity.role === "user" && inboundChannels.has(activity.channel))
+    .filter(
+      (activity) =>
+        activity.role === "user" &&
+        inboundChannels.has(activity.channel) &&
+        activitySinceDeal(activity.createdAt, dealCreatedAt),
+    )
     .map((activity) => ({ position: activity.position, text: activity.text.trim() }))
     .filter((activity) => activity.text)
     .slice(-40);

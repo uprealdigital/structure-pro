@@ -12,9 +12,12 @@ import { dealSummaryRequestSchema } from "@/src/features/ai/types";
 import { prepareNewQuoteMessage, sendNewQuoteMessage } from "@/src/features/ai/services/messaging-agent.service";
 import type { SuggestionIntent } from "@/src/features/ai/types";
 import { selectionHasConfigChanges } from "@/src/features/crm/conversations/utils/design-preview";
+import { activitySinceDeal } from "@/src/features/crm/conversations/utils/inbound-intent";
 import { createDealQuote, deleteDealQuote, readDealQuotes } from "@/src/features/crm/deals/db/deal-quote";
+import { DEFAULT_QUOTE_SELECTIONS } from "@/src/features/cpq/utils/catalog";
+import { newInvoiceId } from "@/src/features/cpq/utils/id";
 import { describeSelections } from "@/src/features/cpq/utils/pricing";
-import { readQuote, readQuotesByIds } from "@/src/features/crm/quotes/db/quote";
+import { createQuote, deleteQuote, readQuote, readQuotesByIds } from "@/src/features/crm/quotes/db/quote";
 import type { QuoteSelections } from "@/src/features/cpq/types";
 import type { ConfigChanges } from "@/src/features/crm/quotes/types";
 import { outboundTextTransport } from "@/src/features/crm/conversations/config/outbound-text";
@@ -49,6 +52,7 @@ import {
 } from "@/src/features/crm/conversations/server/queries";
 import {
   activeDealRequestSchema,
+  createConnectedDealSchema,
   moveQuoteToNewDealSchema,
   undoMoveQuoteToNewDealSchema,
   activityInsertSchema,
@@ -60,17 +64,20 @@ import {
   suggestionIdSchema,
   syncSuggestionsSchema,
   visibleActivityReadSchema,
+  conversationParticipantSchema,
   customerDealsRequestSchema,
+  setDealPersonSchema,
   type Activity,
   type ActivityInsert,
   type ConversationDealListItem,
   type ConversationDealOption,
   type ConversationInboxItem,
+  type ConversationParticipant,
   type ConversationSuggestion,
   type ConversationWorkspace,
 } from "@/src/features/crm/conversations/types";
-import { readCustomer, updateCustomer } from "@/src/features/crm/common/db/customer";
-import { createDealCustomer, deleteDealCustomer, readDealCustomersForCustomer, readDealCustomersForDeal } from "@/src/features/crm/common/db/deal-customer";
+import { readCustomer, readCustomers, updateCustomer } from "@/src/features/crm/common/db/customer";
+import { createDealCustomer, deleteDealCustomer, readDealCustomer, readDealCustomersForCustomer, readDealCustomersForDeal } from "@/src/features/crm/common/db/deal-customer";
 import { assignDefaultDealName, createDeal, deleteDeal, readDeal, updateDeal } from "@/src/features/crm/deals/db/deal";
 import { fileActivityText, imageActivityText } from "@/src/features/crm/conversations/utils/attachments";
 import { emailActivityText } from "@/src/features/crm/conversations/utils/email-message";
@@ -88,6 +95,7 @@ import { canMarkDealLost } from "@/src/features/crm/deals/utils/status";
 import { canMoveQuoteToNewDeal } from "@/src/features/crm/quotes/config/status";
 import { markQuoteSent, readQuoteStatus, setQuoteStatus } from "@/src/features/crm/quotes/db/quote";
 import { readQuoteRevision, updateQuoteRevision } from "@/src/features/crm/quotes/db/quote-revision";
+import { recordCrmLog } from "@/src/features/crm/common/db/log";
 
 export async function openConversation(input: {
   lookupKey: string;
@@ -125,6 +133,7 @@ export async function ensureCustomerConversation(input: {
     if (!item) return { error: "Conversation was not opened" };
     return { success: true, data: { item } };
   } catch (error) {
+    void recordCrmLog({ feature: "conversations", error });
     const message = error instanceof Error ? error.message : "Conversation was not opened";
     return { error: message };
   }
@@ -141,7 +150,7 @@ export async function appendActivity(
   const id = conversationIdSchema.parse(conversationId);
   const row = activityInsertSchema.parse(activity);
   await createActivities(id, [row]);
-  revalidatePath("/crm/conversations");
+  revalidatePath("/conversations");
 }
 
 export async function attachConversationChannel(
@@ -150,13 +159,13 @@ export async function attachConversationChannel(
 ): Promise<void> {
   const id = conversationIdSchema.parse(conversationId);
   await updateConversationAddress(id, input);
-  revalidatePath("/crm/conversations");
+  revalidatePath("/conversations");
 }
 
 export async function removeLatestActivity(conversationId: string): Promise<void> {
   const id = conversationIdSchema.parse(conversationId);
   await deleteLatestActivity(id);
-  revalidatePath("/crm/conversations");
+  revalidatePath("/conversations");
 }
 
 export async function sendWebsiteQuoteMessage(input: {
@@ -215,6 +224,7 @@ export async function sendWebsiteQuoteMessage(input: {
   try {
     await sendNewQuoteMessage({ phone: customer.phone, delivery });
   } catch (error) {
+    void recordCrmLog({ feature: "conversations", error });
     if (opened.created) await removeConversation(channelKey);
     else {
       await removeLatestActivity(opened.id);
@@ -223,7 +233,7 @@ export async function sendWebsiteQuoteMessage(input: {
     throw error;
   }
 
-  revalidatePath("/crm/conversations");
+  revalidatePath("/conversations");
   return { channel: delivery.channel === "telegram" ? "telegram" : "twilio" };
 }
 
@@ -257,9 +267,10 @@ export async function sendManualActivity(input: {
     ]);
     const activity = (await readActivities(conversationId.data)).at(-1);
     if (!activity) return { error: "The message was not saved" };
-    revalidatePath("/crm/conversations");
+    revalidatePath("/conversations");
     return { success: true, data: activity };
   } catch (error) {
+    void recordCrmLog({ feature: "conversations", error });
     const message = error instanceof Error ? error.message : "Could not send message";
     return { error: message };
   }
@@ -283,6 +294,7 @@ export async function storeManualAttachment(input: {
     });
     return { success: true };
   } catch (error) {
+    void recordCrmLog({ feature: "conversations", error });
     const message = error instanceof Error ? error.message : copy.attachmentUploadFailed;
     return { error: message };
   }
@@ -331,9 +343,10 @@ export async function sendStoredAttachment(input: {
     const activity = (await readActivities(conversationId.data)).at(-1);
     if (!activity) return { error: "The attachment was not saved" };
     if (!input.image) await deleteAttachmentFile(input.id).catch(() => undefined);
-    revalidatePath("/crm/conversations");
+    revalidatePath("/conversations");
     return { success: true, data: activity };
   } catch (error) {
+    void recordCrmLog({ feature: "conversations", error });
     const message = error instanceof Error ? error.message : "Could not send attachment";
     return { error: message };
   }
@@ -368,11 +381,12 @@ export async function markDealLost(dealId: string): Promise<{ success: true } | 
     if (!deal) return { error: "Deal was not found" };
     if (!canMarkDealLost(deal.status)) return { error: "This deal cannot be marked as lost" };
     await updateDeal(id.data, { status: "deal_lost" });
-    revalidatePath("/crm/conversations");
-    revalidatePath("/crm/deals");
-    revalidatePath("/crm/quotes");
+    revalidatePath("/conversations");
+    revalidatePath("/deals");
+    revalidatePath("/quotes");
     return { success: true };
   } catch (error) {
+    void recordCrmLog({ feature: "conversations", error });
     const message = error instanceof Error ? error.message : "Could not update deal";
     return { error: message };
   }
@@ -391,11 +405,12 @@ export async function reopenDeal(
       return { error: "This deal cannot be reopened" };
     }
     await updateDeal(deal.id, { status: deal.previousStatus });
-    revalidatePath("/crm/conversations");
-    revalidatePath("/crm/deals");
-    revalidatePath("/crm/quotes");
+    revalidatePath("/conversations");
+    revalidatePath("/deals");
+    revalidatePath("/quotes");
     return { success: true, data: { status: deal.previousStatus } };
   } catch (error) {
+    void recordCrmLog({ feature: "conversations", error });
     const message = error instanceof Error ? error.message : "Could not update deal";
     return { error: message };
   }
@@ -449,15 +464,16 @@ export async function sendConversationQuote(input: {
     const dealStatus = deal.status === "new_lead" ? "active_quote" : deal.status;
     if (dealStatus !== deal.status) await updateDeal(deal.id, { status: dealStatus });
 
-    revalidatePath("/crm/conversations");
-    revalidatePath("/crm/quotes");
-    revalidatePath("/crm/deals");
+    revalidatePath("/conversations");
+    revalidatePath("/quotes");
+    revalidatePath("/deals");
     revalidatePath(`/quote/${quoteId}`);
     return {
       success: true,
       data: { revisionId: saved.id, updatedAt: saved.updatedAt, sharedQuoteAt: saved.sharedQuoteAt, dealStatus },
     };
   } catch (error) {
+    void recordCrmLog({ feature: "conversations", error });
     const message = error instanceof Error ? error.message : "Could not send quote";
     return { error: message };
   }
@@ -597,9 +613,10 @@ export async function sendQuoteMessages(
       latest = sent.data;
     }
     if (!latest) return { error: copy.sendQuoteError };
-    revalidatePath("/crm/conversations");
+    revalidatePath("/conversations");
     return { success: true, data: latest };
   } catch (error) {
+    void recordCrmLog({ feature: "conversations", error });
     const message = error instanceof Error ? error.message : copy.sendQuoteError;
     return { error: message };
   }
@@ -617,11 +634,73 @@ export async function renameDeal(input: {
     const deal = await readDeal(id.data);
     if (!deal) return { error: "Deal was not found" };
     await updateDeal(deal.id, { name: name.data });
-    revalidatePath("/crm/conversations");
-    revalidatePath("/crm/deals");
+    revalidatePath("/conversations");
+    revalidatePath("/deals");
     return { success: true, data: { name: name.data } };
   } catch (error) {
+    void recordCrmLog({ feature: "conversations", error });
     const message = error instanceof Error ? error.message : "Could not rename deal";
+    return { error: message };
+  }
+}
+
+export async function listCustomers(): Promise<
+  { success: true; data: Customer[] } | { error: string }
+> {
+  try {
+    return { success: true, data: await readCustomers() };
+  } catch (error) {
+    void recordCrmLog({ feature: "conversations", error });
+    const message = error instanceof Error ? error.message : "Could not load customers";
+    return { error: message };
+  }
+}
+
+export async function setDealPerson(input: {
+  dealId: string;
+  customerId: string;
+  included: boolean;
+}): Promise<{ success: true; data: ConversationParticipant | null } | { error: string }> {
+  const parsed = setDealPersonSchema.safeParse(input);
+  if (!parsed.success) return { error: "A deal and customer are required" };
+
+  try {
+    const dealId = parsed.data.dealId;
+    const customerId = parsed.data.customerId;
+    const [customer, deal, existing] = await Promise.all([
+      readCustomer(customerId),
+      readDeal(dealId),
+      readDealCustomer(customerId, dealId),
+    ]);
+    if (!customer) return { error: "Customer was not found" };
+    if (!deal) return { error: "Deal was not found" };
+
+    if (!parsed.data.included) {
+      if (!existing) return { success: true, data: null };
+      const links = await readDealCustomersForDeal(dealId);
+      if (existing.isPrimary || links.length <= 1) {
+        return { error: copy.addPersonError };
+      }
+      await deleteDealCustomer(customerId, dealId);
+      revalidatePath("/conversations");
+      revalidatePath("/deals");
+      return { success: true, data: null };
+    }
+
+    const saved = existing ?? (await createDealCustomer({ customerId, dealId, isPrimary: false }));
+    const summary = await readConversationSummaryByCustomer(customerId);
+    const participant = conversationParticipantSchema.parse({
+      dealId,
+      isPrimary: saved.isPrimary,
+      ...(summary ? { conversationId: summary.id } : {}),
+      customer,
+    });
+    revalidatePath("/conversations");
+    revalidatePath("/deals");
+    return { success: true, data: participant };
+  } catch (error) {
+    void recordCrmLog({ feature: "conversations", error });
+    const message = error instanceof Error ? error.message : copy.addPersonError;
     return { error: message };
   }
 }
@@ -643,9 +722,10 @@ export async function setCustomerActiveDeal(input: {
       return { error: "Deal was not found" };
     }
     await updateCustomer(parsed.data.customerId, { activeDealId: parsed.data.dealId });
-    revalidatePath("/crm/conversations");
+    revalidatePath("/conversations");
     return { success: true };
   } catch (error) {
+    void recordCrmLog({ feature: "conversations", error });
     const message = error instanceof Error ? error.message : "Could not update the active deal";
     return { error: message };
   }
@@ -657,6 +737,47 @@ function missingOptionalQuote(error: unknown): boolean {
     message.includes("quote_id") &&
     (message.includes("null value") || message.includes("not-null") || message.includes("not null"))
   );
+}
+
+export async function createConnectedDeal(input: {
+  dealId: string;
+}): Promise<{ success: true; data: { dealId: string; name: string; quoteId: string } } | { error: string }> {
+  const parsed = createConnectedDealSchema.safeParse(input);
+  if (!parsed.success) return { error: "A deal is required" };
+
+  let quoteId = "";
+  let createdId = "";
+  try {
+    const [deal, customers] = await Promise.all([
+      readDeal(parsed.data.dealId),
+      readDealCustomersForDeal(parsed.data.dealId),
+    ]);
+    if (!deal) return { error: "Deal was not found" };
+    if (customers.length === 0) return { error: "This deal has no customers" };
+
+    quoteId = await createQuote({ invoiceId: newInvoiceId(), selections: DEFAULT_QUOTE_SELECTIONS });
+    const created = await createDeal({ quoteId, source: deal.source });
+    createdId = created.id;
+    await createDealQuote({ dealId: created.id, quoteId });
+    for (const customer of customers) {
+      await createDealCustomer({
+        customerId: customer.customerId,
+        dealId: created.id,
+        isPrimary: customer.isPrimary,
+      });
+    }
+    const name = (await assignDefaultDealName(created.id)) ?? created.name ?? "";
+    revalidatePath("/conversations");
+    revalidatePath("/quotes");
+    revalidatePath("/deals");
+    return { success: true, data: { dealId: created.id, name, quoteId } };
+  } catch (error) {
+    void recordCrmLog({ feature: "conversations", error });
+    if (createdId) await deleteDeal(createdId).catch(() => undefined);
+    if (quoteId) await deleteQuote(quoteId).catch(() => undefined);
+    const message = error instanceof Error ? error.message : "Could not create a deal";
+    return { error: message };
+  }
 }
 
 export async function moveQuoteToNewDeal(input: {
@@ -711,11 +832,12 @@ export async function moveQuoteToNewDeal(input: {
         await updateCustomer(person.id, { activeDealId: created.id });
       }
     }
-    revalidatePath("/crm/conversations");
-    revalidatePath("/crm/quotes");
-    revalidatePath("/crm/deals");
+    revalidatePath("/conversations");
+    revalidatePath("/quotes");
+    revalidatePath("/deals");
     return { success: true, data: { dealId: created.id, name, wasPrimary } };
   } catch (error) {
+    void recordCrmLog({ feature: "conversations", error });
     if (createdId) await deleteDeal(createdId).catch(() => undefined);
     if (missingOptionalQuote(error)) {
       return { error: "Run supabase/migrate-crm-deal-optional-quote.sql in the Supabase SQL editor." };
@@ -763,11 +885,12 @@ export async function undoMoveQuoteToNewDeal(input: {
       await deleteDealCustomer(customer.customerId, created.id);
     }
     await deleteDeal(created.id);
-    revalidatePath("/crm/conversations");
-    revalidatePath("/crm/quotes");
-    revalidatePath("/crm/deals");
+    revalidatePath("/conversations");
+    revalidatePath("/quotes");
+    revalidatePath("/deals");
     return { success: true };
   } catch (error) {
+    void recordCrmLog({ feature: "conversations", error });
     const message = error instanceof Error ? error.message : "Could not move this quote back";
     return { error: message };
   }
@@ -781,6 +904,7 @@ export async function markDealViewed(dealId: string): Promise<{ success: true } 
     await updateDeal(parsed.data, { viewedAt: new Date().toISOString() });
     return { success: true };
   } catch (error) {
+    void recordCrmLog({ feature: "conversations", error });
     const message = error instanceof Error ? error.message : "Could not update the deal";
     return { error: message };
   }
@@ -788,7 +912,7 @@ export async function markDealViewed(dealId: string): Promise<{ success: true } 
 
 export async function recordSystemActivity(input: {
   conversationId: string;
-  kind: "deal" | "quote" | "activeQuote" | "created" | "renamed" | "savedRevision";
+  kind: "deal" | "quote" | "activeQuote" | "created" | "renamed" | "savedRevision" | "duplicatedQuote";
   name: string;
   dealId?: string;
   previousName?: string;
@@ -804,7 +928,8 @@ export async function recordSystemActivity(input: {
       input.kind !== "activeQuote" &&
       input.kind !== "created" &&
       input.kind !== "renamed" &&
-      input.kind !== "savedRevision") ||
+      input.kind !== "savedRevision" &&
+      input.kind !== "duplicatedQuote") ||
     !name ||
     (input.kind === "created" && !dealId) ||
     (input.kind === "renamed" && !previousName) ||
@@ -832,6 +957,7 @@ export async function recordSystemActivity(input: {
     if (!activity) return { error: "The event was not saved" };
     return { success: true, data: activity };
   } catch (error) {
+    void recordCrmLog({ feature: "conversations", error });
     const message = error instanceof Error ? error.message : "Could not save the event";
     return { error: message };
   }
@@ -850,6 +976,7 @@ export async function deleteConversationActivity(input: {
     await deleteActivityAt(conversationId.data, input.position);
     return { success: true };
   } catch (error) {
+    void recordCrmLog({ feature: "conversations", error });
     const message = error instanceof Error ? error.message : "Could not remove the event";
     return { error: message };
   }
@@ -865,6 +992,7 @@ export async function loadCustomerDeals(
     const deals = await getCustomerDeals(parsed.data.customerId);
     return { success: true, data: deals };
   } catch (error) {
+    void recordCrmLog({ feature: "conversations", error });
     const message = error instanceof Error ? error.message : "Could not load deals";
     return { error: message };
   }
@@ -882,12 +1010,13 @@ export async function markVisibleActivitiesRead(input: {
   try {
     const updated = await markActivitiesReadAt(parsed.data.conversationId, parsed.data.positions);
     const unreadCount = await conversationUnreadCount(parsed.data.conversationId);
-    revalidatePath("/crm/conversations");
+    revalidatePath("/conversations");
     return {
       success: true,
       data: { readAt: updated.readAt, positions: updated.positions, unread: unreadCount > 0, unreadCount },
     };
   } catch (error) {
+    void recordCrmLog({ feature: "conversations", error });
     const message = error instanceof Error ? error.message : "Could not update messages";
     return { error: message };
   }
@@ -904,9 +1033,10 @@ export async function markConversationsRead(input: {
 
   try {
     const counts = await updateActivitiesRead(parsed.data);
-    revalidatePath("/crm/conversations");
+    revalidatePath("/conversations");
     return { success: true, data: { counts } };
   } catch (error) {
+    void recordCrmLog({ feature: "conversations", error });
     const message = error instanceof Error ? error.message : "Could not update messages";
     return { error: message };
   }
@@ -922,6 +1052,7 @@ export async function loadConversationInboxItem(
     const item = await getConversationInboxItem(parsed.data);
     return { success: true, data: item ?? null };
   } catch (error) {
+    void recordCrmLog({ feature: "conversations", error });
     const message = error instanceof Error ? error.message : "Could not load conversation";
     return { error: message };
   }
@@ -937,6 +1068,7 @@ export async function loadConversationDeal(
     const option = await getConversationDealOption(parsed.data);
     return { success: true, data: option ?? null };
   } catch (error) {
+    void recordCrmLog({ feature: "conversations", error });
     const message = error instanceof Error ? error.message : "Could not load deal";
     return { error: message };
   }
@@ -955,6 +1087,7 @@ export async function loadConversationWorkspace(
     const workspace = await getConversationWorkspace(parsed.data, deal?.success ? deal.data : undefined);
     return { success: true, data: workspace ?? null };
   } catch (error) {
+    void recordCrmLog({ feature: "conversations", error });
     const message = error instanceof Error ? error.message : "Could not load conversation";
     return { error: message };
   }
@@ -1005,6 +1138,12 @@ async function pendingSuggestions(dealId: string): Promise<ConversationSuggestio
     .sort((left, right) => Number(left.intent === "new_quote") - Number(right.intent === "new_quote"));
 }
 
+function dealIdFrom(input: unknown): string | null {
+  if (!input || typeof input !== "object" || !("dealId" in input)) return null;
+  const dealId = input.dealId;
+  return typeof dealId === "string" && dealId.trim() ? dealId.trim() : null;
+}
+
 export async function summarizeConversationDeal(
   input: unknown,
 ): Promise<{ success: true; data: string } | { error: string }> {
@@ -1012,9 +1151,10 @@ export async function summarizeConversationDeal(
   if (!parsed.success) return { error: "A deal summary needs the current deal" };
 
   try {
-    const summary = await summarizeDeal(parsed.data);
+    const summary = await summarizeDeal(parsed.data, { dealId: dealIdFrom(input) });
     return { success: true, data: summary };
   } catch (error) {
+    void recordCrmLog({ feature: "conversations", error });
     const message = error instanceof Error ? error.message : "Could not summarize the deal";
     return { error: message };
   }
@@ -1027,13 +1167,46 @@ export async function syncConversationSuggestions(
   if (!parsed.success) return { error: "A deal and its messages are required" };
 
   try {
+    const deal = await readDeal(parsed.data.dealId);
+    const since = deal?.createdAt;
     const refs = await readActivityRefs(parsed.data.conversationId, parsed.data.positions);
     const inbound = refs
-      .filter((row) => row.role === "user" && suggestionChannels.has(row.channel) && row.body.trim())
+      .filter(
+        (row) =>
+          row.role === "user" &&
+          suggestionChannels.has(row.channel) &&
+          row.body.trim() &&
+          activitySinceDeal(row.createdAt, since),
+      )
       .sort((left, right) => left.position - right.position);
     const existing = await readSuggestions(parsed.data.dealId);
     const frozen = new Set(existing.filter((row) => row.status !== "pending").flatMap((row) => row.messageIds));
     const pending = existing.filter((row) => row.status === "pending");
+    const pendingIds = [...new Set(pending.flatMap((row) => row.messageIds))].filter((id) => !frozen.has(id));
+    const seen = new Set(refs.map((row) => row.id));
+    const olderRows = await readActivityRefsByIds(pendingIds.filter((id) => !seen.has(id)));
+    const loaded = new Map([...refs, ...olderRows].map((row) => [row.id, row]));
+    const onDeal = (id: number) => {
+      const row = loaded.get(id);
+      return row ? activitySinceDeal(row.createdAt, since) : true;
+    };
+    for (const row of [...pending]) {
+      const kept = row.messageIds.filter((id) => frozen.has(id) || onDeal(id));
+      if (kept.length === row.messageIds.length) continue;
+      if (kept.length === 0) {
+        await updateSuggestion(row.id, { status: "dismissed" });
+        const index = pending.indexOf(row);
+        if (index >= 0) pending.splice(index, 1);
+        continue;
+      }
+      const saved = await updateSuggestion(row.id, {
+        messageIds: kept,
+        ...(row.intent === "revision" ? { configChanges: {} } : {}),
+      });
+      if (!saved) continue;
+      row.messageIds = saved.messageIds;
+      row.configChanges = saved.configChanges;
+    }
     const covered = new Set(pending.flatMap((row) => row.messageIds));
     const candidates = inbound.filter((row) => !frozen.has(row.id));
     const uncovered = candidates.filter((row) => !covered.has(row.id));
@@ -1043,9 +1216,10 @@ export async function syncConversationSuggestions(
     const revisions = await dealRevisions(parsed.data.dealId);
     const quoteSelections = revisions.map((revision) => revision.selections);
     if (uncovered.length > 0 || staleRevision) {
-      const pendingIds = pending.flatMap((row) => row.messageIds).filter((id) => !frozen.has(id));
       const known = new Set(candidates.map((row) => row.id));
-      const older = await readActivityRefsByIds(pendingIds.filter((id) => !known.has(id)));
+      const older = olderRows.filter(
+        (row) => row.body.trim() && !known.has(row.id) && activitySinceDeal(row.createdAt, since),
+      );
       const analyzed = [...older, ...candidates]
         .filter((row) => row.body.trim())
         .sort((left, right) => left.position - right.position)
@@ -1055,6 +1229,8 @@ export async function syncConversationSuggestions(
         messages: analyzed.map((row) => row.body.trim()),
         currentChanges,
         revisions,
+        dealId: parsed.data.dealId,
+        activityIds: analyzed.map((row) => row.id),
       });
       const order = new Map(analyzed.map((row) => [row.id, row.position]));
       for (const hit of hits) {
@@ -1069,7 +1245,9 @@ export async function syncConversationSuggestions(
         ];
         if (messageIds.length === 0) continue;
         const current = pending.find((row) => row.intent === intent);
-        const combined = [...new Set([...(current?.messageIds ?? []).filter((id) => !frozen.has(id)), ...messageIds])];
+        const combined = [
+          ...new Set([...(current?.messageIds ?? []).filter((id) => !frozen.has(id) && onDeal(id)), ...messageIds]),
+        ];
         combined.sort((left, right) => (order.get(left) ?? 0) - (order.get(right) ?? 0));
         if (combined.length > 40) combined.splice(0, combined.length - 40);
         const configChanges = intent === "revision" ? hit.configChanges : {};
@@ -1103,6 +1281,7 @@ export async function syncConversationSuggestions(
     }
     return { success: true, data: await pendingSuggestions(parsed.data.dealId) };
   } catch (error) {
+    void recordCrmLog({ feature: "conversations", error });
     console.error(error);
     const message = error instanceof Error ? error.message : "Could not read these messages";
     return { error: message };
@@ -1127,6 +1306,7 @@ export async function saveSuggestionPreview(
     if (!saved?.previewImageUrl) return { error: "Could not save the preview" };
     return { success: true, data: { previewImageUrl: saved.previewImageUrl } };
   } catch (error) {
+    void recordCrmLog({ feature: "conversations", error });
     console.error(error);
     const message = error instanceof Error ? error.message : "Could not save the preview";
     return { error: message };
@@ -1141,9 +1321,10 @@ export async function dismissConversationSuggestion(
   try {
     const dismissed = await updateSuggestion(parsed.data.id, { status: "dismissed" });
     if (!dismissed) return { error: "Could not dismiss this suggestion" };
-    revalidatePath("/crm/conversations");
+    revalidatePath("/conversations");
     return { success: true, data: { id: dismissed.id } };
   } catch (error) {
+    void recordCrmLog({ feature: "conversations", error });
     console.error(error);
     const message = error instanceof Error ? error.message : "Could not dismiss this suggestion";
     return { error: message };
@@ -1158,9 +1339,10 @@ export async function restoreConversationSuggestion(
   try {
     const restored = await updateSuggestion(parsed.data.id, { status: "pending" });
     if (!restored) return { error: "Could not restore this suggestion" };
-    revalidatePath("/crm/conversations");
+    revalidatePath("/conversations");
     return { success: true, data: { id: restored.id } };
   } catch (error) {
+    void recordCrmLog({ feature: "conversations", error });
     console.error(error);
     const message = error instanceof Error ? error.message : "Could not restore this suggestion";
     return { error: message };
@@ -1174,9 +1356,10 @@ export async function applyConversationSuggestion(
   if (!parsed.success) return { error: "A suggestion is required" };
   try {
     await updateSuggestion(parsed.data.id, { status: "applied" });
-    revalidatePath("/crm/conversations");
+    revalidatePath("/conversations");
     return { success: true, data: { id: parsed.data.id } };
   } catch (error) {
+    void recordCrmLog({ feature: "conversations", error });
     console.error(error);
     const message = error instanceof Error ? error.message : "Could not apply this suggestion";
     return { error: message };

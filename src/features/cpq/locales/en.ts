@@ -23,6 +23,7 @@ export const copy = {
   saveQuoteError: "Could not save this quote. Try again.",
   dismiss: "Dismiss",
   saveAndClose: "Save & Close",
+  saveNeedsChange: "Make a change before saving a new revision.",
   cancelEditing: "Cancel Editing",
   saveAndShare: "Save & Share",
   shareDesignPreview: "Photos...",

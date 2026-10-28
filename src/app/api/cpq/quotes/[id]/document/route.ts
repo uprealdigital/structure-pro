@@ -8,6 +8,7 @@ import {
   buildYardPreviewText,
   YARD_PREVIEW_CID,
 } from "@/src/features/cpq/utils/yard-preview";
+import { recordCpqLog } from "@/src/features/cpq/db/log";
 
 export const runtime = "nodejs";
 
@@ -74,6 +75,7 @@ export async function POST(request: Request, context: RouteContext) {
 
     return Response.json({ error: "kind is required" }, { status: 400 });
   } catch (error) {
+    void recordCpqLog({ feature: "quote-document", error });
     const message = error instanceof Error ? error.message : "Could not render document";
     return Response.json({ error: message }, { status: 500 });
   }

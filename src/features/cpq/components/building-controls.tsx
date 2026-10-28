@@ -44,6 +44,7 @@ type BuildingControlsProps = {
   onShare?: () => void;
   onReview?: () => void;
   pending?: boolean;
+  changed?: boolean;
   mode?: ConfiguratorMode;
   children?: ReactNode;
   estimate: {
@@ -66,6 +67,7 @@ export function BuildingControls({
   onShare,
   onReview,
   pending = false,
+  changed = true,
   mode = "external",
   children,
   estimate,
@@ -524,6 +526,7 @@ export function BuildingControls({
             zip={zip}
             mode={mode}
             pending={pending}
+            changed={changed}
             onQuote={onSubmit}
             onCancel={onCancel}
             onShare={onShare}
@@ -531,7 +534,12 @@ export function BuildingControls({
           />
         </Accordion>
       </div>
-      <button type="button" className="sr-only" onClick={onSubmit} disabled={pending}>
+      <button
+        type="button"
+        className="sr-only"
+        onClick={onSubmit}
+        disabled={pending || (mode === "internal" && !changed)}
+      >
         {pending && mode === "internal" ? copy.savingQuote : mode === "internal" ? copy.save : copy.submitQuote}
       </button>
       </div>
@@ -540,6 +548,7 @@ export function BuildingControls({
         total={estimate.total}
         mode={mode}
         pending={pending}
+        changed={changed}
         onQuote={onSubmit}
         onCancel={onCancel}
         onShare={onShare}
@@ -553,14 +562,17 @@ export function BuildingControls({
 function SaveAndShareMenu({
   variant,
   pending,
+  locked = false,
   onShare,
   onReview,
 }: {
   variant: "header" | "panel" | "bar";
   pending: boolean;
+  locked?: boolean;
   onShare?: () => void;
   onReview?: () => void;
 }) {
+  const disabled = pending || locked;
   const [open, setOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
@@ -581,8 +593,8 @@ function SaveAndShareMenu({
   }, [open]);
 
   useEffect(() => {
-    if (pending) setOpen(false);
-  }, [pending]);
+    if (disabled) setOpen(false);
+  }, [disabled]);
 
   function choose(action: () => void) {
     setOpen(false);
@@ -591,10 +603,10 @@ function SaveAndShareMenu({
 
   const buttonClass =
     variant === "panel"
-      ? "flex w-full items-center justify-center gap-1.5 rounded-full border border-transparent bg-black py-3 text-sm font-medium text-white hover:bg-black disabled:opacity-60"
+      ? "flex w-full items-center justify-center gap-1.5 rounded-full border border-transparent bg-black py-3 text-sm font-medium text-white hover:bg-black disabled:cursor-not-allowed disabled:opacity-60"
       : variant === "header"
-        ? "inline-flex shrink-0 items-center justify-center gap-1.5 rounded-full border border-transparent bg-[#1A1A1A] px-5 py-2.5 text-[13px] leading-tight font-medium whitespace-nowrap text-white hover:bg-black disabled:opacity-60"
-        : "inline-flex shrink-0 items-center justify-center gap-1.5 rounded-full border border-transparent bg-black px-5 py-3 text-sm leading-none font-medium whitespace-nowrap text-white disabled:opacity-60";
+        ? "inline-flex shrink-0 items-center justify-center gap-1.5 rounded-full border border-transparent bg-[#1A1A1A] px-5 py-2.5 text-[13px] leading-tight font-medium whitespace-nowrap text-white hover:bg-black disabled:cursor-not-allowed disabled:opacity-60"
+        : "inline-flex shrink-0 items-center justify-center gap-1.5 rounded-full border border-transparent bg-black px-5 py-3 text-sm leading-none font-medium whitespace-nowrap text-white disabled:cursor-not-allowed disabled:opacity-60";
 
   return (
     <div ref={menuRef} className={variant === "panel" ? "relative mt-2" : "relative"}>
@@ -602,7 +614,8 @@ function SaveAndShareMenu({
         type="button"
         aria-haspopup="menu"
         aria-expanded={open}
-        disabled={pending}
+        disabled={disabled}
+        title={locked && !pending ? copy.saveNeedsChange : undefined}
         onClick={() => setOpen((value) => !value)}
         className={buttonClass}
       >
@@ -670,6 +683,7 @@ export function QuoteActions({
   onShare,
   onReview,
   pending = false,
+  changed = true,
 }: {
   mode: ConfiguratorMode;
   variant: "header" | "panel" | "bar";
@@ -678,12 +692,16 @@ export function QuoteActions({
   onShare?: () => void;
   onReview?: () => void;
   pending?: boolean;
+  changed?: boolean;
 }) {
   const internal = mode === "internal";
   const menu = internal && (onShare || onReview);
+  const locked = internal && !changed;
+  const blocked = pending || locked;
+  const unchangedTitle = locked && !pending ? copy.saveNeedsChange : undefined;
   const label = pending && internal ? copy.savingQuote : internal ? copy.saveAndClose : copy.submitQuote;
   function activate() {
-    if (pending) return;
+    if (blocked) return;
     onPrimary();
   }
 
@@ -691,13 +709,20 @@ export function QuoteActions({
     return (
       <>
         {menu ? (
-          <SaveAndShareMenu variant="panel" pending={pending} onShare={onShare} onReview={onReview} />
+          <SaveAndShareMenu
+            variant="panel"
+            pending={pending}
+            locked={locked}
+            onShare={onShare}
+            onReview={onReview}
+          />
         ) : (
           <button
             type="button"
             onClick={activate}
-            disabled={pending}
-            className="mt-2 block w-full rounded-full bg-black py-3 text-center text-sm font-medium text-white disabled:opacity-60"
+            disabled={blocked}
+            title={unchangedTitle}
+            className="mt-2 block w-full rounded-full bg-black py-3 text-center text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-60"
           >
             {internal ? copy.save : copy.submitQuote}
           </button>
@@ -706,8 +731,9 @@ export function QuoteActions({
           <button
             type="button"
             onClick={activate}
-            disabled={pending}
-            className="mt-2 block w-full rounded-full border border-gray-300 bg-white py-3 text-center text-sm font-medium text-gray-900 hover:bg-gray-50 disabled:opacity-60"
+            disabled={blocked}
+            title={unchangedTitle}
+            className="mt-2 block w-full rounded-full border border-gray-300 bg-white py-3 text-center text-sm font-medium text-gray-900 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-60"
           >
             {copy.saveAndClose}
           </button>
@@ -735,7 +761,13 @@ export function QuoteActions({
   if (!menu) {
     return (
       <div className="flex shrink-0 flex-col items-stretch gap-2">
-        <button type="button" onClick={activate} disabled={pending} className={primaryClass}>
+        <button
+          type="button"
+          onClick={activate}
+          disabled={blocked}
+          title={unchangedTitle}
+          className={`${primaryClass} disabled:cursor-not-allowed`}
+        >
           {label}
         </button>
         {onCancel ? (
@@ -755,8 +787,20 @@ export function QuoteActions({
 
   return (
     <div className="flex shrink-0 flex-col items-end gap-2">
-      <SaveAndShareMenu variant={variant} pending={pending} onShare={onShare} onReview={onReview} />
-      <button type="button" onClick={activate} disabled={pending} className={secondaryClass}>
+      <SaveAndShareMenu
+        variant={variant}
+        pending={pending}
+        locked={locked}
+        onShare={onShare}
+        onReview={onReview}
+      />
+      <button
+        type="button"
+        onClick={activate}
+        disabled={blocked}
+        title={unchangedTitle}
+        className={`${secondaryClass} disabled:cursor-not-allowed`}
+      >
         {pending ? copy.savingQuote : copy.saveAndClose}
       </button>
     </div>
@@ -768,6 +812,7 @@ function MobileQuoteBar({
   total,
   mode,
   pending,
+  changed,
   onQuote,
   onCancel,
   onShare,
@@ -778,6 +823,7 @@ function MobileQuoteBar({
   total: number;
   mode: ConfiguratorMode;
   pending: boolean;
+  changed: boolean;
   onQuote: () => void;
   onCancel?: () => void;
   onShare?: () => void;
@@ -804,7 +850,16 @@ function MobileQuoteBar({
             {copy.seeDetails}
           </button>
         </div>
-        <QuoteActions mode={mode} variant="bar" pending={pending} onPrimary={onQuote} onCancel={onCancel} onShare={onShare} onReview={onReview} />
+        <QuoteActions
+          mode={mode}
+          variant="bar"
+          pending={pending}
+          changed={changed}
+          onPrimary={onQuote}
+          onCancel={onCancel}
+          onShare={onShare}
+          onReview={onReview}
+        />
       </div>
     </div>
   );
@@ -921,6 +976,7 @@ function EstimateBreakdownBody({
   zip,
   mode,
   pending,
+  changed,
   onQuote,
   onCancel,
   onShare,
@@ -934,6 +990,7 @@ function EstimateBreakdownBody({
   zip: string;
   mode: ConfiguratorMode;
   pending: boolean;
+  changed: boolean;
   onQuote: () => void;
   onCancel?: () => void;
   onShare?: () => void;
@@ -985,7 +1042,16 @@ function EstimateBreakdownBody({
         {copy.quoteDisclaimer}
       </p>
       <p className="text-[11px] leading-relaxed text-gray-500">{copy.satisfaction}</p>
-      <QuoteActions mode={mode} variant="panel" pending={pending} onPrimary={onQuote} onCancel={onCancel} onShare={onShare} onReview={onReview} />
+      <QuoteActions
+        mode={mode}
+        variant="panel"
+        pending={pending}
+        changed={changed}
+        onPrimary={onQuote}
+        onCancel={onCancel}
+        onShare={onShare}
+        onReview={onReview}
+      />
       <div className="flex items-center space-x-2 pt-3 text-xs text-gray-600">
         <span>
           {copy.deliveryTo}{" "}

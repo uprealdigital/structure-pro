@@ -8,7 +8,7 @@ import type { DealStatus } from "@/src/features/crm/deals/types";
 type SelectionStatus = "ready" | "pending" | "missing" | "error";
 
 function conversationPath(id?: string): string {
-  return id ? `/crm/conversations?conversation=${encodeURIComponent(id)}` : "/crm/conversations";
+  return id ? `/conversations?conversation=${encodeURIComponent(id)}` : "/conversations";
 }
 
 export function useConversationSelection({

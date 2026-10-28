@@ -10,6 +10,7 @@ import { toBuildingConfig } from "@/src/features/cpq/utils/mappers";
 import { UploadProgress } from "@/src/features/crm/conversations/components/composer-attachments";
 import { RevisionChangeList } from "@/src/features/crm/conversations/components/revision-change-list";
 import { copy } from "@/src/features/crm/conversations/locales/en";
+import { reportCrmIssue } from "@/src/features/crm/common/server/actions";
 import type { ConversationQuoteRevision } from "@/src/features/crm/conversations/types";
 import type { ConfigChanges } from "@/src/features/crm/quotes/types";
 
@@ -215,9 +216,11 @@ export function DesignPreviewModal({ current, revisions, selections, suggested, 
       }
       await onAttach(await composeDesignPreview(blobs));
     } catch (caught) {
+      const message = caught instanceof Error ? caught.message : copy.designPreviewAttachFailed;
+      void reportCrmIssue("conversations", message);
       setError({
         id: Date.now(),
-        message: caught instanceof Error ? caught.message : copy.designPreviewAttachFailed,
+        message,
       });
       setAttaching(false);
     }

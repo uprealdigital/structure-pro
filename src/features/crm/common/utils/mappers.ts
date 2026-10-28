@@ -1,4 +1,11 @@
-import { customerSchema, dealCustomerSchema, type Customer, type DealCustomer } from "@/src/features/crm/common/types";
+import {
+  crmLogSchema,
+  customerSchema,
+  dealCustomerSchema,
+  type CrmLog,
+  type Customer,
+  type DealCustomer,
+} from "@/src/features/crm/common/types";
 
 export type CustomerRow = {
   id: string;
@@ -16,6 +23,39 @@ export type DealCustomerRow = {
   is_primary: boolean;
   created_at?: string | null;
 };
+
+export type CrmLogRow = {
+  id: string;
+  feature: string;
+  raw_response: string | null;
+  parsed_response: unknown;
+  status: string;
+  error_message: string | null;
+  created_at: string;
+};
+
+function jsonField(value: unknown): unknown {
+  if (value == null) return null;
+  if (typeof value !== "string") return value;
+  try {
+    return JSON.parse(value) as unknown;
+  } catch {
+    return value;
+  }
+}
+
+export function toCrmLog(row: CrmLogRow): CrmLog | undefined {
+  const log = crmLogSchema.safeParse({
+    id: row.id,
+    feature: row.feature,
+    rawResponse: row.raw_response,
+    parsedResponse: jsonField(row.parsed_response),
+    status: row.status,
+    errorMessage: row.error_message,
+    createdAt: row.created_at,
+  });
+  return log.success ? log.data : undefined;
+}
 
 export function toCustomer(row: CustomerRow): Customer | undefined {
   const customer = customerSchema.safeParse({

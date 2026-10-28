@@ -11,7 +11,7 @@ import { contactInitials } from "@/src/features/crm/common/utils/formatting";
 
 function dealConversationHref(deal: { id: string; conversationId?: string }): string | undefined {
   if (!deal.conversationId) return undefined;
-  return `/crm/conversations?conversation=${encodeURIComponent(deal.conversationId)}&deal=${encodeURIComponent(deal.id)}`;
+  return `/conversations?conversation=${encodeURIComponent(deal.conversationId)}&deal=${encodeURIComponent(deal.id)}`;
 }
 
 function stageLabel(stage: DealStatus): string {

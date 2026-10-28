@@ -91,9 +91,25 @@ function StatusChangePill({ kind, label }: { kind: "dealStatus" | "quoteStatus";
 
 function logSubjectIcon(kind: SystemEventKind) {
   const quote =
-    kind === "quote" || kind === "quoteStatus" || kind === "savedRevision" || kind === "activeQuote";
+    kind === "quote" ||
+    kind === "quoteStatus" ||
+    kind === "savedRevision" ||
+    kind === "duplicatedQuote" ||
+    kind === "activeQuote";
   const Icon = quote ? Calculator : Handshake;
   return <Icon className="h-3.5 w-3.5 shrink-0 text-gray-500" strokeWidth={1.8} aria-hidden="true" />;
+}
+
+function NamedChange({ name, badge }: { name: string; badge: string }) {
+  return (
+    <>
+      <span className="font-normal text-gray-900">{name}</span>
+      <ArrowRight className="h-3.5 w-3.5 shrink-0 text-gray-400" strokeWidth={1.8} aria-hidden="true" />
+      <span className="inline-flex items-center rounded-full border border-gray-200 bg-gray-100 px-2 py-0.5 text-[11px] font-medium whitespace-nowrap text-gray-900">
+        {badge}
+      </span>
+    </>
+  );
 }
 
 function SystemActivity({ activity }: { activity: Activity }) {
@@ -111,13 +127,9 @@ function SystemActivity({ activity }: { activity: Activity }) {
             {copy.dealWasRenamedTo} <strong className="font-bold text-gray-900">{event.name}</strong>
           </span>
         ) : event.kind === "savedRevision" && event.previousName ? (
-          <>
-            <span className="font-normal text-gray-900">{event.previousName}</span>
-            <ArrowRight className="h-3.5 w-3.5 shrink-0 text-gray-400" strokeWidth={1.8} aria-hidden="true" />
-            <span className="inline-flex items-center rounded-full border border-gray-200 bg-gray-100 px-2 py-0.5 text-[11px] font-medium whitespace-nowrap text-gray-900">
-              {event.name}
-            </span>
-          </>
+          <NamedChange name={event.previousName} badge={event.name} />
+        ) : event.kind === "created" || event.kind === "duplicatedQuote" ? (
+          <NamedChange name={event.name} badge={copy.duplicatedQuoteBadge} />
         ) : statusChange ? (
           <>
             <span className="font-normal text-gray-900">{event.name}</span>

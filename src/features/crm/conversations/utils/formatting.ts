@@ -60,6 +60,7 @@ export function lastMessageAt(activities: Activity[]): string {
 }
 
 const quoteSystemPrefix = "quote:";
+const duplicatedQuotePrefix = "duplicated-quote:";
 const savedRevisionPrefix = "saved-revision:";
 const activeQuotePrefix = "active-quote:";
 const createdDealPrefix = "deal-created:";
@@ -75,7 +76,8 @@ export type SystemEventKind =
   | "dealStatus"
   | "quoteStatus"
   | "renamed"
-  | "savedRevision";
+  | "savedRevision"
+  | "duplicatedQuote";
 
 export type SystemEvent = {
   kind: SystemEventKind;
@@ -108,6 +110,7 @@ export function systemEventBody(
   if (kind === "savedRevision" && previousName) {
     return `${savedRevisionPrefix}${encodeURIComponent(previousName)}:${encodeURIComponent(name)}`;
   }
+  if (kind === "duplicatedQuote") return `${duplicatedQuotePrefix}${encodeURIComponent(name)}`;
   if (kind === "created" && dealId) return `${createdDealPrefix}${dealId}:${name}`;
   if (kind === "renamed" && previousName) {
     return `${renamedDealPrefix}${encodeURIComponent(previousName)}:${encodeURIComponent(name)}`;
@@ -168,6 +171,10 @@ export function systemEventText(text: string): SystemEvent {
       name: text.slice(activeQuotePrefix.length),
     };
   }
+  if (text.startsWith(duplicatedQuotePrefix)) {
+    const name = decodedName(text.slice(duplicatedQuotePrefix.length));
+    if (name) return { kind: "duplicatedQuote", label: copy.duplicatedQuoteBadge, name };
+  }
   if (text.startsWith(savedRevisionPrefix)) {
     const rest = text.slice(savedRevisionPrefix.length);
     const split = rest.indexOf(":");
@@ -218,6 +225,9 @@ export function activityPreview(activity: Activity | undefined): string {
     }
     if (event.kind === "savedRevision" && event.previousName) {
       return `${messagePreview(event.previousName)} ${name}`;
+    }
+    if (event.kind === "created" || event.kind === "duplicatedQuote") {
+      return `${name} ${copy.duplicatedQuoteBadge}`;
     }
     if ((event.kind === "dealStatus" || event.kind === "quoteStatus") && event.status) {
       return `${name} ${copy.statusSetTo} ${messagePreview(event.status)}`;
