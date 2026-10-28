@@ -152,6 +152,46 @@ export const suggestionPatchSchema = z.object({
   status: z.enum(["pending", "applied", "dismissed"]).optional(),
 });
 
+export const dealSummaryCustomerSchema = z.object({
+  name: z.string(),
+  phone: z.string(),
+  email: z.string(),
+  primary: z.boolean(),
+});
+
+export const dealSummaryRevisionSchema = z.object({
+  name: z.string(),
+  status: z.string(),
+  total: z.string(),
+  summary: z.string(),
+  active: z.boolean(),
+});
+
+export const dealSummaryQuoteSchema = z.object({
+  name: z.string(),
+  status: z.string(),
+  revisions: z.array(dealSummaryRevisionSchema).max(30),
+});
+
+export const dealSummaryActivitySchema = z.object({
+  at: z.string().optional(),
+  channel: z.string(),
+  speaker: z.string(),
+  text: z.string(),
+});
+
+export const dealSummaryRequestSchema = z.object({
+  dealName: z.string(),
+  status: z.string(),
+  source: z.string(),
+  customers: z.array(dealSummaryCustomerSchema).max(20),
+  quotes: z.array(dealSummaryQuoteSchema).max(20),
+  activities: z.array(dealSummaryActivitySchema).max(80),
+  earlierActivityCount: z.number().int().nonnegative(),
+});
+
+export type DealSummaryRequest = z.infer<typeof dealSummaryRequestSchema>;
+
 export const yardPreviewPatchSchema = z.object({
   status: yardPreviewStatusSchema.optional(),
   error: z.string().nullable().optional(),

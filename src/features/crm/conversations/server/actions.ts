@@ -7,6 +7,8 @@ import { demoChatId, sendTelegramFile, sendTelegramMessage } from "@/src/common/
 import { sendSms } from "@/src/common/lib/twilio/twilio.service";
 import { createSuggestion, readSuggestions, storeSuggestionPreview, updateSuggestion } from "@/src/features/ai/db/suggestion";
 import { analyzeInboundIntent } from "@/src/features/ai/services/inbound-intent-analyzer.service";
+import { summarizeDeal } from "@/src/features/ai/services/deal-summary.service";
+import { dealSummaryRequestSchema } from "@/src/features/ai/types";
 import { prepareNewQuoteMessage, sendNewQuoteMessage } from "@/src/features/ai/services/messaging-agent.service";
 import type { SuggestionIntent } from "@/src/features/ai/types";
 import { selectionHasConfigChanges } from "@/src/features/crm/conversations/utils/design-preview";
@@ -1001,6 +1003,21 @@ async function pendingSuggestions(dealId: string): Promise<ConversationSuggestio
       return suggestion.success ? [suggestion.data] : [];
     })
     .sort((left, right) => Number(left.intent === "new_quote") - Number(right.intent === "new_quote"));
+}
+
+export async function summarizeConversationDeal(
+  input: unknown,
+): Promise<{ success: true; data: string } | { error: string }> {
+  const parsed = dealSummaryRequestSchema.safeParse(input);
+  if (!parsed.success) return { error: "A deal summary needs the current deal" };
+
+  try {
+    const summary = await summarizeDeal(parsed.data);
+    return { success: true, data: summary };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Could not summarize the deal";
+    return { error: message };
+  }
 }
 
 export async function syncConversationSuggestions(

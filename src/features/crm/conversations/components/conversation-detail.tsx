@@ -18,6 +18,7 @@ import { InboundIntentCard } from "@/src/features/crm/conversations/components/i
 import { ProposedShedRender, RevisionRenderSlot } from "@/src/features/crm/conversations/components/proposed-shed-render";
 import { ReviewSendModal } from "@/src/features/crm/conversations/components/review-send-modal";
 import { useConversationActivities } from "@/src/features/crm/conversations/hooks/use-conversation-activities";
+import { useDealSummary } from "@/src/features/crm/conversations/hooks/use-deal-summary";
 import { useConversationSuggestions } from "@/src/features/crm/conversations/hooks/use-conversation-suggestions";
 import { useVisibleActivityReads } from "@/src/features/crm/conversations/hooks/use-visible-activity-reads";
 import { copy } from "@/src/features/crm/conversations/locales/en";
@@ -72,6 +73,7 @@ import {
   sameSelections,
   selectionTotals,
 } from "@/src/features/crm/conversations/utils/inbound-intent";
+import { dealSummarySnapshot } from "@/src/features/crm/conversations/utils/deal-summary";
 import { participantsForDeal } from "@/src/features/crm/conversations/utils/participants";
 
 function ChannelIcon({ channel, className }: { channel: ComposerChannel; className?: string }) {
@@ -367,6 +369,19 @@ export function ConversationDetail({
   const threadActivities = workspace.activities;
   const { activities, setActivities } = useConversationActivities(threadId, threadActivities, incoming);
   const inboundMessages = useMemo(() => customerInboundMessages(activities), [activities]);
+  const summarySnapshot = dealSummarySnapshot({
+    deal: focused.deal,
+    title: focusedOption?.title ?? "",
+    quotes: listedQuotes,
+    participants,
+    activities,
+  });
+  const generatedSummary = useDealSummary(
+    focused.deal.id,
+    detailsOpen,
+    summarySnapshot.request,
+    summarySnapshot.fingerprint,
+  );
   const detectedSuggestions = useConversationSuggestions(focused.deal.id, workspace.id, inboundMessages);
   const applySuggestionRef = useRef(detectedSuggestions.apply);
   applySuggestionRef.current = detectedSuggestions.apply;
@@ -1946,7 +1961,7 @@ export function ConversationDetail({
         >
           <div className={`min-h-0 ${detailsOpen && detailsSettled ? "overflow-visible" : "overflow-hidden"}`}>
             <div className="grid grid-cols-1 gap-6 bg-white px-6 py-4 lg:grid-cols-2">
-              <DealSummary workspace={focused} />
+              <DealSummary workspace={focused} summary={generatedSummary} />
               <QuotePanel revision={viewed} />
             </div>
           </div>

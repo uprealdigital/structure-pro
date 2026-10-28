@@ -458,7 +458,7 @@ export function QuoteMenu({
             return true;
           });
         }}
-        className="flex w-full cursor-pointer items-center gap-1 rounded-lg bg-white px-2.5 py-1.5 text-left whitespace-nowrap shadow-xs transition-colors hover:bg-gray-50"
+        className="flex w-full cursor-pointer items-center gap-1 rounded-lg bg-white px-2.5 py-1.5 text-left whitespace-nowrap transition-colors hover:bg-gray-50"
       >
         <span className="flex min-w-0 flex-1 flex-col gap-1">
           <span className="flex items-center justify-between gap-4">

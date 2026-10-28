@@ -11,10 +11,16 @@ function sourceLabel(source: ConversationWorkspace["deal"]["source"]): string {
   return source === "yard_preview" ? copy.sourceYardPreview : copy.sourceWebsite;
 }
 
-export function DealSummary({ workspace }: { workspace: ConversationWorkspace }) {
+export function DealSummary({
+  workspace,
+  summary,
+}: {
+  workspace: ConversationWorkspace;
+  summary?: string;
+}) {
   const [open, setOpen] = useState(true);
   const specs = workspace.quote?.specs ?? [];
-  const summary = dealSummarySentence({
+  const fallback = dealSummarySentence({
     source: workspace.deal.source,
     style: specValue(specs, "Style"),
     size: specValue(specs, "Size"),
@@ -22,13 +28,14 @@ export function DealSummary({ workspace }: { workspace: ConversationWorkspace })
     roof: specValue(specs, "Roof"),
     door: specValue(specs, "Door"),
   });
+  const text = summary?.trim() || fallback;
 
   return (
     <div className="col-span-1 space-y-3.5 border-gray-200 pr-4">
       <div className="space-y-3">
         <div className="space-y-2 p-2.5">
           <h3 className="text-sm font-bold tracking-wider text-gray-900 uppercase">{copy.dealSummary}</h3>
-          <p className="text-xs leading-relaxed font-normal text-gray-700">{summary}</p>
+          <p className="text-xs leading-relaxed font-normal whitespace-pre-line text-gray-700">{text}</p>
         </div>
         <div className="space-y-2 border-gray-200 pt-3">
           <div className={`bg-gray-50/90 p-3.5 transition-all ${open ? "rounded-2xl" : "rounded-full px-3.5 py-2"}`}>
