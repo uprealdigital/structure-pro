@@ -272,6 +272,7 @@ export const copy = {
   newRevisionFor: "for",
   revisionSwitchedToast: (quote: string, revision: string) => `${quote} switched to ${revision}`,
   createdDeal: "A new deal was created",
+  quoteMovedTo: "→",
   statusSetTo: "status changed to",
   dealWasRenamedFrom: "Deal was renamed from",
   dealWasRenamedTo: "to",

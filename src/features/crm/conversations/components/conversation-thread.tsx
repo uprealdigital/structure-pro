@@ -95,6 +95,7 @@ function logSubjectIcon(kind: SystemEventKind) {
     kind === "quoteStatus" ||
     kind === "savedRevision" ||
     kind === "duplicatedQuote" ||
+    kind === "movedQuote" ||
     kind === "activeQuote";
   const Icon = quote ? Calculator : Handshake;
   return <Icon className="h-3.5 w-3.5 shrink-0 text-gray-500" strokeWidth={1.8} aria-hidden="true" />;
@@ -127,6 +128,8 @@ function SystemActivity({ activity }: { activity: Activity }) {
             {copy.dealWasRenamedTo} <strong className="font-bold text-gray-900">{event.name}</strong>
           </span>
         ) : event.kind === "savedRevision" && event.previousName ? (
+          <NamedChange name={event.previousName} badge={event.name} />
+        ) : event.kind === "movedQuote" && event.previousName ? (
           <NamedChange name={event.previousName} badge={event.name} />
         ) : event.kind === "created" || event.kind === "duplicatedQuote" ? (
           <NamedChange name={event.name} badge={copy.duplicatedQuoteBadge} />

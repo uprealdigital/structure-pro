@@ -97,6 +97,11 @@ import { markQuoteSent, readQuoteStatus, setQuoteStatus } from "@/src/features/c
 import { readQuoteRevision, updateQuoteRevision } from "@/src/features/crm/quotes/db/quote-revision";
 import { recordCrmLog } from "@/src/features/crm/common/db/log";
 
+function revalidateConversations() {
+  revalidatePath("/");
+  revalidatePath("/conversations");
+}
+
 export async function openConversation(input: {
   lookupKey: string;
   channelKey?: string;
@@ -150,7 +155,7 @@ export async function appendActivity(
   const id = conversationIdSchema.parse(conversationId);
   const row = activityInsertSchema.parse(activity);
   await createActivities(id, [row]);
-  revalidatePath("/conversations");
+  revalidateConversations();
 }
 
 export async function attachConversationChannel(
@@ -159,13 +164,13 @@ export async function attachConversationChannel(
 ): Promise<void> {
   const id = conversationIdSchema.parse(conversationId);
   await updateConversationAddress(id, input);
-  revalidatePath("/conversations");
+  revalidateConversations();
 }
 
 export async function removeLatestActivity(conversationId: string): Promise<void> {
   const id = conversationIdSchema.parse(conversationId);
   await deleteLatestActivity(id);
-  revalidatePath("/conversations");
+  revalidateConversations();
 }
 
 export async function sendWebsiteQuoteMessage(input: {
@@ -233,7 +238,7 @@ export async function sendWebsiteQuoteMessage(input: {
     throw error;
   }
 
-  revalidatePath("/conversations");
+  revalidateConversations();
   return { channel: delivery.channel === "telegram" ? "telegram" : "twilio" };
 }
 
@@ -267,7 +272,7 @@ export async function sendManualActivity(input: {
     ]);
     const activity = (await readActivities(conversationId.data)).at(-1);
     if (!activity) return { error: "The message was not saved" };
-    revalidatePath("/conversations");
+    revalidateConversations();
     return { success: true, data: activity };
   } catch (error) {
     void recordCrmLog({ feature: "conversations", error });
@@ -343,7 +348,7 @@ export async function sendStoredAttachment(input: {
     const activity = (await readActivities(conversationId.data)).at(-1);
     if (!activity) return { error: "The attachment was not saved" };
     if (!input.image) await deleteAttachmentFile(input.id).catch(() => undefined);
-    revalidatePath("/conversations");
+    revalidateConversations();
     return { success: true, data: activity };
   } catch (error) {
     void recordCrmLog({ feature: "conversations", error });
@@ -381,7 +386,7 @@ export async function markDealLost(dealId: string): Promise<{ success: true } | 
     if (!deal) return { error: "Deal was not found" };
     if (!canMarkDealLost(deal.status)) return { error: "This deal cannot be marked as lost" };
     await updateDeal(id.data, { status: "deal_lost" });
-    revalidatePath("/conversations");
+    revalidateConversations();
     revalidatePath("/deals");
     revalidatePath("/quotes");
     return { success: true };
@@ -405,7 +410,7 @@ export async function reopenDeal(
       return { error: "This deal cannot be reopened" };
     }
     await updateDeal(deal.id, { status: deal.previousStatus });
-    revalidatePath("/conversations");
+    revalidateConversations();
     revalidatePath("/deals");
     revalidatePath("/quotes");
     return { success: true, data: { status: deal.previousStatus } };
@@ -464,7 +469,7 @@ export async function sendConversationQuote(input: {
     const dealStatus = deal.status === "new_lead" ? "active_quote" : deal.status;
     if (dealStatus !== deal.status) await updateDeal(deal.id, { status: dealStatus });
 
-    revalidatePath("/conversations");
+    revalidateConversations();
     revalidatePath("/quotes");
     revalidatePath("/deals");
     revalidatePath(`/quote/${quoteId}`);
@@ -613,7 +618,7 @@ export async function sendQuoteMessages(
       latest = sent.data;
     }
     if (!latest) return { error: copy.sendQuoteError };
-    revalidatePath("/conversations");
+    revalidateConversations();
     return { success: true, data: latest };
   } catch (error) {
     void recordCrmLog({ feature: "conversations", error });
@@ -634,7 +639,7 @@ export async function renameDeal(input: {
     const deal = await readDeal(id.data);
     if (!deal) return { error: "Deal was not found" };
     await updateDeal(deal.id, { name: name.data });
-    revalidatePath("/conversations");
+    revalidateConversations();
     revalidatePath("/deals");
     return { success: true, data: { name: name.data } };
   } catch (error) {
@@ -682,7 +687,7 @@ export async function setDealPerson(input: {
         return { error: copy.addPersonError };
       }
       await deleteDealCustomer(customerId, dealId);
-      revalidatePath("/conversations");
+      revalidateConversations();
       revalidatePath("/deals");
       return { success: true, data: null };
     }
@@ -695,7 +700,7 @@ export async function setDealPerson(input: {
       ...(summary ? { conversationId: summary.id } : {}),
       customer,
     });
-    revalidatePath("/conversations");
+    revalidateConversations();
     revalidatePath("/deals");
     return { success: true, data: participant };
   } catch (error) {
@@ -722,7 +727,7 @@ export async function setCustomerActiveDeal(input: {
       return { error: "Deal was not found" };
     }
     await updateCustomer(parsed.data.customerId, { activeDealId: parsed.data.dealId });
-    revalidatePath("/conversations");
+    revalidateConversations();
     return { success: true };
   } catch (error) {
     void recordCrmLog({ feature: "conversations", error });
@@ -767,7 +772,7 @@ export async function createConnectedDeal(input: {
       });
     }
     const name = (await assignDefaultDealName(created.id)) ?? created.name ?? "";
-    revalidatePath("/conversations");
+    revalidateConversations();
     revalidatePath("/quotes");
     revalidatePath("/deals");
     return { success: true, data: { dealId: created.id, name, quoteId } };
@@ -832,7 +837,7 @@ export async function moveQuoteToNewDeal(input: {
         await updateCustomer(person.id, { activeDealId: created.id });
       }
     }
-    revalidatePath("/conversations");
+    revalidateConversations();
     revalidatePath("/quotes");
     revalidatePath("/deals");
     return { success: true, data: { dealId: created.id, name, wasPrimary } };
@@ -885,7 +890,7 @@ export async function undoMoveQuoteToNewDeal(input: {
       await deleteDealCustomer(customer.customerId, created.id);
     }
     await deleteDeal(created.id);
-    revalidatePath("/conversations");
+    revalidateConversations();
     revalidatePath("/quotes");
     revalidatePath("/deals");
     return { success: true };
@@ -912,7 +917,7 @@ export async function markDealViewed(dealId: string): Promise<{ success: true } 
 
 export async function recordSystemActivity(input: {
   conversationId: string;
-  kind: "deal" | "quote" | "activeQuote" | "created" | "renamed" | "savedRevision" | "duplicatedQuote";
+  kind: "deal" | "quote" | "activeQuote" | "created" | "renamed" | "savedRevision" | "duplicatedQuote" | "movedQuote";
   name: string;
   dealId?: string;
   previousName?: string;
@@ -929,11 +934,13 @@ export async function recordSystemActivity(input: {
       input.kind !== "created" &&
       input.kind !== "renamed" &&
       input.kind !== "savedRevision" &&
-      input.kind !== "duplicatedQuote") ||
+      input.kind !== "duplicatedQuote" &&
+      input.kind !== "movedQuote") ||
     !name ||
     (input.kind === "created" && !dealId) ||
     (input.kind === "renamed" && !previousName) ||
-    (input.kind === "savedRevision" && !previousName)
+    (input.kind === "savedRevision" && !previousName) ||
+    (input.kind === "movedQuote" && !previousName)
   ) {
     return { error: "A conversation and event are required" };
   }
@@ -1010,7 +1017,7 @@ export async function markVisibleActivitiesRead(input: {
   try {
     const updated = await markActivitiesReadAt(parsed.data.conversationId, parsed.data.positions);
     const unreadCount = await conversationUnreadCount(parsed.data.conversationId);
-    revalidatePath("/conversations");
+    revalidateConversations();
     return {
       success: true,
       data: { readAt: updated.readAt, positions: updated.positions, unread: unreadCount > 0, unreadCount },
@@ -1033,7 +1040,7 @@ export async function markConversationsRead(input: {
 
   try {
     const counts = await updateActivitiesRead(parsed.data);
-    revalidatePath("/conversations");
+    revalidateConversations();
     return { success: true, data: { counts } };
   } catch (error) {
     void recordCrmLog({ feature: "conversations", error });
@@ -1321,7 +1328,7 @@ export async function dismissConversationSuggestion(
   try {
     const dismissed = await updateSuggestion(parsed.data.id, { status: "dismissed" });
     if (!dismissed) return { error: "Could not dismiss this suggestion" };
-    revalidatePath("/conversations");
+    revalidateConversations();
     return { success: true, data: { id: dismissed.id } };
   } catch (error) {
     void recordCrmLog({ feature: "conversations", error });
@@ -1339,7 +1346,7 @@ export async function restoreConversationSuggestion(
   try {
     const restored = await updateSuggestion(parsed.data.id, { status: "pending" });
     if (!restored) return { error: "Could not restore this suggestion" };
-    revalidatePath("/conversations");
+    revalidateConversations();
     return { success: true, data: { id: restored.id } };
   } catch (error) {
     void recordCrmLog({ feature: "conversations", error });
@@ -1356,7 +1363,7 @@ export async function applyConversationSuggestion(
   if (!parsed.success) return { error: "A suggestion is required" };
   try {
     await updateSuggestion(parsed.data.id, { status: "applied" });
-    revalidatePath("/conversations");
+    revalidateConversations();
     return { success: true, data: { id: parsed.data.id } };
   } catch (error) {
     void recordCrmLog({ feature: "conversations", error });

@@ -959,8 +959,23 @@ export function ConversationDetail({
     setSelectedRevisionId(null);
     onActivateDeal(createdDealId, stage);
     setQuoteToast(null);
+    const dealName = result.data.name.trim() || copy.createDeal;
+    const createdLog = await recordSystemActivity({
+      conversationId: workspace.id,
+      kind: "created",
+      name: dealName,
+      dealId: createdDealId,
+    });
+    const movedLog = await recordSystemActivity({
+      conversationId: workspace.id,
+      kind: "movedQuote",
+      name: dealName,
+      previousName: quoteName,
+    });
+    const logged = [createdLog, movedLog].flatMap((item) => ("error" in item ? [] : [item.data]));
+    for (const activity of logged) publishActivity(activity);
     showNotice(
-      copy.quoteMovedToast(quoteName, result.data.name.trim() || "a new deal"),
+      copy.quoteMovedToast(quoteName, dealName),
       async () => {
         const undone = await undoMoveQuoteToNewDeal({
           quoteId,
@@ -969,6 +984,7 @@ export function ConversationDetail({
           wasPrimary,
         });
         if ("error" in undone) return false;
+        for (const activity of logged) await retractActivity(activity);
         forgetLoadedDeals([dealId, createdDealId]);
         const restored = await onFocusDeal(dealId);
         const restoredStage = restored?.deals.find((deal) => deal.id === dealId)?.stage ?? "new_lead";

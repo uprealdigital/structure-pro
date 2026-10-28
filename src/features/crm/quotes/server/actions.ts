@@ -34,6 +34,11 @@ import {
 import { quoteWindowExpired } from "@/src/features/crm/quotes/utils/status";
 import { recordCrmLog } from "@/src/features/crm/common/db/log";
 
+function revalidateConversations() {
+  revalidatePath("/");
+  revalidatePath("/conversations");
+}
+
 export async function saveQuoteSelections(input: {
   quoteId: string;
   selections: unknown;
@@ -69,7 +74,7 @@ export async function saveQuoteSelections(input: {
     const stored = renders
       ? await storeRevisionRenders(revision.id, renders.data)
       : null;
-    revalidatePath("/conversations");
+    revalidateConversations();
     revalidatePath("/quotes");
     revalidatePath("/deals");
     revalidatePath(`/quote/${quoteId}`);
@@ -135,7 +140,7 @@ export async function saveQuoteRevisionRenders(input: {
     if (!revision) return { error: "Quote revision was not found" };
     if (revision.renders) return { success: true, data: revision.renders };
     const stored = await storeRevisionRenders(revision.id, renders.data);
-    revalidatePath("/conversations");
+    revalidateConversations();
     revalidatePath("/quotes");
     revalidatePath(`/quote/${revision.quoteId}`);
     return { success: true, data: stored };
@@ -176,7 +181,7 @@ export async function shareQuoteRevisionPhotos(
     if (!revision) return { error: "Quote revision was not found" };
     const sharedPhotosAt = new Date().toISOString();
     const saved = await updateQuoteRevisionPhotosShare({ revisionId: revision.id, sharedPhotosAt });
-    revalidatePath("/conversations");
+    revalidateConversations();
     revalidatePath("/quotes");
     revalidatePath(`/quote/${revision.quoteId}`);
     return { success: true, data: { sharedPhotosAt: saved.sharedPhotosAt ?? sharedPhotosAt } };
@@ -240,7 +245,7 @@ export async function createDealQuoteAction(input: {
         : portalCopy.quote,
       conversationId: parsed.data.conversationId,
     });
-    revalidatePath("/conversations");
+    revalidateConversations();
     revalidatePath("/quotes");
     revalidatePath("/deals");
     return {
@@ -330,7 +335,7 @@ export async function duplicateQuote(input: {
         : portalCopy.quote,
       conversationId: parsed.data.conversationId,
     });
-    revalidatePath("/conversations");
+    revalidateConversations();
     revalidatePath("/quotes");
     revalidatePath("/deals");
     return {
@@ -364,7 +369,7 @@ export async function cancelQuote(input: { quoteId: string }): Promise<{ success
     const quote = await readQuote(parsed.data.quoteId);
     if (!quote) return { error: "Quote was not found" };
     await setQuoteStatus(quote.id, "voided");
-    revalidatePath("/conversations");
+    revalidateConversations();
     revalidatePath("/quotes");
     revalidatePath("/deals");
     revalidatePath(`/quote/${quote.id}`);
@@ -389,7 +394,7 @@ export async function activateQuoteRevision(input: {
       return { error: "Quote revision was not found" };
     }
     await updateQuote(parsed.data.quoteId, { activeRevisionId: revision.id });
-    revalidatePath("/conversations");
+    revalidateConversations();
     revalidatePath("/quotes");
     revalidatePath("/deals");
     return { success: true, data: { revisionId: revision.id } };
@@ -422,7 +427,7 @@ export async function payQuoteDeposit(
       await updateDeal(deal.id, { status: "deal_won" });
     }
     await setQuoteStatus(parsed.data.quoteId, "deposit_paid");
-    revalidatePath("/conversations");
+    revalidateConversations();
     revalidatePath("/quotes");
     revalidatePath("/deals");
     revalidatePath(`/quote/${parsed.data.quoteId}`);
@@ -435,7 +440,7 @@ export async function payQuoteDeposit(
 }
 
 function revalidateQuote(quoteId: string) {
-  revalidatePath("/conversations");
+  revalidateConversations();
   revalidatePath("/quotes");
   revalidatePath("/deals");
   revalidatePath(`/quote/${quoteId}`);

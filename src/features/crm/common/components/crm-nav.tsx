@@ -82,7 +82,7 @@ export function CrmNav() {
   const pathname = usePathname();
   const dealsActive = pathname === "/deals" || pathname.startsWith("/deals/");
   const conversationsActive =
-    pathname === "/conversations" || pathname.startsWith("/conversations/");
+    pathname === "/" || pathname === "/conversations" || pathname.startsWith("/conversations/");
   const customersActive = pathname === "/customers" || pathname.startsWith("/customers/");
   const quotesActive = pathname === "/quotes" || pathname.startsWith("/quotes/");
   const settingsActive = pathname === "/settings" || pathname.startsWith("/settings/");
@@ -116,7 +116,7 @@ export function CrmNav() {
 
         <nav aria-label={copy.navigation} className="space-y-1 pr-1">
           <NavItem
-            href="/conversations"
+            href="/"
             current={conversationsActive}
             countStyle="pill"
             count={counts && counts.unreadActivityCount > 0 ? counts.unreadActivityCount : undefined}

@@ -17,6 +17,11 @@ import {
 import { newInvoiceId } from "@/src/features/cpq/utils/id";
 import { toStoredConfiguration } from "@/src/features/cpq/utils/mappers";
 
+function revalidateConversations() {
+  revalidatePath("/");
+  revalidatePath("/conversations");
+}
+
 export type ActionResult<T> = { success: true; data: T } | { error: string };
 
 function quoteChannel(): "twilio" | "telegram" {
@@ -113,7 +118,7 @@ export async function createQuoteAction(input: {
     });
 
     revalidatePath("/cpq");
-    revalidatePath("/conversations");
+    revalidateConversations();
     return { success: true, data: { invoiceId, channel: notified.channel } };
   } catch (error) {
     void recordCpqLog({ feature: "quotes", error });

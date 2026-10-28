@@ -64,6 +64,7 @@ const duplicatedQuotePrefix = "duplicated-quote:";
 const savedRevisionPrefix = "saved-revision:";
 const activeQuotePrefix = "active-quote:";
 const createdDealPrefix = "deal-created:";
+const movedQuotePrefix = "quote-moved:";
 const dealStatusPrefix = "deal-status:";
 const quoteStatusPrefix = "quote-status:";
 const renamedDealPrefix = "deal-renamed:";
@@ -77,7 +78,8 @@ export type SystemEventKind =
   | "quoteStatus"
   | "renamed"
   | "savedRevision"
-  | "duplicatedQuote";
+  | "duplicatedQuote"
+  | "movedQuote";
 
 export type SystemEvent = {
   kind: SystemEventKind;
@@ -111,6 +113,9 @@ export function systemEventBody(
     return `${savedRevisionPrefix}${encodeURIComponent(previousName)}:${encodeURIComponent(name)}`;
   }
   if (kind === "duplicatedQuote") return `${duplicatedQuotePrefix}${encodeURIComponent(name)}`;
+  if (kind === "movedQuote" && previousName) {
+    return `${movedQuotePrefix}${encodeURIComponent(previousName)}:${encodeURIComponent(name)}`;
+  }
   if (kind === "created" && dealId) return `${createdDealPrefix}${dealId}:${name}`;
   if (kind === "renamed" && previousName) {
     return `${renamedDealPrefix}${encodeURIComponent(previousName)}:${encodeURIComponent(name)}`;
@@ -175,6 +180,17 @@ export function systemEventText(text: string): SystemEvent {
     const name = decodedName(text.slice(duplicatedQuotePrefix.length));
     if (name) return { kind: "duplicatedQuote", label: copy.duplicatedQuoteBadge, name };
   }
+  if (text.startsWith(movedQuotePrefix)) {
+    const rest = text.slice(movedQuotePrefix.length);
+    const split = rest.indexOf(":");
+    if (split > 0) {
+      const quoteName = decodedName(rest.slice(0, split));
+      const dealName = decodedName(rest.slice(split + 1));
+      if (quoteName && dealName) {
+        return { kind: "movedQuote", label: copy.quoteMovedTo, previousName: quoteName, name: dealName };
+      }
+    }
+  }
   if (text.startsWith(savedRevisionPrefix)) {
     const rest = text.slice(savedRevisionPrefix.length);
     const split = rest.indexOf(":");
@@ -225,6 +241,9 @@ export function activityPreview(activity: Activity | undefined): string {
     }
     if (event.kind === "savedRevision" && event.previousName) {
       return `${messagePreview(event.previousName)} ${name}`;
+    }
+    if (event.kind === "movedQuote" && event.previousName) {
+      return `${messagePreview(event.previousName)} ${copy.quoteMovedTo} ${name}`;
     }
     if (event.kind === "created" || event.kind === "duplicatedQuote") {
       return `${name} ${copy.duplicatedQuoteBadge}`;
