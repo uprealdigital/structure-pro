@@ -15,6 +15,7 @@ export const cpqLogSchema = z.object({
   parsedResponse: z.unknown(),
   status: cpqLogStatusSchema,
   errorMessage: z.string().nullable(),
+  readAt: z.string().nullable(),
   createdAt: z.string(),
 });
 

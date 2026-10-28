@@ -55,6 +55,7 @@ export type CpqLogRow = {
   parsed_response: unknown;
   status: string;
   error_message: string | null;
+  read_at: string | null;
   created_at: string;
 };
 
@@ -76,6 +77,7 @@ export function toCpqLog(row: CpqLogRow): CpqLog | undefined {
     parsedResponse: jsonField(row.parsed_response),
     status: row.status,
     errorMessage: row.error_message,
+    readAt: row.read_at,
     createdAt: row.created_at,
   });
   return log.success ? log.data : undefined;

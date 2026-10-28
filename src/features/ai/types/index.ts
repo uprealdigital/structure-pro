@@ -208,6 +208,7 @@ export const aiActivityLogSchema = z.object({
   status: aiActivityStatusSchema,
   errorMessage: z.string().nullable(),
   executionTimeMs: z.number().int().nonnegative(),
+  readAt: z.string().nullable(),
   createdAt: z.string(),
 });
 

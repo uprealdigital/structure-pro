@@ -70,6 +70,7 @@ export type AiActivityLogRow = {
   status: string;
   error_message: string | null;
   execution_time_ms: number;
+  read_at: string | null;
   created_at: string;
 };
 
@@ -105,6 +106,7 @@ export function toAiActivityLog(row: AiActivityLogRow): AiActivityLog | undefine
     status: row.status,
     errorMessage: row.error_message,
     executionTimeMs,
+    readAt: row.read_at,
     createdAt: row.created_at,
   });
   return log.success ? log.data : undefined;

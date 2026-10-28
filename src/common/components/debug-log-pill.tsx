@@ -1,6 +1,6 @@
 "use client";
 
-import { Bug } from "lucide-react";
+import { Bug, Check, Filter } from "lucide-react";
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore, type PointerEvent as ReactPointerEvent } from "react";
 import { createPortal } from "react-dom";
 import type { AiActivityStatus } from "@/src/features/ai/types";
@@ -12,10 +12,18 @@ const copy = {
   cpq: "CPQ",
   open: "Open debug logs",
   close: "Close debug logs",
-  empty: "No logs yet.",
+  empty: "No unread logs.",
   detected: "Detected",
   none: "Nothing needed",
   error: "Error",
+  clear: "Clear",
+  clearAll: "Clear all",
+  clearing: "Clearing",
+  filters: "Filters",
+  clearAi: "Clear AI logs",
+  clearCrm: "Clear CRM logs",
+  clearCpq: "Clear CPQ logs",
+  clearEvery: "Clear all logs",
   model: "Model",
   deal: "Deal",
   activities: "Activities",
@@ -23,9 +31,11 @@ const copy = {
   raw: "Raw response",
   parsed: "Parsed response",
   migration: "Run supabase/migrate-feature-logs.sql in the Supabase SQL editor.",
+  readAtMigration: "Run supabase/migrate-feature-log-read-at.sql in the Supabase SQL editor.",
 };
 
 const storageKey = "structure-pro-debug-logs";
+const statusStorageKey = "structure-pro-debug-log-statuses";
 const margin = 16;
 const kinds = [
   { id: "ai", label: copy.ai },
@@ -53,16 +63,19 @@ type DebugLog = {
 type LogSection = {
   kind: LogKind;
   logs: DebugLog[];
-  errorCount: number;
+  unreadCount: number;
   error: string | null;
 };
 
 const emptySections: LogSection[] = kinds.map((kind) => ({
   kind: kind.id,
   logs: [],
-  errorCount: 0,
+  unreadCount: 0,
   error: null,
 }));
+
+const statusOptions: AiActivityStatus[] = ["error", "detected", "none"];
+const defaultStatuses: AiActivityStatus[] = ["error"];
 
 type Edge = "left" | "right" | "top" | "bottom";
 type Dock = { edge: Edge; ratio: number };
@@ -152,14 +165,37 @@ function pretty(value: unknown): string {
 }
 
 function loadErrorText(message: string): string {
+  if (/read_at/i.test(message)) return `${message} ${copy.readAtMigration}`;
   if (/could not find the table|schema cache|does not exist/i.test(message)) {
     return `${message} ${copy.migration}`;
   }
   return message;
 }
 
+function sameStatuses(left: AiActivityStatus[], right: AiActivityStatus[]): boolean {
+  return left.length === right.length && left.every((status, index) => status === right[index]);
+}
+
+function savedStatuses(): AiActivityStatus[] {
+  try {
+    const raw = window.localStorage.getItem(statusStorageKey);
+    if (!raw) return defaultStatuses;
+    const parsed = JSON.parse(raw) as unknown;
+    if (!Array.isArray(parsed)) return defaultStatuses;
+    return statusOptions.filter((status) => parsed.includes(status));
+  } catch {
+    return defaultStatuses;
+  }
+}
+
 function kindLabel(kind: LogKind): string {
   return kinds.find((item) => item.id === kind)?.label ?? kind;
+}
+
+function clearName(kind: LogKind): string {
+  if (kind === "ai") return copy.clearAi;
+  if (kind === "crm") return copy.clearCrm;
+  return copy.clearCpq;
 }
 
 const fallbackPill: Size = { width: 132, height: 36 };
@@ -208,7 +244,12 @@ export function DebugLogPill() {
   const [shown, setShown] = useState(false);
   const [sections, setSections] = useState<LogSection[]>(emptySections);
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [statuses, setStatuses] = useState<AiActivityStatus[]>(defaultStatuses);
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const [clearing, setClearing] = useState<LogKind | "all" | null>(null);
+  const [clearError, setClearError] = useState<string | null>(null);
   const root = useRef<HTMLDivElement>(null);
+  const filterRoot = useRef<HTMLDivElement>(null);
   const pillObserver = useRef<ResizeObserver | null>(null);
 
   const pillRef = useCallback((node: HTMLButtonElement | null) => {
@@ -224,46 +265,58 @@ export function DebugLogPill() {
     pillObserver.current = observer;
   }, []);
 
-  useEffect(() => {
-    let stopped = false;
-    async function load() {
-      try {
-        const response = await fetch("/api/ai/activity-logs", { cache: "no-store" });
-        if (!stopped) setShown(true);
-        const body = (await response.json()) as { sections?: LogSection[]; error?: string };
-        if (!response.ok) throw new Error(body.error || "Could not load logs");
-        if (stopped) return;
-        const next = kinds.map((kind) => {
-          const found = body.sections?.find((item) => item.kind === kind.id);
-          return {
-            kind: kind.id,
-            logs: Array.isArray(found?.logs) ? found.logs : [],
-            errorCount: typeof found?.errorCount === "number" ? found.errorCount : 0,
-            error: found?.error ?? null,
-          };
-        });
-        setSections(next);
-      } catch (error) {
-        if (stopped) return;
-        setShown(true);
-        const message = error instanceof Error ? error.message : "Could not load logs";
-        setSections(kinds.map((kind) => ({ kind: kind.id, logs: [], errorCount: 0, error: message })));
-      }
+  const statusKey = statuses.join(",");
+  const requestId = useRef(0);
+
+  const load = useCallback(async () => {
+    const id = ++requestId.current;
+    try {
+      const response = await fetch(`/api/ai/activity-logs?statuses=${encodeURIComponent(statusKey)}`, { cache: "no-store" });
+      const body = (await response.json()) as { sections?: LogSection[]; error?: string };
+      if (id !== requestId.current) return;
+      setShown(true);
+      if (!response.ok) throw new Error(body.error || "Could not load logs");
+      const next = kinds.map((kind) => {
+        const found = body.sections?.find((item) => item.kind === kind.id);
+        return {
+          kind: kind.id,
+          logs: Array.isArray(found?.logs) ? found.logs : [],
+          unreadCount: typeof found?.unreadCount === "number" ? found.unreadCount : 0,
+          error: found?.error ?? null,
+        };
+      });
+      setSections(next);
+    } catch (error) {
+      if (id !== requestId.current) return;
+      setShown(true);
+      const message = error instanceof Error ? error.message : "Could not load logs";
+      setSections(kinds.map((kind) => ({ kind: kind.id, logs: [], unreadCount: 0, error: message })));
     }
+  }, [statusKey]);
+
+  useEffect(() => {
+    const saved = savedStatuses();
+    setStatuses((current) => (sameStatuses(saved, current) ? current : saved));
+  }, []);
+
+  useEffect(() => {
     void load();
     const timer = window.setInterval(() => {
       if (document.visibilityState === "visible") void load();
     }, 5000);
     return () => {
-      stopped = true;
+      requestId.current += 1;
       window.clearInterval(timer);
     };
-  }, []);
+  }, [load]);
 
   useEffect(() => {
     if (!open) return;
     function onKey(event: KeyboardEvent) {
-      if (event.key === "Escape") setOpen(false);
+      if (event.key === "Escape") {
+        setFiltersOpen(false);
+        setOpen(false);
+      }
     }
     function onPointer(event: PointerEvent) {
       if (!root.current?.contains(event.target as Node)) setOpen(false);
@@ -281,7 +334,7 @@ export function DebugLogPill() {
   const measured = viewport.width > 0 && viewport.height > 0;
   const point = measured && drag ? drag : measured ? place(dock, viewport, pillSize) : { x: margin, y: margin };
   const placed = drag ? dockFor(point, viewport, pillSize) : dock;
-  const errorCount = sections.reduce((sum, section) => sum + section.errorCount, 0);
+  const unreadCount = sections.reduce((sum, section) => sum + section.unreadCount, 0);
   const loadError = sections.some((section) => section.error);
   const panelWidth = Math.min(420, Math.max(280, viewport.width - margin * 2));
   const space =
@@ -331,6 +384,7 @@ export function DebugLogPill() {
       button.removeEventListener("pointercancel", up);
       if (!moved) {
         setDrag(null);
+        setFiltersOpen(false);
         setOpen((value) => !value);
         return;
       }
@@ -343,11 +397,53 @@ export function DebugLogPill() {
     button.addEventListener("pointercancel", up);
   }
 
+  function toggleStatus(status: AiActivityStatus) {
+    setStatuses((current) => {
+      const next = current.includes(status)
+        ? current.filter((item) => item !== status)
+        : statusOptions.filter((item) => item === status || current.includes(item));
+      window.localStorage.setItem(statusStorageKey, JSON.stringify(next));
+      return next;
+    });
+  }
+
+  async function clear(kind: LogKind | "all") {
+    if (clearing) return;
+    setClearing(kind);
+    setClearError(null);
+    setFiltersOpen(false);
+    try {
+      const response = await fetch("/api/ai/activity-logs", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ kind, statuses }),
+      });
+      const body = (await response.json()) as { error?: string };
+      if (!response.ok) throw new Error(body.error || "Could not clear logs");
+      await load();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Could not clear logs";
+      setClearError(loadErrorText(message));
+      await load();
+    } finally {
+      setClearing(null);
+    }
+  }
+
+  function onPanelPointerDown(event: ReactPointerEvent<HTMLElement>) {
+    if (!filterRoot.current?.contains(event.target as Node)) setFiltersOpen(false);
+  }
+
+  const filtersChanged = !sameStatuses(statuses, defaultStatuses);
+  const actionClass =
+    "cursor-pointer rounded-md px-1.5 py-0.5 text-[11px] font-semibold text-gray-600 hover:bg-gray-100 disabled:cursor-default disabled:text-gray-300 disabled:hover:bg-transparent";
+
   return createPortal(
     <div ref={root} className="pointer-events-none fixed inset-0 z-[90]">
       {open ? (
         <section
           aria-label={copy.logs}
+          onPointerDown={onPanelPointerDown}
           className="pointer-events-auto fixed flex flex-col overflow-hidden rounded-xl border border-gray-200 bg-white text-gray-950 shadow-xl"
           style={
             measured
@@ -362,19 +458,86 @@ export function DebugLogPill() {
               : { width: 360, maxHeight: 420, left: margin, bottom: margin + 48 }
           }
         >
+          <div className="relative z-20 flex shrink-0 items-center justify-between gap-3 border-b border-gray-200 bg-white px-3 py-2">
+            <div ref={filterRoot} className="relative">
+              <button
+                type="button"
+                aria-expanded={filtersOpen}
+                aria-haspopup="menu"
+                onClick={() => setFiltersOpen((value) => !value)}
+                className={`flex cursor-pointer items-center gap-1.5 rounded-md px-1.5 py-0.5 text-[11px] font-semibold ${
+                  filtersOpen || filtersChanged ? "bg-gray-950 text-white" : "text-gray-600 hover:bg-gray-100"
+                }`}
+              >
+                <Filter className="h-3 w-3" strokeWidth={2} aria-hidden="true" />
+                {copy.filters}
+              </button>
+              {filtersOpen ? (
+                <div
+                  role="menu"
+                  aria-label={copy.filters}
+                  className="absolute top-full left-0 z-30 mt-1 w-44 rounded-lg border border-gray-200 bg-white p-1 shadow-lg"
+                >
+                  {statusOptions.map((status) => {
+                    const selected = statuses.includes(status);
+                    return (
+                      <button
+                        key={status}
+                        type="button"
+                        role="menuitemcheckbox"
+                        aria-checked={selected}
+                        onClick={() => toggleStatus(status)}
+                        className="flex w-full cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs text-gray-800 hover:bg-gray-50"
+                      >
+                        <span
+                          className={`flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded border ${
+                            selected ? "border-gray-950 bg-gray-950 text-white" : "border-gray-300 bg-white"
+                          }`}
+                        >
+                          {selected ? <Check className="h-2.5 w-2.5" strokeWidth={3} aria-hidden="true" /> : null}
+                        </span>
+                        {statusLabel[status]}
+                      </button>
+                    );
+                  })}
+                </div>
+              ) : null}
+            </div>
+            <button
+              type="button"
+              aria-label={copy.clearEvery}
+              onClick={() => void clear("all")}
+              disabled={clearing !== null || unreadCount === 0}
+              className={actionClass}
+            >
+              {clearing === "all" ? copy.clearing : copy.clearAll}
+            </button>
+          </div>
+          {clearError ? (
+            <p className="shrink-0 border-b border-gray-100 px-3 py-2 text-xs leading-relaxed text-red-700">{clearError}</p>
+          ) : null}
           <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
             {sections.map((section) => (
               <section key={section.kind} aria-label={kindLabel(section.kind)}>
                 <div className="sticky top-0 z-10 flex items-center justify-between gap-3 border-b border-gray-100 bg-white px-3 py-2">
-                  <span className="rounded-full bg-gray-950 px-2 py-0.5 text-[11px] font-semibold text-white">
-                    {kindLabel(section.kind)}
-                  </span>
-                  <span
-                    className={`inline-flex min-w-5 items-center justify-center rounded-full px-1.5 py-0.5 text-[11px] font-semibold ${
-                      section.error || section.errorCount > 0 ? "bg-red-50 text-red-700" : "bg-gray-100 text-gray-600"
-                    }`}
-                  >
-                    {section.error ? "!" : section.errorCount}
+                  <span className="text-[11px] font-bold text-gray-950">{kindLabel(section.kind)}</span>
+                  <span className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      aria-label={clearName(section.kind)}
+                      onClick={() => void clear(section.kind)}
+                      disabled={clearing !== null || section.unreadCount === 0}
+                      className={actionClass}
+                    >
+                      {clearing === section.kind ? copy.clearing : copy.clear}
+                    </button>
+                    <span
+                      className={`inline-flex min-w-5 items-center justify-center rounded-full px-1.5 py-0.5 text-[11px] font-semibold ${
+                        section.error || section.unreadCount > 0 ? "bg-red-50 text-red-700" : "bg-gray-100 text-gray-600"
+                      }`}
+                    >
+                      {section.error ? "!" : section.unreadCount}
+                    </span>
                   </span>
                 </div>
                 {section.error ? (
@@ -454,10 +617,10 @@ export function DebugLogPill() {
         <span className="text-xs font-semibold">{copy.logs}</span>
         <span
           className={`inline-flex min-w-5 items-center justify-center rounded-full px-1.5 py-0.5 text-[11px] font-semibold ${
-            loadError || errorCount > 0 ? "bg-red-500 text-white" : "bg-white/15 text-white"
+            loadError || unreadCount > 0 ? "bg-red-500 text-white" : "bg-white/15 text-white"
           }`}
         >
-          {loadError ? "!" : errorCount}
+          {loadError ? "!" : unreadCount}
         </span>
       </button>
     </div>,

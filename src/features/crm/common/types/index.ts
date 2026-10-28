@@ -45,6 +45,7 @@ export const crmLogSchema = z.object({
   parsedResponse: z.unknown(),
   status: featureLogStatusSchema,
   errorMessage: z.string().nullable(),
+  readAt: z.string().nullable(),
   createdAt: z.string(),
 });
 

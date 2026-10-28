@@ -3,7 +3,7 @@ import { throwIfError } from "@/src/common/utils/error-handling";
 import { crmLogWriteSchema, type CrmLog, type FeatureLogStatus } from "@/src/features/crm/common/types";
 import { toCrmLog, type CrmLogRow } from "@/src/features/crm/common/utils/mappers";
 
-const columns = "id, feature, raw_response, parsed_response, status, error_message, created_at";
+const columns = "id, feature, raw_response, parsed_response, status, error_message, read_at, created_at";
 
 function crm() {
   return db("crm");
@@ -55,19 +55,36 @@ export async function recordCrmLog(input: {
   }
 }
 
-export async function readCrmLogs(limit: number): Promise<{ logs: CrmLog[]; errorCount: number }> {
-  const [listed, errors] = await Promise.all([
-    crm().from("logs").select(columns).order("created_at", { ascending: false }).limit(limit),
-    crm().from("logs").select("id", { count: "exact", head: true }).eq("status", "error"),
+export async function readCrmLogs(
+  limit: number,
+  statuses: FeatureLogStatus[],
+): Promise<{ logs: CrmLog[]; unreadCount: number }> {
+  if (statuses.length === 0) return { logs: [], unreadCount: 0 };
+  const unread = crm().from("logs").select("id", { count: "exact", head: true }).is("read_at", null).in("status", statuses);
+  const [listed, counted] = await Promise.all([
+    crm()
+      .from("logs")
+      .select(columns)
+      .is("read_at", null)
+      .in("status", statuses)
+      .order("created_at", { ascending: false })
+      .limit(limit),
+    unread,
   ]);
   throwIfError(listed.error);
-  throwIfError(errors.error);
+  throwIfError(counted.error);
   const rows = Array.isArray(listed.data) ? listed.data : [];
   return {
     logs: rows.flatMap((row) => {
       const log = toCrmLog(row as CrmLogRow);
       return log ? [log] : [];
     }),
-    errorCount: errors.count ?? 0,
+    unreadCount: counted.count ?? 0,
   };
+}
+
+export async function updateCrmLogsRead(statuses: FeatureLogStatus[]): Promise<void> {
+  if (statuses.length === 0) return;
+  const { error } = await crm().from("logs").update({ read_at: new Date().toISOString() }).is("read_at", null).in("status", statuses);
+  throwIfError(error);
 }

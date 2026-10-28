@@ -3,7 +3,7 @@ import { throwIfError } from "@/src/common/utils/error-handling";
 import { cpqLogWriteSchema, type CpqLog, type CpqLogWrite } from "@/src/features/cpq/types";
 import { toCpqLog, type CpqLogRow } from "@/src/features/cpq/utils/mappers";
 
-const columns = "id, feature, raw_response, parsed_response, status, error_message, created_at";
+const columns = "id, feature, raw_response, parsed_response, status, error_message, read_at, created_at";
 
 function cpq() {
   return db("cpq");
@@ -55,19 +55,35 @@ export async function recordCpqLog(input: {
   }
 }
 
-export async function readCpqLogs(limit: number): Promise<{ logs: CpqLog[]; errorCount: number }> {
-  const [listed, errors] = await Promise.all([
-    cpq().from("logs").select(columns).order("created_at", { ascending: false }).limit(limit),
-    cpq().from("logs").select("id", { count: "exact", head: true }).eq("status", "error"),
+export async function readCpqLogs(
+  limit: number,
+  statuses: CpqLogWrite["status"][],
+): Promise<{ logs: CpqLog[]; unreadCount: number }> {
+  if (statuses.length === 0) return { logs: [], unreadCount: 0 };
+  const [listed, counted] = await Promise.all([
+    cpq()
+      .from("logs")
+      .select(columns)
+      .is("read_at", null)
+      .in("status", statuses)
+      .order("created_at", { ascending: false })
+      .limit(limit),
+    cpq().from("logs").select("id", { count: "exact", head: true }).is("read_at", null).in("status", statuses),
   ]);
   throwIfError(listed.error);
-  throwIfError(errors.error);
+  throwIfError(counted.error);
   const rows = Array.isArray(listed.data) ? listed.data : [];
   return {
     logs: rows.flatMap((row) => {
       const log = toCpqLog(row as CpqLogRow);
       return log ? [log] : [];
     }),
-    errorCount: errors.count ?? 0,
+    unreadCount: counted.count ?? 0,
   };
+}
+
+export async function updateCpqLogsRead(statuses: CpqLogWrite["status"][]): Promise<void> {
+  if (statuses.length === 0) return;
+  const { error } = await cpq().from("logs").update({ read_at: new Date().toISOString() }).is("read_at", null).in("status", statuses);
+  throwIfError(error);
 }
