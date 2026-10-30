@@ -12,34 +12,6 @@ function crm() {
 }
 
 const dealColumns = "id, quote_id, source, status, previous_status, name, viewed_at, created_at";
-const namedDealColumns = "id, quote_id, source, status, previous_status, name, created_at";
-const legacyDealColumns = "id, quote_id, source, status, previous_status, created_at";
-
-function missingColumn(error: { message: string } | null, column: string): boolean {
-  if (!error) return false;
-  const message = error.message.toLowerCase();
-  return message.includes(column) && (message.includes("does not exist") || message.includes("schema cache"));
-}
-
-async function queryDeals(
-  run: (columns: string) => PromiseLike<{
-    data: unknown;
-    error: { message: string; code?: string; details?: string; hint?: string } | null;
-  }>,
-): Promise<unknown> {
-  const full = await run(dealColumns);
-  if (!full.error) return full.data;
-  if (missingColumn(full.error, "viewed_at")) {
-    const named = await run(namedDealColumns);
-    if (!named.error) return named.data;
-    if (!missingColumn(named.error, "name")) throwIfError(named.error);
-  } else if (!missingColumn(full.error, "name")) {
-    throwIfError(full.error);
-  }
-  const legacy = await run(legacyDealColumns);
-  throwIfError(legacy.error);
-  return legacy.data;
-}
 
 export async function createDeal(input: {
   quoteId: string;
@@ -53,22 +25,14 @@ export async function createDeal(input: {
       source: deal.source,
       status: "new_lead",
     })
-    .select(legacyDealColumns)
+    .select(dealColumns)
     .single();
 
   throwIfError(inserted.error);
   const saved = inserted.data ? toDeal(inserted.data as unknown as DealRow) : undefined;
   if (!saved) throw new Error("Deal was not saved");
   const name = defaultDealName(saved.source, saved.createdAt ?? new Date().toISOString());
-  try {
-    await updateDeal(saved.id, { name });
-  } catch (error) {
-    const message = error instanceof Error ? error.message.toLowerCase() : "";
-    const missingName =
-      message.includes("name") && (message.includes("does not exist") || message.includes("schema cache"));
-    if (!missingName) throw error;
-    return saved;
-  }
+  await updateDeal(saved.id, { name });
   return { ...saved, name };
 }
 
@@ -99,9 +63,8 @@ export async function assignDefaultDealName(dealId: string): Promise<string | un
 }
 
 export async function readDeals(): Promise<Deal[]> {
-  const data = await queryDeals((columns) =>
-    crm().from("deals").select(columns).order("created_at", { ascending: false }),
-  );
+  const { data, error } = await crm().from("deals").select(dealColumns).order("created_at", { ascending: false });
+  throwIfError(error);
   return ((data ?? []) as DealRow[])
     .map(toDeal)
     .filter((deal): deal is Deal => deal != null);
@@ -109,25 +72,28 @@ export async function readDeals(): Promise<Deal[]> {
 
 export async function readDealsByIds(ids: string[]): Promise<Deal[]> {
   if (ids.length === 0) return [];
-  const data = await queryDeals((columns) => crm().from("deals").select(columns).in("id", ids));
+  const { data, error } = await crm().from("deals").select(dealColumns).in("id", ids);
+  throwIfError(error);
   return ((data ?? []) as DealRow[])
     .map(toDeal)
     .filter((deal): deal is Deal => deal != null);
 }
 
 export async function readDeal(id: string): Promise<Deal | undefined> {
-  const data = await queryDeals((columns) =>
-    crm().from("deals").select(columns).eq("id", id).maybeSingle(),
-  );
+  const { data, error } = await crm().from("deals").select(dealColumns).eq("id", id).maybeSingle();
+  throwIfError(error);
   if (!data) return undefined;
   return toDeal(data as DealRow);
 }
 
 export async function readDealsByQuoteId(quoteId: string): Promise<Deal[]> {
   if (!quoteId) return [];
-  const data = await queryDeals((columns) =>
-    crm().from("deals").select(columns).eq("quote_id", quoteId).order("created_at", { ascending: false }),
-  );
+  const { data, error } = await crm()
+    .from("deals")
+    .select(dealColumns)
+    .eq("quote_id", quoteId)
+    .order("created_at", { ascending: false });
+  throwIfError(error);
   return ((data ?? []) as DealRow[])
     .map(toDeal)
     .filter((deal): deal is Deal => deal != null);
@@ -156,14 +122,6 @@ export async function updateDeal(
   if (next.quoteId !== undefined) row.quote_id = next.quoteId;
   if (next.viewedAt !== undefined) row.viewed_at = next.viewedAt;
   const updated = await crm().from("deals").update(row).eq("id", id);
-  if (updated.error && missingColumn(updated.error, "viewed_at") && "viewed_at" in row) {
-    delete row.viewed_at;
-    if (Object.keys(row).length === 1) return;
-    const retry = await crm().from("deals").update(row).eq("id", id);
-    throwIfError(retry.error);
-    if (statusActivity) await recordDealStatusActivity(statusActivity);
-    return;
-  }
   throwIfError(updated.error);
   if (statusActivity) await recordDealStatusActivity(statusActivity);
 }

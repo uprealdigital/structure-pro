@@ -767,14 +767,6 @@ export async function setCustomerActiveDeal(input: {
   }
 }
 
-function missingOptionalQuote(error: unknown): boolean {
-  const message = error instanceof Error ? error.message.toLowerCase() : "";
-  return (
-    message.includes("quote_id") &&
-    (message.includes("null value") || message.includes("not-null") || message.includes("not null"))
-  );
-}
-
 export async function createConnectedDeal(input: {
   dealId: string;
 }): Promise<{ success: true; data: { dealId: string; name: string; quoteId: string } } | { error: string }> {
@@ -869,9 +861,6 @@ export async function moveQuoteToNewDeal(input: {
   } catch (error) {
     void recordCrmLog({ feature: "conversations", error });
     if (createdId) await deleteDeal(createdId).catch(() => undefined);
-    if (missingOptionalQuote(error)) {
-      return { error: "Run supabase/migrate-crm-deal-optional-quote.sql in the Supabase SQL editor." };
-    }
     const message = error instanceof Error ? error.message : "Could not move this quote";
     return { error: message };
   }

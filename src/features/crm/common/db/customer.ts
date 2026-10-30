@@ -9,24 +9,6 @@ function crm() {
 }
 
 const customerColumns = "id, full_name, phone, email, opted_out, active_deal_id, created_at";
-const legacyCustomerColumns = "id, full_name, phone, email, opted_out, created_at";
-
-function missingActiveDeal(error: { message?: string } | null): boolean {
-  return /active_deal_id/i.test(error?.message ?? "");
-}
-
-async function selectCustomer(
-  run: (columns: string) => PromiseLike<{ data: unknown; error: { message: string } | null }>,
-): Promise<unknown> {
-  const first = await run(customerColumns);
-  if (!missingActiveDeal(first.error)) {
-    throwIfError(first.error);
-    return first.data;
-  }
-  const second = await run(legacyCustomerColumns);
-  throwIfError(second.error);
-  return second.data;
-}
 
 export async function phoneOptedOut(phone: string): Promise<boolean> {
   const { data, error } = await crm()
@@ -41,9 +23,8 @@ export async function phoneOptedOut(phone: string): Promise<boolean> {
 }
 
 export async function readCustomerByPhone(phone: string): Promise<Customer | undefined> {
-  const data = await selectCustomer((columns) =>
-    crm().from("customers").select(columns).eq("phone", phone).maybeSingle(),
-  );
+  const { data, error } = await crm().from("customers").select(customerColumns).eq("phone", phone).maybeSingle();
+  throwIfError(error);
   if (!data) return undefined;
   return toCustomer(data as CustomerRow);
 }
@@ -65,7 +46,7 @@ export async function createCustomer(input: {
       opted_out: optedOut,
       updated_at: new Date().toISOString(),
     })
-    .select(legacyCustomerColumns)
+    .select(customerColumns)
     .single();
 
   throwIfError(error);
@@ -85,17 +66,18 @@ export async function ensureCustomerThread(customer: Customer): Promise<void> {
 }
 
 export async function readCustomer(id: string): Promise<Customer | undefined> {
-  const data = await selectCustomer((columns) =>
-    crm().from("customers").select(columns).eq("id", id).maybeSingle(),
-  );
+  const { data, error } = await crm().from("customers").select(customerColumns).eq("id", id).maybeSingle();
+  throwIfError(error);
   if (!data) return undefined;
   return toCustomer(data as CustomerRow);
 }
 
 export async function readCustomers(): Promise<Customer[]> {
-  const data = await selectCustomer((columns) =>
-    crm().from("customers").select(columns).order("created_at", { ascending: false }),
-  );
+  const { data, error } = await crm()
+    .from("customers")
+    .select(customerColumns)
+    .order("created_at", { ascending: false });
+  throwIfError(error);
   return ((data ?? []) as CustomerRow[])
     .map(toCustomer)
     .filter((customer): customer is Customer => customer != null);

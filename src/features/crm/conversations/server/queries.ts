@@ -101,26 +101,10 @@ async function revisionsForQuote(
   quoteId: string,
   selections: NonNullable<ConversationDealOption["quote"]>["selections"],
 ): Promise<{ revisions: ConversationQuoteRevision[]; activeRevisionId: string | undefined }> {
-  let rows: Awaited<ReturnType<typeof readQuoteRevisions>> = [];
-  let activeRevisionId: string | undefined;
-  try {
-    [rows, activeRevisionId] = await Promise.all([
-      readQuoteRevisions(quoteId),
-      readActiveRevisionId(quoteId),
-    ]);
-  } catch (error) {
-    const message = error instanceof Error ? error.message : "";
-    if (!/quote_revisions|active_revision_id|schema cache/i.test(message)) throw error;
-    const fallback = toConversationQuoteRevision({
-      id: quoteId,
-      revisionNumber: 1,
-      status: "draft",
-      createdAt: "",
-      updatedAt: "",
-      selections,
-    });
-    return { revisions: fallback ? [fallback] : [], activeRevisionId: undefined };
-  }
+  const [rows, activeRevisionId] = await Promise.all([
+    readQuoteRevisions(quoteId),
+    readActiveRevisionId(quoteId),
+  ]);
   const revisions = rows
     .map((row) =>
       toConversationQuoteRevision({

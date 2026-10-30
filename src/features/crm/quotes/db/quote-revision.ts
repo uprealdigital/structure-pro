@@ -20,43 +20,9 @@ function crm() {
 }
 
 const revisionColumns =
-  "id, quote_id, revision_number, status, config, config_changes, communication, renders, created_at, updated_at";
-const revisionColumnsWithShare =
   "id, quote_id, revision_number, status, config, config_changes, communication, renders, shared_photos_at, shared_quote_at, created_at, updated_at";
-const revisionColumnsWithoutRenders =
-  "id, quote_id, revision_number, status, config, config_changes, communication, created_at, updated_at";
-const shareMigration = "Run supabase/migrate-crm-quote-revision-shared-at.sql in the Supabase SQL editor.";
-const legacyRevisionColumns =
-  "id, quote_id, revision_number, status, selections, communication, created_at, updated_at";
 const renderBucket = "quote-revision-renders";
 const maxRenderBytes = 8 * 1024 * 1024;
-
-function missingConfigColumn(error: { message: string } | null): boolean {
-  if (!error) return false;
-  const message = error.message.toLowerCase();
-  return (
-    (message.includes("config") || message.includes("selections")) &&
-    (message.includes("schema cache") || message.includes("could not find") || message.includes("does not exist"))
-  );
-}
-
-function missingShareColumn(error: { message: string } | null): boolean {
-  if (!error) return false;
-  const message = error.message.toLowerCase();
-  return (
-    (message.includes("shared_photos_at") || message.includes("shared_quote_at")) &&
-    (message.includes("schema cache") || message.includes("could not find") || message.includes("does not exist"))
-  );
-}
-
-function missingRendersColumn(error: { message: string } | null): boolean {
-  if (!error) return false;
-  const message = error.message.toLowerCase();
-  return (
-    message.includes("renders") &&
-    (message.includes("schema cache") || message.includes("could not find") || message.includes("does not exist"))
-  );
-}
 
 function rowsFrom(data: unknown): QuoteRevisionRow[] {
   if (!data) return [];
@@ -66,36 +32,9 @@ function rowsFrom(data: unknown): QuoteRevisionRow[] {
 async function revisionRows(
   apply: (columns: string) => PromiseLike<{ data: unknown; error: { message: string } | null }>,
 ): Promise<QuoteRevisionRow[]> {
-  const current = await apply(revisionColumnsWithShare);
-  if (missingShareColumn(current.error)) {
-    return revisionRowsFrom(apply, revisionColumns);
-  }
-  if (missingRendersColumn(current.error)) {
-    return revisionRowsFrom(apply, revisionColumnsWithoutRenders);
-  }
-  if (!missingConfigColumn(current.error)) {
-    throwIfError(current.error);
-    return rowsFrom(current.data);
-  }
-  return revisionRowsFrom(apply, legacyRevisionColumns);
-}
-
-async function revisionRowsFrom(
-  apply: (columns: string) => PromiseLike<{ data: unknown; error: { message: string } | null }>,
-  columns: string,
-): Promise<QuoteRevisionRow[]> {
-  const current = await apply(columns);
-  if (!missingConfigColumn(current.error)) {
-    throwIfError(current.error);
-    return rowsFrom(current.data);
-  }
-  const legacy = await apply(legacyRevisionColumns);
-  throwIfError(legacy.error);
-  return rowsFrom(legacy.data).map((row) => ({
-    ...row,
-    config: row.config ?? row.selections,
-    config_changes: row.config_changes ?? {},
-  }));
+  const current = await apply(revisionColumns);
+  throwIfError(current.error);
+  return rowsFrom(current.data);
 }
 
 function savedRevision(row: QuoteRevisionRow | undefined): QuoteRevision {
@@ -117,20 +56,10 @@ export async function createQuoteRevision(input: {
     .order("revision_number", { ascending: false })
     .limit(1)
     .maybeSingle();
-  const previousRow = missingConfigColumn(latest.error)
-    ? await crm()
-        .from("quote_revisions")
-        .select("revision_number, selections")
-        .eq("quote_id", revision.quoteId)
-        .order("revision_number", { ascending: false })
-        .limit(1)
-        .maybeSingle()
-    : latest;
-  if (missingConfigColumn(latest.error)) throwIfError(previousRow.error);
-  else throwIfError(latest.error);
-  const latestRow = previousRow.data as { revision_number?: unknown; config?: unknown; selections?: unknown } | null;
+  throwIfError(latest.error);
+  const latestRow = latest.data as { revision_number?: unknown; config?: unknown } | null;
   const current = typeof latestRow?.revision_number === "number" ? latestRow.revision_number : 0;
-  const previous = quoteSelectionsSchema.safeParse(latestRow?.config ?? latestRow?.selections);
+  const previous = quoteSelectionsSchema.safeParse(latestRow?.config);
   const configChanges = changedConfig(previous.success ? previous.data : undefined, revision.selections);
   const inserted = await crm()
     .from("quote_revisions")
@@ -143,26 +72,8 @@ export async function createQuoteRevision(input: {
     })
     .select(revisionColumns)
     .single();
-  if (!missingConfigColumn(inserted.error)) {
-    throwIfError(inserted.error);
-    return savedRevision(inserted.data as QuoteRevisionRow);
-  }
-  const legacy = await crm()
-    .from("quote_revisions")
-    .insert({
-      quote_id: revision.quoteId,
-      revision_number: current + 1,
-      status: revision.status,
-      selections: revision.selections,
-    })
-    .select(legacyRevisionColumns)
-    .single();
-  throwIfError(legacy.error);
-  return savedRevision({
-    ...(legacy.data as QuoteRevisionRow),
-    config: revision.selections,
-    config_changes: configChanges,
-  });
+  throwIfError(inserted.error);
+  return savedRevision(inserted.data as QuoteRevisionRow);
 }
 
 function toRevisions(rows: QuoteRevisionRow[]): QuoteRevision[] {
@@ -204,19 +115,7 @@ export async function updateQuoteRevision(
     updated_at: updatedAt,
   };
   if (next.sharedQuoteAt) update.shared_quote_at = next.sharedQuoteAt;
-  if (!next.sharedQuoteAt) {
-    const rows = await revisionRows((columns) =>
-      crm().from("quote_revisions").update(update).eq("id", id).select(columns).single(),
-    );
-    return savedRevision(rows[0]);
-  }
-  const saved = await crm()
-    .from("quote_revisions")
-    .update(update)
-    .eq("id", id)
-    .select(revisionColumnsWithShare)
-    .single();
-  if (missingShareColumn(saved.error)) throw new Error(shareMigration);
+  const saved = await crm().from("quote_revisions").update(update).eq("id", id).select(revisionColumns).single();
   throwIfError(saved.error);
   return savedRevision(saved.data as QuoteRevisionRow);
 }
@@ -233,9 +132,8 @@ export async function updateQuoteRevisionPhotosShare(input: {
       updated_at: new Date().toISOString(),
     })
     .eq("id", next.revisionId)
-    .select(revisionColumnsWithShare)
+    .select(revisionColumns)
     .single();
-  if (missingShareColumn(saved.error)) throw new Error(shareMigration);
   throwIfError(saved.error);
   return savedRevision(saved.data as QuoteRevisionRow);
 }
@@ -297,9 +195,6 @@ export async function updateQuoteRevisionRenders(id: string, renders: unknown): 
       updated_at: new Date().toISOString(),
     })
     .eq("id", id);
-  if (missingRendersColumn(error)) {
-    throw new Error("Run supabase/migrate-crm-quote-revision-renders.sql in the Supabase SQL editor.");
-  }
   throwIfError(error);
   return next;
 }

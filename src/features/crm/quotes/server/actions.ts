@@ -226,18 +226,6 @@ export async function shareQuoteRevisionPhotos(
   }
 }
 
-function missingDealQuotes(error: unknown): boolean {
-  const message = error instanceof Error ? error.message.toLowerCase() : "";
-  return (
-    message.includes("permission denied") ||
-    message.includes("42501") ||
-    (message.includes("deal_quotes") &&
-      (message.includes("does not exist") ||
-        message.includes("schema cache") ||
-        message.includes("could not find")))
-  );
-}
-
 export async function createDealQuoteAction(input: {
   dealId: string;
   selections: unknown;
@@ -298,7 +286,6 @@ export async function createDealQuoteAction(input: {
   } catch (error) {
     void recordCrmLog({ feature: "quotes", error });
     if (quoteId) await deleteQuote(quoteId).catch(() => undefined);
-    if (missingDealQuotes(error)) return { error: "Could not add a quote yet" };
     const message = error instanceof Error ? error.message : "Could not add a quote";
     return { error: message };
   }
@@ -389,7 +376,6 @@ export async function duplicateQuote(input: {
   } catch (error) {
     void recordCrmLog({ feature: "quotes", error });
     if (quoteId) await deleteQuote(quoteId).catch(() => undefined);
-    if (missingDealQuotes(error)) return { error: "Could not duplicate this quote" };
     const message = error instanceof Error ? error.message : "Could not duplicate this quote";
     return { error: message };
   }

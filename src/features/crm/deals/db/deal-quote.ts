@@ -9,19 +9,6 @@ function crm() {
 
 const linkColumns = "deal_id, quote_id, created_at";
 
-function missingDealQuotes(error: { message: string; code?: string } | null): boolean {
-  if (!error) return false;
-  if (error.code === "42501" || error.code === "42P01" || error.code === "PGRST205") return true;
-  const message = error.message.toLowerCase();
-  return (
-    message.includes("permission denied") ||
-    (message.includes("deal_quotes") &&
-      (message.includes("does not exist") ||
-        message.includes("schema cache") ||
-        message.includes("could not find")))
-  );
-}
-
 function linksFrom(rows: unknown): (DealQuoteLink & { createdAt: string })[] {
   return (rows as DealQuoteRow[])
     .map(toDealQuoteLink)
@@ -46,7 +33,6 @@ export async function deleteDealQuote(input: { dealId: string; quoteId: string }
     .delete()
     .eq("deal_id", link.dealId)
     .eq("quote_id", link.quoteId);
-  if (missingDealQuotes(error)) return;
   throwIfError(error);
 }
 
@@ -57,7 +43,6 @@ export async function readDealQuotes(dealId: string): Promise<(DealQuoteLink & {
     .select(linkColumns)
     .eq("deal_id", dealId)
     .order("created_at", { ascending: true });
-  if (missingDealQuotes(error)) return [];
   throwIfError(error);
   return linksFrom(data ?? []);
 }
@@ -67,7 +52,6 @@ export async function readDealQuotesForQuote(
 ): Promise<(DealQuoteLink & { createdAt: string })[]> {
   if (!quoteId) return [];
   const { data, error } = await crm().from("deal_quotes").select(linkColumns).eq("quote_id", quoteId);
-  if (missingDealQuotes(error)) return [];
   throwIfError(error);
   return linksFrom(data ?? []);
 }
@@ -77,7 +61,6 @@ export async function readAllDealQuotes(): Promise<(DealQuoteLink & { createdAt:
     .from("deal_quotes")
     .select(linkColumns)
     .order("created_at", { ascending: true });
-  if (missingDealQuotes(error)) return [];
   throwIfError(error);
   return linksFrom(data ?? []);
 }

@@ -19,17 +19,13 @@ export async function createQuote(input: {
   selections: unknown;
 }): Promise<string> {
   const selections = quoteSelectionsSchema.parse(input.selections);
-  const { data, error } = await quoteQuery(
-    (columns) =>
-      crm()
-        .from("quotes")
-        .insert({
-          invoice_id: input.invoiceId,
-        })
-        .select(columns)
-        .single(),
-    "id, quote_number",
-  );
+  const { data, error } = await crm()
+    .from("quotes")
+    .insert({
+      invoice_id: input.invoiceId,
+    })
+    .select("id, quote_number")
+    .single();
 
   throwIfError(error);
   const saved = quoteRow(data);
@@ -44,32 +40,6 @@ export async function createQuote(input: {
   });
   await updateQuote(saved.id, { activeRevisionId: revision.id });
   return saved.id;
-}
-
-function missingQuoteNumber(error: { message: string } | null): boolean {
-  if (!error) return false;
-  const message = error.message.toLowerCase();
-  return (
-    message.includes("quote_number") &&
-    (message.includes("does not exist") || message.includes("schema cache") || message.includes("could not find"))
-  );
-}
-
-function withoutQuoteNumber(columns: string): string {
-  return columns
-    .split(",")
-    .map((column) => column.trim())
-    .filter((column) => column !== "quote_number")
-    .join(", ");
-}
-
-async function quoteQuery(
-  run: (columns: string) => PromiseLike<{ data: unknown; error: { message: string } | null }>,
-  columns: string,
-): Promise<{ data: unknown; error: { message: string } | null }> {
-  const result = await run(columns);
-  if (!missingQuoteNumber(result.error)) return result;
-  return run(withoutQuoteNumber(columns));
 }
 
 function quoteRow(data: unknown): QuoteRow | undefined {
@@ -133,10 +103,11 @@ function quoteFromRow(
 }
 
 export async function readQuote(id: string): Promise<QuoteRecord | undefined> {
-  const { data, error } = await quoteQuery(
-    (columns) => crm().from("quotes").select(columns).eq("id", id).maybeSingle(),
-    "id, invoice_id, quote_number, active_revision_id",
-  );
+  const { data, error } = await crm()
+    .from("quotes")
+    .select("id, invoice_id, quote_number, active_revision_id")
+    .eq("id", id)
+    .maybeSingle();
 
   throwIfError(error);
   const row = quoteRow(data);
@@ -147,10 +118,10 @@ export async function readQuote(id: string): Promise<QuoteRecord | undefined> {
 
 export async function readQuotesByIds(ids: string[]): Promise<QuoteRecord[]> {
   if (ids.length === 0) return [];
-  const { data, error } = await quoteQuery(
-    (columns) => crm().from("quotes").select(columns).in("id", ids),
-    "id, invoice_id, quote_number, active_revision_id",
-  );
+  const { data, error } = await crm()
+    .from("quotes")
+    .select("id, invoice_id, quote_number, active_revision_id")
+    .in("id", ids);
   throwIfError(error);
   const rows = quoteRows(data);
   const selectionsById = await selectionsByRevision(rows);
@@ -162,19 +133,14 @@ export async function readQuotesByIds(ids: string[]): Promise<QuoteRecord[]> {
 export async function readListedQuote(id: string): Promise<(ListedQuote & { status: QuoteStatus }) | undefined> {
   const quoteId = id.trim();
   if (!quoteId) return undefined;
-  const withStatus = await quoteQuery(
-    (columns) => crm().from("quotes").select(columns).eq("id", quoteId).maybeSingle(),
-    "id, invoice_id, quote_number, active_revision_id, created_at, status",
-  );
-  const result = missingQuoteStatus(withStatus.error)
-    ? await quoteQuery(
-        (columns) => crm().from("quotes").select(columns).eq("id", quoteId).maybeSingle(),
-        "id, invoice_id, quote_number, active_revision_id, created_at",
-      )
-    : withStatus;
+  const { data, error } = await crm()
+    .from("quotes")
+    .select("id, invoice_id, quote_number, active_revision_id, created_at, status")
+    .eq("id", quoteId)
+    .maybeSingle();
 
-  throwIfError(result.error);
-  const row = quoteRow(result.data);
+  throwIfError(error);
+  const row = quoteRow(data);
   if (!row || typeof row.id !== "string" || typeof row.invoice_id !== "string") return undefined;
   const selectionsById = await selectionsByRevision([row]);
   const selections =
@@ -188,25 +154,18 @@ export async function readListedQuote(id: string): Promise<(ListedQuote & { stat
     created_at: row.created_at,
   });
   if (!listed) return undefined;
-  return { ...listed, status: missingQuoteStatus(withStatus.error) ? "draft" : storedQuoteStatus(row.status) };
+  return { ...listed, status: storedQuoteStatus(row.status) };
 }
 
 export async function readQuotes(): Promise<Array<ListedQuote & { status: QuoteStatus }>> {
-  const withStatus = await quoteQuery(
-    (columns) => crm().from("quotes").select(columns).order("created_at", { ascending: false }),
-    "id, invoice_id, quote_number, active_revision_id, created_at, status",
-  );
-  const result = missingQuoteStatus(withStatus.error)
-    ? await quoteQuery(
-        (columns) => crm().from("quotes").select(columns).order("created_at", { ascending: false }),
-        "id, invoice_id, quote_number, active_revision_id, created_at",
-      )
-    : withStatus;
+  const { data, error } = await crm()
+    .from("quotes")
+    .select("id, invoice_id, quote_number, active_revision_id, created_at, status")
+    .order("created_at", { ascending: false });
 
-  throwIfError(result.error);
-  const rows = quoteRows(result.data);
+  throwIfError(error);
+  const rows = quoteRows(data);
   const selectionsById = await selectionsByRevision(rows);
-  const includeStatus = !missingQuoteStatus(withStatus.error);
   return rows.flatMap((row) => {
     if (typeof row.id !== "string" || typeof row.invoice_id !== "string") return [];
     const selections =
@@ -219,7 +178,7 @@ export async function readQuotes(): Promise<Array<ListedQuote & { status: QuoteS
       selections,
       created_at: row.created_at,
     });
-    return listed ? [{ ...listed, status: includeStatus ? storedQuoteStatus(row.status) : "draft" }] : [];
+    return listed ? [{ ...listed, status: storedQuoteStatus(row.status) }] : [];
   });
 }
 
@@ -230,23 +189,13 @@ export async function readActiveRevisionId(quoteId: string): Promise<string | un
     .eq("id", quoteId)
     .maybeSingle();
 
-  if (error || !data || typeof data.active_revision_id !== "string") return undefined;
+  throwIfError(error);
+  if (!data || typeof data.active_revision_id !== "string") return undefined;
   return data.active_revision_id;
-}
-
-function missingQuoteStatus(error: { message: string; code?: string } | null): boolean {
-  if (!error) return false;
-  const message = error.message.toLowerCase();
-  return (
-    message.includes("quotes.status") ||
-    (message.includes("status") &&
-      (message.includes("schema cache") || message.includes("could not find") || message.includes("does not exist")))
-  );
 }
 
 export async function readQuoteStatus(id: string): Promise<QuoteStatus | undefined> {
   const { data, error } = await crm().from("quotes").select("status").eq("id", id).maybeSingle();
-  if (missingQuoteStatus(error)) return undefined;
   throwIfError(error);
   if (!data) return undefined;
   return storedQuoteStatus(data.status);
@@ -254,15 +203,6 @@ export async function readQuoteStatus(id: string): Promise<QuoteStatus | undefin
 
 export async function readQuoteUpdatedAt(id: string): Promise<string | undefined> {
   const { data, error } = await crm().from("quotes").select("updated_at").eq("id", id).maybeSingle();
-  if (error) {
-    const message = error.message.toLowerCase();
-    if (
-      message.includes("updated_at") &&
-      (message.includes("does not exist") || message.includes("schema cache") || message.includes("could not find"))
-    ) {
-      return undefined;
-    }
-  }
   throwIfError(error);
   if (!data || typeof data !== "object" || Array.isArray(data)) return undefined;
   const updatedAt = "updated_at" in data ? data.updated_at : undefined;
@@ -305,12 +245,7 @@ export async function setQuoteStatus(id: string, status: QuoteStatus): Promise<v
   await updateQuote(id, { status: next });
   const revisionId = await readActiveRevisionId(id);
   if (!revisionId) return;
-  try {
-    await updateQuoteRevision(revisionId, { status: next });
-  } catch (error) {
-    const message = error instanceof Error ? error.message.toLowerCase() : "";
-    if (!message.includes("check constraint")) throw error;
-  }
+  await updateQuoteRevision(revisionId, { status: next });
 }
 
 export async function markQuoteSent(id: string): Promise<void> {

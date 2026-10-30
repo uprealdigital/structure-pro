@@ -11,42 +11,15 @@ import { z } from "zod";
 
 const columns =
   "id, deal_id, message_ids, intent, status, config_changes, quote_number, preview_image_url, created_at";
-const columnsWithoutPreview =
-  "id, deal_id, message_ids, intent, status, config_changes, quote_number, created_at";
-const columnsWithoutQuoteNumber =
-  "id, deal_id, message_ids, intent, status, config_changes, preview_image_url, created_at";
-const columnsBare = "id, deal_id, message_ids, intent, status, config_changes, created_at";
 const previewBucket = "ai-suggestions";
 const maxPreviewBytes = 2 * 1024 * 1024;
-const previewMigration = "Run supabase/migrate-suggestion-preview.sql in the Supabase SQL editor.";
+
 function ai() {
   return db("ai");
 }
 
 function uniqueViolation(error: { code?: string; message: string }): boolean {
   return error.code === "23505" || /duplicate key|unique/i.test(error.message);
-}
-
-function missingColumn(error: { message: string } | null, column: string): boolean {
-  if (!error) return false;
-  const message = error.message.toLowerCase();
-  return (
-    message.includes(column) &&
-    (message.includes("does not exist") || message.includes("schema cache") || message.includes("could not find"))
-  );
-}
-
-async function suggestionQuery(
-  run: (selected: string) => PromiseLike<{ data: unknown; error: { message: string } | null }>,
-): Promise<{ data: unknown; error: { message: string } | null }> {
-  const result = await run(columns);
-  if (!result.error) return result;
-  if (missingColumn(result.error, "quote_number") && missingColumn(result.error, "preview_image_url")) {
-    return run(columnsBare);
-  }
-  if (missingColumn(result.error, "quote_number")) return run(columnsWithoutQuoteNumber);
-  if (missingColumn(result.error, "preview_image_url")) return run(columnsWithoutPreview);
-  return result;
 }
 
 async function ensurePreviewBucket(): Promise<void> {
@@ -71,9 +44,7 @@ export async function createSuggestion(input: {
     config_changes: suggestion.configChanges,
     quote_number: suggestion.quoteNumber ?? null,
   };
-  const inserted = await suggestionQuery((selected) =>
-    ai().from("suggestions").insert(withoutMissing(row, selected)).select(selected).single(),
-  );
+  const inserted = await ai().from("suggestions").insert(row).select(columns).single();
 
   if (inserted.error && uniqueViolation(inserted.error)) {
     const pending = (await readSuggestions(suggestion.dealId)).find(
@@ -96,9 +67,11 @@ export async function createSuggestion(input: {
 }
 
 export async function readSuggestions(dealId: string): Promise<Suggestion[]> {
-  const { data, error } = await suggestionQuery((selected) =>
-    ai().from("suggestions").select(selected).eq("deal_id", dealId).order("created_at", { ascending: true }),
-  );
+  const { data, error } = await ai()
+    .from("suggestions")
+    .select(columns)
+    .eq("deal_id", dealId)
+    .order("created_at", { ascending: true });
   throwIfError(error);
   const rows = Array.isArray(data) ? data : [];
   return rows.flatMap((row) => {
@@ -127,48 +100,16 @@ export async function updateSuggestion(
   if (next.status) row.status = next.status;
   const fromStatus = next.status === "pending" ? "dismissed" : "pending";
 
-  const first = await ai()
+  const updated = await ai()
     .from("suggestions")
     .update(row)
     .eq("id", id)
     .eq("status", fromStatus)
     .select(columns)
     .maybeSingle();
-  let updated = first;
-  if (missingColumn(first.error, "quote_number")) {
-    updated = await ai()
-      .from("suggestions")
-      .update(withoutColumns(row, ["quote_number"]))
-      .eq("id", id)
-      .eq("status", fromStatus)
-      .select(columnsWithoutQuoteNumber)
-      .maybeSingle();
-  }
-  if (missingColumn(updated.error, "preview_image_url")) {
-    updated = await ai()
-      .from("suggestions")
-      .update(withoutColumns(row, ["preview_image_url", "quote_number"]))
-      .eq("id", id)
-      .eq("status", fromStatus)
-      .select(columnsBare)
-      .maybeSingle();
-  }
   throwIfError(updated.error);
   if (!updated.data) return undefined;
   return toSuggestion(updated.data as SuggestionRow);
-}
-
-function withoutColumns(row: Record<string, unknown>, columnsToDrop: string[]): Record<string, unknown> {
-  const next = { ...row };
-  for (const column of columnsToDrop) delete next[column];
-  return next;
-}
-
-function withoutMissing(row: Record<string, unknown>, selected: string): Record<string, unknown> {
-  const next = { ...row };
-  if (!selected.includes("quote_number")) delete next.quote_number;
-  if (!selected.includes("preview_image_url")) delete next.preview_image_url;
-  return next;
 }
 
 export async function storeSuggestionPreview(id: string, bytes: Uint8Array): Promise<Suggestion | undefined> {
@@ -192,7 +133,6 @@ export async function storeSuggestionPreview(id: string, bytes: Uint8Array): Pro
     .eq("status", "pending")
     .select(columns)
     .maybeSingle();
-  if (missingPreviewColumn(updateError)) throw new Error(previewMigration);
   throwIfError(updateError);
   if (!data) return undefined;
   return toSuggestion(data as SuggestionRow);

@@ -36,19 +36,7 @@ export async function POST(request: Request) {
   }
   try {
     const deal = await createDeal({ quoteId, source });
-    try {
-      await createDealQuote({ dealId: deal.id, quoteId: deal.quoteId });
-    } catch (error) {
-      const message = error instanceof Error ? error.message.toLowerCase() : "";
-      const missing =
-        message.includes("permission denied") ||
-        message.includes("42501") ||
-        (message.includes("deal_quotes") &&
-          (message.includes("does not exist") ||
-            message.includes("schema cache") ||
-            message.includes("could not find")));
-      if (!missing) throw error;
-    }
+    await createDealQuote({ dealId: deal.id, quoteId: deal.quoteId });
     return Response.json(deal);
   } catch (error) {
     void recordCrmLog({ feature: "deals", error });
