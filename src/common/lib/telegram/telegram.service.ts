@@ -1,3 +1,5 @@
+import { messageParts } from "@/src/features/crm/conversations/utils/message-links";
+
 export function botToken(): string {
   const token = process.env.TELEGRAM_BOT_TOKEN?.trim();
   if (!token) {
@@ -59,15 +61,67 @@ export async function sendTelegramFile(
   }
 }
 
+function escapeTelegramHtml(value: string): string {
+  return value.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;");
+}
+
+/** Wrap detected links in HTML anchors. Other text is escaped and otherwise unchanged. */
+function telegramHtml(text: string): string | undefined {
+  const parts = messageParts(text);
+  if (!parts.some((part) => part.kind === "link")) return undefined;
+  return parts
+    .map((part) => {
+      if (part.kind === "text") return escapeTelegramHtml(part.value);
+      const href = escapeTelegramHtml(part.href).replaceAll('"', "&quot;");
+      return `<a href="${href}">${escapeTelegramHtml(part.label)}</a>`;
+    })
+    .join("");
+}
+
 export async function sendTelegramMessage(
   chatId: string,
   text: string,
 ): Promise<void> {
-  const chunks = splitTelegram(text);
+  const html = telegramHtml(text);
+  const chunks = html ? splitTelegramHtml(html) : splitTelegram(text);
   for (const chunk of chunks) {
     if (!chunk) continue;
-    await telegramCall("sendMessage", { chat_id: chatId, text: chunk });
+    await telegramCall("sendMessage", {
+      chat_id: chatId,
+      text: chunk,
+      ...(html ? { parse_mode: "HTML" } : {}),
+    });
   }
+}
+
+function splitTelegramHtml(body: string, max = 4000): string[] {
+  const text = body.trim();
+  if (!text) return [""];
+  if (text.length <= max) return [text];
+
+  const parts: string[] = [];
+  let remaining = text;
+  while (remaining.length > max) {
+    let cut = remaining.lastIndexOf("\n", max);
+    if (cut < 1) cut = remaining.lastIndexOf(" ", max);
+    if (cut < 1) cut = max;
+    const head = remaining.slice(0, cut);
+    const open = head.lastIndexOf("<a ");
+    const close = head.lastIndexOf("</a>");
+    if (open > close) {
+      if (open > 0) cut = open;
+      else {
+        const end = remaining.indexOf("</a>");
+        cut = end === -1 ? remaining.length : end + "</a>".length;
+      }
+    }
+    const piece = remaining.slice(0, cut).trim();
+    if (!piece) break;
+    parts.push(piece);
+    remaining = remaining.slice(cut).trim();
+  }
+  if (remaining) parts.push(remaining);
+  return parts;
 }
 
 export function splitTelegram(body: string, max = 4000): string[] {
