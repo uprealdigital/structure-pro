@@ -121,7 +121,7 @@ export const copy = {
   quoteEmailRequired: "Enter your email.",
   quoteEmailInvalid: "Enter a valid email address.",
   quoteConsentRequired: "Select this box to agree to the terms and privacy policy.",
-  quoteSubmitting: "Sending quote…",
+  quoteSubmitting: "Submitting for quote...",
   quoteSubmitSuccessTitle: "Request submitted",
   quoteSubmitSuccess:
     "Your quote request was submitted successfully. You'll hear from us soon.",

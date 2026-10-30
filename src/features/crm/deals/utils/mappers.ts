@@ -1,10 +1,13 @@
 import {
   dealBoardItemSchema,
+  dealChangeEventSchema,
   dealQuoteLinkSchema,
   dealSchema,
   dealStatusSchema,
   type Deal,
   type DealBoardItem,
+  type DealChangeEvent,
+  type DealChangeKind,
   type DealQuoteLink,
   type DealStatus,
 } from "@/src/features/crm/deals/types";
@@ -51,6 +54,26 @@ function storedStatus(value: string | null | undefined): DealStatus | null {
   if (!value) return null;
   const parsed = dealStatusSchema.safeParse(legacyStatus[value] ?? value);
   return parsed.success ? parsed.data : null;
+}
+
+export function toDealChangeEvent(
+  kind: DealChangeKind,
+  row: {
+    id?: unknown;
+    status?: unknown;
+    updated_at?: unknown;
+  },
+): DealChangeEvent | undefined {
+  if (typeof row.id !== "string" || row.id.trim().length === 0) return undefined;
+  const rawStatus = typeof row.status === "string" ? row.status : undefined;
+  const status = dealStatusSchema.safeParse(rawStatus ? legacyStatus[rawStatus] ?? rawStatus : undefined);
+  const event = dealChangeEventSchema.safeParse({
+    id: row.id,
+    kind,
+    status: status.success ? status.data : undefined,
+    updatedAt: typeof row.updated_at === "string" ? row.updated_at : undefined,
+  });
+  return event.success ? event.data : undefined;
 }
 
 export function toDeal(row: DealRow): Deal | undefined {

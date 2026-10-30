@@ -23,7 +23,7 @@ import { useDealSummary } from "@/src/features/crm/conversations/hooks/use-deal-
 import { useConversationSuggestions } from "@/src/features/crm/conversations/hooks/use-conversation-suggestions";
 import { useVisibleActivityReads } from "@/src/features/crm/conversations/hooks/use-visible-activity-reads";
 import { copy } from "@/src/features/crm/conversations/locales/en";
-import { sendQuoteMessages, sendManualActivity, sendStoredAttachment, discardStoredAttachment, recordSystemActivity, deleteConversationActivity, loadConversationDeal, markDealViewed, createConnectedDeal, moveQuoteToNewDeal, undoMoveQuoteToNewDeal } from "@/src/features/crm/conversations/server/actions";
+import { sendQuoteMessages, sendManualActivity, sendStoredAttachment, discardStoredAttachment, recordSystemActivity, deleteConversationActivity, loadConversationDeal, loadConversationQuote, markDealViewed, createConnectedDeal, moveQuoteToNewDeal, undoMoveQuoteToNewDeal } from "@/src/features/crm/conversations/server/actions";
 import type {
   Activity,
   ComposerChannel,
@@ -38,7 +38,6 @@ import { emailActivityText } from "@/src/features/crm/conversations/utils/email-
 import { uploadComposerAttachment } from "@/src/features/crm/conversations/utils/upload-attachment";
 import { productTitle, quoteMenuName, revisionMenuLabel, systemEventText } from "@/src/features/crm/conversations/utils/formatting";
 import { quoteDisplayName } from "@/src/features/crm/quotes/utils/formatting";
-import { latestShareAt, suggestionQuoteTargets } from "@/src/features/crm/conversations/utils/suggestion-quotes";
 import {
   conversationQuoteFromSelections,
   conversationQuoteWithActiveRevision,
@@ -61,9 +60,10 @@ import {
   saveQuoteSelections,
   shareQuoteRevisionPhotos,
 } from "@/src/features/crm/quotes/server/actions";
-import type { ConfigChanges, QuoteCommunication, QuoteStatus } from "@/src/features/crm/quotes/types";
+import type { ConfigChanges, QuoteChangeEvent, QuoteCommunication, QuoteStatus } from "@/src/features/crm/quotes/types";
 import type { QuoteSelections } from "@/src/features/cpq/types";
 import { DealStatusBadge } from "@/src/features/crm/deals/components/deal-status-badge";
+import type { DealChangeEvent } from "@/src/features/crm/deals/types";
 import { canMarkDealLost } from "@/src/features/crm/deals/utils/status";
 import { dealNameMaxLength, type DealStatus } from "@/src/features/crm/deals/types";
 import { configChangeRows } from "@/src/features/crm/conversations/utils/config-changes-summary";
@@ -230,6 +230,8 @@ export function ConversationDetail({
   onSelectCustomer,
   onActivitiesSeen,
   readNotice = null,
+  quoteChange = null,
+  dealChange = null,
 }: {
   workspace: ConversationWorkspace;
   incoming?: Activity[];
@@ -246,6 +248,8 @@ export function ConversationDetail({
   onSelectCustomer: (participant: ConversationParticipant, dealId: string) => void;
   onActivitiesSeen: (conversationId: string, unreadCount: number) => void;
   readNotice?: ThreadReadNotice | null;
+  quoteChange?: QuoteChangeEvent | null;
+  dealChange?: DealChangeEvent | null;
 }) {
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [detailsSettled, setDetailsSettled] = useState(false);
@@ -263,7 +267,8 @@ export function ConversationDetail({
   const [quotePatches, setQuotePatches] = useState<Record<string, ConversationQuote>>({});
   const [dealStatusPatches, setDealStatusPatches] = useState<Record<string, DealStatus>>({});
   const [dealNamePatches, setDealNamePatches] = useState<Record<string, string>>({});
-  const [seenDealIds, setSeenDealIds] = useState<string[]>([]);
+  const [seenDealIds, setSeenDealIds] = useState<string[]>(() => (workspace.deal.id ? [workspace.deal.id] : []));
+  const markedViewed = useRef(new Set<string>());
   const requestedNewDeals = useRef(new Set<string>());
   const [notice, setNotice] = useState<{ id: number; message: string; pending: boolean; tone: ToastTone } | null>(null);
   const noticeRecord = useRef<NoticeRecord | null>(null);
@@ -336,8 +341,54 @@ export function ConversationDetail({
   const quotesByIdRef = useRef(new Map<string, ConversationQuote>());
   quotesByIdRef.current = new Map(deals.flatMap((deal) => deal.quotes.map((quote) => [quote.id, quote])));
   const headerRenderSaves = useRef(new Set<string>());
+  const appliedQuoteChange = useRef("");
+  const appliedDealChange = useRef("");
   const lifecycleQuoteId = focused.quote?.id;
   const lifecycleStatus = focused.quote?.status;
+  useEffect(() => {
+    if (!dealChange?.status) return;
+    const key = `${dealChange.kind}:${dealChange.id}:${dealChange.status}:${dealChange.updatedAt ?? ""}`;
+    if (appliedDealChange.current === key) return;
+    appliedDealChange.current = key;
+    const status = dealChange.status;
+    setDealStatusPatches((current) => ({ ...current, [dealChange.id]: status }));
+  }, [dealChange]);
+
+  useEffect(() => {
+    if (!quoteChange) return;
+    const key = `${quoteChange.kind}:${quoteChange.id}:${quoteChange.status ?? ""}:${quoteChange.activeRevisionId ?? ""}:${quoteChange.updatedAt ?? ""}`;
+    if (appliedQuoteChange.current === key) return;
+    appliedQuoteChange.current = key;
+    if (quoteChange.kind === "delete") {
+      setRemovedQuoteIds((current) => ({ ...current, [quoteChange.id]: true }));
+      return;
+    }
+    const match = quotesByIdRef.current.get(quoteChange.id);
+    if (!match) return;
+    if (quoteChange.status && quoteChange.status !== match.status) {
+      setQuotePatches((current) => {
+        const base = current[match.id] ?? match;
+        const status = quoteChange.status ?? base.status;
+        return {
+          ...current,
+          [match.id]: {
+            ...base,
+            status,
+            revisions: base.revisions.map((revision) =>
+              revision.id === base.activeRevisionId ? { ...revision, status } : revision,
+            ),
+          },
+        };
+      });
+    }
+    if (quoteChange.activeRevisionId && quoteChange.activeRevisionId !== match.activeRevisionId) {
+      void loadConversationQuote({ quoteId: match.id }).then((result) => {
+        if ("error" in result) return;
+        setQuotePatches((current) => ({ ...current, [match.id]: result.data }));
+      });
+    }
+  }, [quoteChange]);
+
   useEffect(() => {
     if (!lifecycleQuoteId || (lifecycleStatus !== "sent" && lifecycleStatus !== "viewed" && lifecycleStatus !== "changes_requested")) {
       return;
@@ -401,6 +452,16 @@ export function ConversationDetail({
   const armedPhotoSuggestionId = useRef<string | null>(null);
   const armedQuoteSuggestionId = useRef<string | null>(null);
   const [applyingIntent, setApplyingIntent] = useState(false);
+  useEffect(() => {
+    const id = focusedDealId;
+    if (!id || markedViewed.current.has(id)) return;
+    markedViewed.current.add(id);
+    setSeenDealIds((current) => (current.includes(id) ? current : [...current, id]));
+    const stored = workspace.deals.find((deal) => deal.id === id)?.deal.viewedAt;
+    if (stored) return;
+    void markDealViewed(id);
+  }, [focusedDealId, workspace.deals]);
+
   useEffect(() => {
     for (const activity of activities) {
       if (activity.channel !== "system") continue;
@@ -952,12 +1013,14 @@ export function ConversationDetail({
     );
     forgetLoadedDeals([dealId, createdDealId]);
     setEditing(false);
-    const loaded = await onFocusDeal(createdDealId);
-    const stage = loaded?.deals.find((deal) => deal.id === createdDealId)?.stage ?? "new_lead";
-    setFocusedDealId(createdDealId);
-    setViewingQuoteIds((current) => ({ ...current, [createdDealId]: quoteId }));
+    setViewingQuoteIds((current) => {
+      if (current[dealId] !== quoteId) return current;
+      const next = { ...current };
+      delete next[dealId];
+      return next;
+    });
     setSelectedRevisionId(null);
-    onActivateDeal(createdDealId, stage);
+    await onFocusDeal(dealId);
     setQuoteToast(null);
     const dealName = result.data.name.trim() || copy.createDeal;
     const createdLog = await recordSystemActivity({
@@ -1262,7 +1325,10 @@ export function ConversationDetail({
     setCommunicationPatches((current) => ({ ...current, [viewed.id]: communication }));
   }
 
-  async function sendViewedQuote(communication: QuoteCommunication) {
+  async function sendViewedQuote(
+    communication: QuoteCommunication,
+    attempt?: { sendId: string; active: () => boolean },
+  ) {
     const suggestionId = armedQuoteSuggestionId.current;
     const quote = focused.quote;
     if (!quote || !viewed) throw new Error(copy.sendQuoteError);
@@ -1272,8 +1338,11 @@ export function ConversationDetail({
       dealIds: [focused.deal.id],
       dealName: focusedOption?.title || title || copy.quote,
       dealPrice: viewed.totalLabel,
+      quoteName: quoteLabel(quote, listedQuotes.findIndex((item) => item.id === quote.id)),
       communication,
+      sendId: attempt?.sendId,
     });
+    if ("cancelled" in result) return;
     if ("error" in result) throw new Error(result.error);
     const next = conversationQuoteWithSentRevision(
       quote,
@@ -1665,6 +1734,7 @@ export function ConversationDetail({
           id: "streaming",
           intent: "revision",
           configChanges: streamingRevision.configChanges,
+          quoteNumber: null,
           previewImageUrl: null,
           summary: "",
           messages: inboundMessages.map((message) => message.text),
@@ -1677,6 +1747,7 @@ export function ConversationDetail({
           id: "streaming",
           intent: "new_quote",
           configChanges: {},
+          quoteNumber: null,
           previewImageUrl: null,
           summary: "",
           messages: inboundMessages.map((message) => message.text),
@@ -1684,27 +1755,31 @@ export function ConversationDetail({
       : null;
   const revisionResolving = revisionSuggestion?.id === "streaming";
   const quoteResolving = quoteSuggestion?.id === "streaming";
+  const draftQuotes = listedQuotes.filter((quote) => quote.status === "draft");
   const suggestionQuotes = listedQuotes.map((quote, index) => ({
     id: quote.id,
     name: quoteLabel(quote, index),
     number: quote.quoteNumber ?? index + 1,
-    title: productTitle(quote.specs),
-    sharedAt: latestShareAt(quote.revisions.flatMap((revision) => [revision.sharedPhotosAt, revision.sharedQuoteAt])),
   }));
-  const quoteTargets = suggestionQuoteTargets(
-    suggestionQuotes,
-    revisionSuggestion?.messages ?? [],
-    viewingQuote?.id ?? focused.quote?.id ?? null,
-  );
+  const draftSuggestionQuotes = draftQuotes.map((quote) => {
+    const index = listedQuotes.findIndex((item) => item.id === quote.id);
+    return {
+      id: quote.id,
+      name: quoteLabel(quote, index),
+      number: quote.quoteNumber ?? (index >= 0 ? index + 1 : 1),
+    };
+  });
+  const activeQuoteId = viewingQuote?.id ?? focused.quote?.id ?? null;
   const selectedIntentQuoteId =
     intentQuoteChoice &&
     intentQuoteChoice.suggestionId === revisionSuggestion?.id &&
-    quoteTargets.quotes.some((quote) => quote.id === intentQuoteChoice.quoteId)
+    suggestionQuotes.some((quote) => quote.id === intentQuoteChoice.quoteId)
       ? intentQuoteChoice.quoteId
-      : quoteTargets.selectedId;
+      : suggestionQuotes.find((quote) => quote.number === revisionSuggestion?.quoteNumber)?.id ??
+        activeQuoteId;
   const intentQuote = listedQuotes.find((quote) => quote.id === selectedIntentQuoteId) ?? viewingQuote ?? focused.quote;
   const intentRevision = intentQuote
-    ? intentQuote.id === (viewingQuote?.id ?? focused.quote?.id)
+    ? intentQuote.id === activeQuoteId
       ? viewed
       : viewedRevision(intentQuote, null)
     : null;
@@ -1717,6 +1792,32 @@ export function ConversationDetail({
   const nextRevision = intentQuote
     ? Math.max(0, ...intentQuote.revisions.map((revision) => revision.revisionNumber)) + 1
     : 1;
+  const namedRequestQuote =
+    quoteSuggestion?.quoteNumber != null
+      ? listedQuotes.find((quote, index) => (quote.quoteNumber ?? index + 1) === quoteSuggestion.quoteNumber) ?? null
+      : null;
+  const selectedRequestQuoteId =
+    intentQuoteChoice &&
+    intentQuoteChoice.suggestionId === quoteSuggestion?.id &&
+    draftSuggestionQuotes.some((quote) => quote.id === intentQuoteChoice.quoteId)
+      ? intentQuoteChoice.quoteId
+      : namedRequestQuote?.status === "draft"
+        ? namedRequestQuote.id
+        : namedRequestQuote
+          ? null
+          : draftQuotes.some((quote) => quote.id === activeQuoteId)
+            ? activeQuoteId
+            : null;
+  const requestQuote =
+    selectedRequestQuoteId != null
+      ? listedQuotes.find((quote) => quote.id === selectedRequestQuoteId && quote.status === "draft") ?? null
+      : null;
+  const requestRevision = requestQuote
+    ? requestQuote.id === activeQuoteId
+      ? viewed
+      : viewedRevision(requestQuote, null)
+    : null;
+  const requestTitle = requestQuote ? productTitle(requestQuote.specs) : title;
 
   function showIntentQuote(quoteId: string, revisionId: string | null) {
     const dealId = focusedOption?.id;
@@ -2095,7 +2196,7 @@ export function ConversationDetail({
           <InboundIntentCard
             title={copy.configurationDetected}
             assistant
-            quotes={quoteTargets.quotes.map((quote) => ({ id: quote.id, name: quote.name }))}
+            quotes={suggestionQuotes.map((quote) => ({ id: quote.id, name: quote.name }))}
             selectedQuoteId={intentQuote?.id}
             onSelectQuote={(quoteId) => setIntentQuoteChoice({ suggestionId: revisionSuggestion.id, quoteId })}
             draft={{
@@ -2144,14 +2245,43 @@ export function ConversationDetail({
             onShareQuote={() => void applyDetectedConfiguration("quote")}
           />
         ) : null}
-        {quoteSuggestion && viewed ? (
+        {quoteSuggestion && requestQuote && requestRevision ? (
           <InboundIntentCard
             title={copy.quoteRequested}
             assistant
             icon="quote"
+            quotes={draftSuggestionQuotes.map((quote) => ({ id: quote.id, name: quote.name }))}
+            selectedQuoteId={requestQuote.id}
+            onSelectQuote={(quoteId) => setIntentQuoteChoice({ suggestionId: quoteSuggestion.id, quoteId })}
+            draft={{
+              title: revisionMenuLabel(requestRevision.revisionNumber),
+              price: requestRevision.totalLabel,
+              imageAlt: requestTitle || copy.quote,
+              imageUrl: requestRevision.renders?.render_small_url || undefined,
+              image: requestRevision.renders?.render_small_url ? undefined : (
+                <RevisionRenderSlot
+                  key={requestRevision.id}
+                  revisionId={requestRevision.id}
+                  selections={requestRevision.selections}
+                  alt={requestTitle || copy.quote}
+                  capture={renderTarget?.revisionId === requestRevision.id}
+                  failed={Boolean(renderFailures[requestRevision.id])}
+                  progressLabel={copy.renderingRevision}
+                  onCaptured={(files) => {
+                    const quoteId = requestQuote?.id;
+                    if (!quoteId) return;
+                    storeHeaderRender(quoteId, requestRevision.id, files);
+                  }}
+                  onFailed={() => {
+                    setRenderFailures((current) =>
+                      current[requestRevision.id] ? current : { ...current, [requestRevision.id]: true },
+                    );
+                  }}
+                />
+              ),
+            }}
             actionLabel={copy.shareQuote}
             pending={quoteResolving}
-            loading={quoteResolving && streamingQuote?.partial !== false}
             onDismiss={() => {
               if (quoteResolving) {
                 detectedSuggestions.dismissStreaming("new_quote");
@@ -2160,8 +2290,9 @@ export function ConversationDetail({
               void dismissDetectedSuggestion(quoteSuggestion);
             }}
             onShareQuote={() => {
-              if (quoteResolving) return;
+              if (quoteResolving || !requestQuote || !requestRevision) return;
               armedQuoteSuggestionId.current = quoteSuggestion.id;
+              showIntentQuote(requestQuote.id, requestRevision.id);
               setReviewImageUrl(null);
               setReviewOpen(true);
             }}

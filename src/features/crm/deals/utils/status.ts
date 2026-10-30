@@ -21,8 +21,8 @@ export const dealStatusOptions: DealStatusOption[] = pipeline.map((id) => {
 });
 
 export const defaultIncludedDealStatuses: DealStatus[] = dealStatusOptions
-  .map((option) => option.id)
-  .filter((id) => id !== "deal_lost");
+  .filter((option) => option.tone === "default")
+  .map((option) => option.id);
 
 export function canMarkDealLost(status: DealStatus): boolean {
   return dealStatuses[status].canMarkLost;

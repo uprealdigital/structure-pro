@@ -9,18 +9,19 @@ export function usePayDeposit(quoteId: string, initiallyWon: boolean) {
   const [pending, setPending] = useState(false);
   const [error, setError] = useState("");
 
-  async function pay() {
-    if (pending || won) return;
+  async function pay(): Promise<boolean> {
+    if (pending || won) return false;
     setPending(true);
     setError("");
     const result = await payQuoteDeposit({ quoteId });
     if ("error" in result) {
       setError(result.error || portalCopy.payError);
       setPending(false);
-      return;
+      return false;
     }
     setWon(true);
     setPending(false);
+    return true;
   }
 
   return { won, pending, error, pay };

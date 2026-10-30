@@ -33,6 +33,7 @@ export type SuggestionRow = {
   intent: string;
   status: string;
   config_changes: unknown;
+  quote_number?: unknown;
   preview_image_url?: unknown;
   created_at: string;
 };
@@ -114,6 +115,15 @@ export function toAiActivityLog(row: AiActivityLogRow): AiActivityLog | undefine
   return log.success ? log.data : undefined;
 }
 
+function quoteNumber(value: unknown): number | null {
+  if (typeof value === "number" && Number.isInteger(value) && value > 0) return value;
+  if (typeof value === "string" && value.trim() && Number.isInteger(Number(value.trim()))) {
+    const number = Number(value.trim());
+    return number > 0 ? number : null;
+  }
+  return null;
+}
+
 export function toSuggestion(row: SuggestionRow): Suggestion | undefined {
   const suggestion = suggestionSchema.safeParse({
     id: row.id,
@@ -122,6 +132,7 @@ export function toSuggestion(row: SuggestionRow): Suggestion | undefined {
     intent: row.intent,
     status: row.status,
     configChanges: configChanges(row.config_changes),
+    quoteNumber: quoteNumber(row.quote_number),
     previewImageUrl: typeof row.preview_image_url === "string" && row.preview_image_url ? row.preview_image_url : null,
     createdAt: row.created_at,
   });

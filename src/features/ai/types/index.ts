@@ -100,6 +100,7 @@ export const inboundIntentSchema = z.object({
   kind: inboundIntentKindSchema,
   summary: z.string(),
   configChanges: z.record(z.string(), suggestionConfigValueSchema),
+  quoteNumber: z.number().int().positive().nullable(),
   messageIndexes: z.array(z.number().int().nonnegative()),
 });
 
@@ -112,6 +113,7 @@ export const inboundIntentResultSchema = z.object({
         kind: z.enum(["configuration", "quote_request", "none"]),
         summary: z.string().optional(),
         configChanges: z.record(z.string(), suggestionConfigValueSchema).optional(),
+        quoteNumber: z.number().int().positive().nullable().optional(),
         messageIndexes: z.array(z.number()).optional(),
       }),
     )
@@ -133,6 +135,7 @@ export const suggestionSchema = z.object({
   intent: suggestionIntentSchema,
   status: suggestionStatusSchema,
   configChanges: suggestionConfigChangesSchema,
+  quoteNumber: z.number().int().positive().nullable(),
   previewImageUrl: z.string().nullable(),
   createdAt: z.string(),
 });
@@ -144,11 +147,13 @@ export const suggestionWriteSchema = z.object({
   messageIds: z.array(z.number().int().positive()).min(1).max(40),
   intent: suggestionIntentSchema,
   configChanges: suggestionConfigChangesSchema,
+  quoteNumber: z.number().int().positive().nullable().optional(),
 });
 
 export const suggestionPatchSchema = z.object({
   messageIds: z.array(z.number().int().positive()).min(1).max(40).optional(),
   configChanges: suggestionConfigChangesSchema.optional(),
+  quoteNumber: z.number().int().positive().nullable().optional(),
   previewImageUrl: z.string().nullable().optional(),
   status: z.enum(["pending", "applied", "dismissed"]).optional(),
 });

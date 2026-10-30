@@ -17,52 +17,101 @@ import { useSaveQuoteRevision } from "@/src/features/crm/quotes/hooks/use-save-q
 import { useSendQuote } from "@/src/features/crm/quotes/hooks/use-send-quote";
 import { quoteStatuses, type QuoteStatusActionId } from "@/src/features/crm/quotes/config/status";
 import { QuoteStatusBadge } from "@/src/features/crm/quotes/components/quote-status-badge";
+import { QuoteUpdatePill } from "@/src/features/crm/quotes/components/quote-update-pill";
+import { useQuoteStream } from "@/src/features/crm/quotes/hooks/use-quote-stream";
 import { reportCrmIssue } from "@/src/features/crm/common/server/actions";
 import { portalCopy } from "@/src/features/crm/quotes/locales/en";
+import { formatQuoteDateTime } from "@/src/features/crm/quotes/utils/formatting";
 import {
   duplicateQuote,
-  payQuoteDeposit,
+  loadQuotePortal,
   refreshQuoteLifecycle,
   renewQuote,
   saveQuoteCommunication,
   signQuoteAgreement,
 } from "@/src/features/crm/quotes/server/actions";
-import type { QuoteCommunication, QuotePortal, QuotePortalMode } from "@/src/features/crm/quotes/types";
-import { downloadQuotePdf, shareQuotePdf } from "@/src/features/crm/quotes/utils/quote-pdf";
+import type { QuoteChangeEvent, QuoteCommunication, QuotePortal, QuotePortalMode } from "@/src/features/crm/quotes/types";
+import { downloadQuotePdf, shareQuotePdf, type QuotePdfKind } from "@/src/features/crm/quotes/utils/quote-pdf";
 
 const actionClass =
   "inline-flex cursor-pointer items-center gap-2 rounded-full border border-[#c5c6c9] px-3.5 py-1.5 text-xs font-medium text-[#1a1c1d] transition-colors hover:bg-[#eeeef0]";
+
+const primaryCtaClass =
+  "flex w-full cursor-pointer items-center justify-center gap-2 rounded-xl bg-black px-6 py-3 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-[#1b1c1d] disabled:cursor-default disabled:opacity-60";
+
+const secondaryCtaClass =
+  "flex w-full cursor-pointer items-center justify-center gap-2 rounded-xl border border-[#c5c6c9] bg-white px-6 py-3 text-sm font-semibold text-[#1a1c1d] transition-colors hover:bg-[#f3f3f5]";
 
 function customerQuotePath(id: string) {
   return `/quote/${id}`;
 }
 
-function QuoteSuccess() {
+function ReceiptCheck() {
   return (
-    <main className="flex h-full min-h-0 min-w-0 flex-1 items-center justify-center overflow-y-auto bg-[#f9f9fb] px-6 py-16">
-      <div className="w-full max-w-lg rounded-xl border border-[#e8e8ea] bg-white px-8 py-12 text-center shadow-md">
-        <div className="mx-auto flex h-24 w-24 items-center justify-center rounded-full bg-[#f3f3f5] text-green-600">
-          <Check className="h-12 w-12" strokeWidth={2.5} aria-hidden="true" />
+    <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-green-600 text-white">
+      <Check className="h-3.5 w-3.5" strokeWidth={3} aria-hidden="true" />
+    </span>
+  );
+}
+
+function QuoteReceipts({
+  paid,
+  confirmedLabel,
+  onDownloadAgreement,
+}: {
+  paid: boolean;
+  confirmedLabel: string;
+  onDownloadAgreement: () => void;
+}) {
+  return (
+    <div className="flex flex-col gap-4 border-b border-[#e8e8ea] pb-4">
+      {paid ? (
+        <div className="flex items-start gap-3">
+          <ReceiptCheck />
+          <div className="min-w-0">
+            <p className="text-sm font-semibold text-[#1a1c1d]">{portalCopy.depositReceipt}</p>
+            <p className="mt-0.5 text-xs font-medium text-[#44474a]">{portalCopy.orderConfirmed}</p>
+            {confirmedLabel ? <p className="mt-0.5 text-xs text-[#655d55]">{confirmedLabel}</p> : null}
+            <p className="mt-1 text-xs leading-relaxed text-[#655d55]">{portalCopy.depositConfirmed}</p>
+          </div>
         </div>
-        <h1 className="mt-6 font-serif text-3xl font-semibold tracking-tight text-[#1a1c1d]">
-          {portalCopy.successTitle}
-        </h1>
-        <p className="mt-3 text-sm leading-relaxed text-[#655d55]">{portalCopy.successBody}</p>
+      ) : null}
+      <div className="flex items-start gap-3">
+        <ReceiptCheck />
+        <div className="min-w-0">
+          <p className="text-sm font-semibold text-[#1a1c1d]">{portalCopy.agreementSigned}</p>
+          {paid ? null : (
+            <button
+              type="button"
+              onClick={onDownloadAgreement}
+              className="mt-1 cursor-pointer text-xs font-medium text-[#1a1c1d] underline"
+            >
+              {portalCopy.downloadAgreement}
+            </button>
+          )}
+        </div>
       </div>
-    </main>
+    </div>
   );
 }
 
 export function QuotePortal({
-  quote,
+  quote: initialQuote,
   mode = "external",
 }: {
   quote: QuotePortal;
   mode?: QuotePortalMode;
 }) {
   const router = useRouter();
+  const [quote, setQuote] = useState(initialQuote);
+  const quoteRef = useRef(quote);
+  const incomingRef = useRef(initialQuote);
+  const suppressRemote = useRef(false);
+  const heldRemote = useRef<QuoteChangeEvent | null>(null);
+  quoteRef.current = quote;
+  incomingRef.current = initialQuote;
   const internal = mode === "internal";
-  const { won, pending, error, pay } = usePayDeposit(quote.id, quote.won);
+  const { pending, error, pay } = usePayDeposit(quote.id, quote.won);
   const { save } = useSaveQuoteRevision(quote.id);
   const { send } = useSendQuote({
     quoteId: quote.id,
@@ -70,6 +119,7 @@ export function QuotePortal({
     dealIds: quote.dealIds,
     dealName: quote.dealName,
     dealPrice: quote.totalLabel,
+    quoteName: quote.dealName,
   });
   const [editing, setEditing] = useState(false);
   const [signing, setSigning] = useState(false);
@@ -78,6 +128,8 @@ export function QuotePortal({
   const [copied, setCopied] = useState(false);
   const [toast, setToast] = useState<{ id: number; message: string } | null>(null);
   const [actionPending, setActionPending] = useState(false);
+  const [updateReady, setUpdateReady] = useState(false);
+  const [loadingLatest, setLoadingLatest] = useState(false);
   const shareRef = useRef<HTMLDivElement>(null);
   const dealId = quote.dealIds[0];
 
@@ -85,21 +137,65 @@ export function QuotePortal({
     setToast({ id: Date.now(), message });
   }
 
+  function replaceQuote(next: QuotePortal) {
+    quoteRef.current = next;
+    setQuote(next);
+    setUpdateReady(false);
+  }
+
+  function noteRemote(event: QuoteChangeEvent) {
+    const current = quoteRef.current;
+    if (event.id !== current.id || event.kind === "delete") return;
+    const statusChanged = event.status != null && event.status !== current.status;
+    const revisionChanged = typeof event.activeRevisionId === "string" && event.activeRevisionId !== current.revisionId;
+    if (statusChanged || revisionChanged) setUpdateReady(true);
+  }
+
+  function releaseLocalWrite() {
+    suppressRemote.current = false;
+    const held = heldRemote.current;
+    heldRemote.current = null;
+    if (held) noteRemote(held);
+  }
+
+  useEffect(() => {
+    const next = incomingRef.current;
+    quoteRef.current = next;
+    setQuote(next);
+    setUpdateReady(false);
+  }, [initialQuote.id]);
+
   useEffect(() => {
     setSigning(false);
   }, [quote.status]);
 
   useEffect(() => {
-    if (quote.status !== "sent" && quote.status !== "viewed" && quote.status !== "changes_requested") return;
+    const current = quoteRef.current;
+    if (current.status !== "sent" && current.status !== "viewed" && current.status !== "changes_requested") return;
     let cancelled = false;
-    void refreshQuoteLifecycle({ quoteId: quote.id, openedByCustomer: !internal }).then((result) => {
-      if (cancelled || "error" in result || result.data.status === quote.status) return;
-      router.refresh();
-    });
+    suppressRemote.current = true;
+    void refreshQuoteLifecycle({ quoteId: current.id, openedByCustomer: !internal })
+      .then((result) => {
+        if (cancelled) return;
+        if (!("error" in result) && result.data.status !== quoteRef.current.status) {
+          replaceQuote({ ...quoteRef.current, status: result.data.status });
+        }
+      })
+      .finally(() => {
+        if (!cancelled) releaseLocalWrite();
+      });
     return () => {
       cancelled = true;
     };
-  }, [internal, quote.id, quote.status, router]);
+  }, [internal, quote.id, quote.status]);
+
+  useQuoteStream((event) => {
+    if (suppressRemote.current) {
+      heldRemote.current = event;
+      return;
+    }
+    noteRemote(event);
+  }, quote.id);
 
   useEffect(() => {
     if (!shareOpen) return;
@@ -115,7 +211,11 @@ export function QuotePortal({
     setToast({ id: Date.now(), message: error });
   }, [error]);
 
-  if (!internal && won) return <QuoteSuccess />;
+  const updatePill = updateReady ? (
+    <QuoteUpdatePill pending={loadingLatest} onView={() => void viewLatest()} />
+  ) : null;
+  const depositPaid = quote.won || quote.status === "deposit_paid";
+  const agreementSigned = depositPaid || quote.status === "signed";
 
   const participants: ConversationParticipant[] = quote.recipients.map((recipient) => ({
     dealId: recipient.dealId,
@@ -139,8 +239,34 @@ export function QuotePortal({
   }
 
   async function saveRevision(selections: QuoteSelections, renders: QuoteRevisionRenderFiles) {
-    await save(selections, renders);
-    setEditing(false);
+    suppressRemote.current = true;
+    try {
+      await save(selections, renders);
+      const loaded = await loadQuotePortal({ quoteId: quoteRef.current.id });
+      if ("error" in loaded) throw new Error(loaded.error);
+      replaceQuote(loaded.data);
+      setEditing(false);
+    } finally {
+      releaseLocalWrite();
+    }
+  }
+
+  async function viewLatest() {
+    if (loadingLatest) return;
+    setLoadingLatest(true);
+    suppressRemote.current = true;
+    try {
+      const loaded = await loadQuotePortal({ quoteId: quoteRef.current.id });
+      if ("error" in loaded) {
+        showError(loaded.error || portalCopy.actionError);
+        return;
+      }
+      setEditing(false);
+      replaceQuote(loaded.data);
+    } finally {
+      setLoadingLatest(false);
+      releaseLocalWrite();
+    }
   }
 
   async function saveCommunication(communication: QuoteCommunication) {
@@ -163,26 +289,24 @@ export function QuotePortal({
   async function renew() {
     if (actionPending) return;
     setActionPending(true);
-    const result = await renewQuote({ quoteId: quote.id });
-    setActionPending(false);
-    if ("error" in result) {
-      showError(portalCopy.actionError);
-      return;
+    suppressRemote.current = true;
+    try {
+      const result = await renewQuote({ quoteId: quoteRef.current.id });
+      if ("error" in result) {
+        showError(portalCopy.actionError);
+        return;
+      }
+      const loaded = await loadQuotePortal({ quoteId: quoteRef.current.id });
+      if ("error" in loaded) {
+        showError(loaded.error || portalCopy.actionError);
+        return;
+      }
+      replaceQuote(loaded.data);
+      setReviewOpen(true);
+    } finally {
+      setActionPending(false);
+      releaseLocalWrite();
     }
-    setReviewOpen(true);
-    router.refresh();
-  }
-
-  async function collectDeposit() {
-    if (actionPending) return;
-    setActionPending(true);
-    const result = await payQuoteDeposit({ quoteId: quote.id });
-    setActionPending(false);
-    if ("error" in result) {
-      showError(result.error || portalCopy.payError);
-      return;
-    }
-    router.refresh();
   }
 
   function runStatusAction(id: QuoteStatusActionId) {
@@ -199,7 +323,7 @@ export function QuotePortal({
       return;
     }
     if (id === "collect_deposit") {
-      void collectDeposit();
+      showError(portalCopy.collectDepositUnavailable);
       return;
     }
     if (id === "view_signed_quote" || id === "view_deposit_receipt") {
@@ -213,21 +337,55 @@ export function QuotePortal({
     if (id === "copy") void copyQuote();
   }
 
+  async function payDeposit() {
+    suppressRemote.current = true;
+    try {
+      const paid = await pay();
+      if (paid) {
+        replaceQuote({
+          ...quoteRef.current,
+          status: "deposit_paid",
+          won: true,
+          confirmedAt: new Date().toISOString(),
+        });
+      }
+    } finally {
+      releaseLocalWrite();
+    }
+  }
+
+  async function sendQuote(communication: QuoteCommunication) {
+    suppressRemote.current = true;
+    try {
+      await send(communication);
+      const loaded = await loadQuotePortal({ quoteId: quoteRef.current.id });
+      if ("error" in loaded) throw new Error(loaded.error);
+      replaceQuote(loaded.data);
+    } finally {
+      releaseLocalWrite();
+    }
+  }
+
   async function signAgreement() {
     if (signing) return;
     setSigning(true);
-    const result = await signQuoteAgreement({ quoteId: quote.id });
-    if ("error" in result) {
-      showError(result.error || portalCopy.signError);
-      setSigning(false);
-      return;
+    suppressRemote.current = true;
+    try {
+      const result = await signQuoteAgreement({ quoteId: quoteRef.current.id });
+      if ("error" in result) {
+        showError(result.error || portalCopy.signError);
+        setSigning(false);
+        return;
+      }
+      replaceQuote({ ...quoteRef.current, status: result.data.status });
+    } finally {
+      releaseLocalWrite();
     }
-    router.refresh();
   }
 
-  async function onDownload() {
+  function onDownload(kind: QuotePdfKind = "quote") {
     try {
-      downloadQuotePdf(quote);
+      downloadQuotePdf(quote, kind);
     } catch (error) {
       void reportCrmIssue("quotes", error instanceof Error ? error.message : portalCopy.pdfError);
       showError(portalCopy.pdfError);
@@ -271,6 +429,7 @@ export function QuotePortal({
 
   return (
     <main className="flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-[#f9f9fb] text-[#1a1c1d]">
+      {updatePill}
       <header className="shrink-0 border-b border-[#e2e2e4] bg-white py-6">
         <div className="mx-auto flex w-full max-w-7xl flex-col gap-4 px-4 sm:px-6 lg:px-10">
           <div className="flex flex-col justify-between gap-4 lg:flex-row lg:items-start lg:gap-6">
@@ -375,6 +534,13 @@ export function QuotePortal({
 
             <div className="lg:col-span-5">
               <div id="quote-summary" className="flex flex-col gap-5 rounded-xl border border-[#e8e8ea] bg-white p-6 shadow-md">
+                {!internal && agreementSigned ? (
+                  <QuoteReceipts
+                    paid={depositPaid}
+                    confirmedLabel={formatQuoteDateTime(quote.confirmedAt)}
+                    onDownloadAgreement={() => onDownload("agreement")}
+                  />
+                ) : null}
                 <h2 className="border-b border-[#e8e8ea] pb-4 font-serif text-base font-semibold text-[#1a1c1d]">
                   {portalCopy.quote}
                 </h2>
@@ -424,19 +590,27 @@ export function QuotePortal({
                       />
                     </div>
                   </div>
+                ) : depositPaid ? (
+                  <div className="flex flex-col gap-2">
+                    <button type="button" onClick={() => onDownload("agreement")} className={primaryCtaClass}>
+                      <Download className="h-4 w-4" aria-hidden="true" />
+                      {portalCopy.downloadAgreement}
+                    </button>
+                    <button type="button" onClick={() => onDownload("receipt")} className={secondaryCtaClass}>
+                      <Download className="h-4 w-4" aria-hidden="true" />
+                      {portalCopy.downloadReceipt}
+                    </button>
+                  </div>
                 ) : quote.status === "signed" ? (
                   <div className="flex flex-col items-center gap-3">
                     <button
                       type="button"
                       disabled={pending}
-                      onClick={() => void pay()}
-                      className="flex w-full cursor-pointer items-center justify-center gap-2 rounded-xl bg-black px-6 py-3 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-[#1b1c1d] disabled:cursor-default disabled:opacity-60"
+                      onClick={() => void payDeposit()}
+                      className={primaryCtaClass}
                     >
                       <CreditCard className="h-4 w-4" aria-hidden="true" />
                       {pending ? portalCopy.paying : portalCopy.payDeposit}
-                    </button>
-                    <button type="button" className="text-xs font-medium text-[#1a1c1d] underline">
-                      {portalCopy.viewSignedAgreement}
                     </button>
                   </div>
                 ) : quote.status === "sent" || quote.status === "viewed" ? (
@@ -445,7 +619,7 @@ export function QuotePortal({
                       type="button"
                       disabled={signing}
                       onClick={() => void signAgreement()}
-                      className="flex w-full cursor-pointer items-center justify-center gap-2 rounded-xl bg-black px-6 py-3 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-[#1b1c1d] disabled:cursor-default disabled:opacity-60"
+                      className={primaryCtaClass}
                     >
                       {portalCopy.reviewAndSign}
                     </button>
@@ -495,7 +669,7 @@ export function QuotePortal({
           statusLabel={quoteStatuses[quote.status].label}
           communication={quote.communication}
           onSave={saveCommunication}
-          onSend={send}
+          onSend={sendQuote}
           onClose={() => setReviewOpen(false)}
         />
       ) : null}

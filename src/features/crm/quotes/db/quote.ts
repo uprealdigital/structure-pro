@@ -159,6 +159,38 @@ export async function readQuotesByIds(ids: string[]): Promise<QuoteRecord[]> {
     .filter((quote): quote is QuoteRecord => quote != null);
 }
 
+export async function readListedQuote(id: string): Promise<(ListedQuote & { status: QuoteStatus }) | undefined> {
+  const quoteId = id.trim();
+  if (!quoteId) return undefined;
+  const withStatus = await quoteQuery(
+    (columns) => crm().from("quotes").select(columns).eq("id", quoteId).maybeSingle(),
+    "id, invoice_id, quote_number, active_revision_id, created_at, status",
+  );
+  const result = missingQuoteStatus(withStatus.error)
+    ? await quoteQuery(
+        (columns) => crm().from("quotes").select(columns).eq("id", quoteId).maybeSingle(),
+        "id, invoice_id, quote_number, active_revision_id, created_at",
+      )
+    : withStatus;
+
+  throwIfError(result.error);
+  const row = quoteRow(result.data);
+  if (!row || typeof row.id !== "string" || typeof row.invoice_id !== "string") return undefined;
+  const selectionsById = await selectionsByRevision([row]);
+  const selections =
+    typeof row.active_revision_id === "string" ? selectionsById.get(row.active_revision_id) : undefined;
+  if (!selections) return undefined;
+  const listed = toListedQuote({
+    id: row.id,
+    invoice_id: row.invoice_id,
+    quote_number: row.quote_number,
+    selections,
+    created_at: row.created_at,
+  });
+  if (!listed) return undefined;
+  return { ...listed, status: missingQuoteStatus(withStatus.error) ? "draft" : storedQuoteStatus(row.status) };
+}
+
 export async function readQuotes(): Promise<Array<ListedQuote & { status: QuoteStatus }>> {
   const withStatus = await quoteQuery(
     (columns) => crm().from("quotes").select(columns).order("created_at", { ascending: false }),
@@ -218,6 +250,23 @@ export async function readQuoteStatus(id: string): Promise<QuoteStatus | undefin
   throwIfError(error);
   if (!data) return undefined;
   return storedQuoteStatus(data.status);
+}
+
+export async function readQuoteUpdatedAt(id: string): Promise<string | undefined> {
+  const { data, error } = await crm().from("quotes").select("updated_at").eq("id", id).maybeSingle();
+  if (error) {
+    const message = error.message.toLowerCase();
+    if (
+      message.includes("updated_at") &&
+      (message.includes("does not exist") || message.includes("schema cache") || message.includes("could not find"))
+    ) {
+      return undefined;
+    }
+  }
+  throwIfError(error);
+  if (!data || typeof data !== "object" || Array.isArray(data)) return undefined;
+  const updatedAt = "updated_at" in data ? data.updated_at : undefined;
+  return typeof updatedAt === "string" && updatedAt ? updatedAt : undefined;
 }
 
 function quoteLogName(quote: QuoteRecord): string {

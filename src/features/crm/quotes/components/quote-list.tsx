@@ -3,19 +3,47 @@
 import { ChevronRight, Filter, Plus, Search } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { QuoteCustomers } from "@/src/features/crm/quotes/components/quote-customers";
 import { QuoteStatusBadge } from "@/src/features/crm/quotes/components/quote-status-badge";
+import { useQuoteStream } from "@/src/features/crm/quotes/hooks/use-quote-stream";
 import { copy } from "@/src/features/crm/quotes/locales/en";
+import { loadQuoteListItem } from "@/src/features/crm/quotes/server/actions";
 import type { QuoteListItem } from "@/src/features/crm/quotes/types";
 import { formatQuoteDate, quotePageNumbers } from "@/src/features/crm/quotes/utils/formatting";
 
 const pageSize = 15;
 
-export function QuoteList({ quotes, loadError }: { quotes: QuoteListItem[]; loadError: boolean }) {
+export function QuoteList({ quotes: initialQuotes, loadError }: { quotes: QuoteListItem[]; loadError: boolean }) {
   const router = useRouter();
+  const [quotes, setQuotes] = useState(initialQuotes);
   const [query, setQuery] = useState("");
   const [pageIndex, setPageIndex] = useState(0);
+  useEffect(() => {
+    setQuotes(initialQuotes);
+  }, [initialQuotes]);
+  useQuoteStream((event) => {
+    if (event.kind === "delete") {
+      setQuotes((current) => current.filter((item) => item.id !== event.id));
+      return;
+    }
+    if (event.status) {
+      setQuotes((current) =>
+        current.map((item) => (item.id === event.id ? { ...item, status: event.status ?? item.status } : item)),
+      );
+    }
+    void loadQuoteListItem({ quoteId: event.id }).then((result) => {
+      if ("error" in result || !result.data) return;
+      const item = result.data;
+      setQuotes((current) => {
+        const index = current.findIndex((quote) => quote.id === item.id);
+        if (index === -1) return [item, ...current];
+        const next = current.slice();
+        next[index] = item;
+        return next;
+      });
+    });
+  });
   const needle = query.trim().toLowerCase();
   const visible = needle
     ? quotes.filter((quote) =>

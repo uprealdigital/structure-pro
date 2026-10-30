@@ -66,3 +66,15 @@ export const dealBoardItemSchema = z.object({
 });
 
 export type DealBoardItem = z.infer<typeof dealBoardItemSchema>;
+
+export const dealChangeKindSchema = z.enum(["insert", "update", "delete"]);
+export type DealChangeKind = z.infer<typeof dealChangeKindSchema>;
+
+export const dealChangeEventSchema = z.object({
+  id: z.string().min(1),
+  kind: dealChangeKindSchema,
+  status: dealStatusSchema.optional(),
+  updatedAt: z.string().optional(),
+});
+
+export type DealChangeEvent = z.infer<typeof dealChangeEventSchema>;

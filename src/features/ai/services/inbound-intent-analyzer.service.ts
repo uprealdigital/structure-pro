@@ -59,6 +59,11 @@ If the same field is asked again, keep the latest request.
 The current revisions in the request are the buildings as they are now. If the customer asks for a value that every current revision already has, leave that field out. A metal roof asked for again is not a change when roofTypeId is already metal. Include a field only when the requested value differs from the current revision.
 Use an empty object when nothing should change, and for quote_request.
 
+quoteNumber identifies which deal quote the customer named. Current quotes lists every quote on this deal with its number and name.
+When the customer names a quote by number, spoken number, or name that matches Current quotes, set quoteNumber to that quote's number. "quote seventy six", "quote 76", and "quote #76" are the same as number 76.
+If they did not name a specific quote from Current quotes, set quoteNumber to null.
+quoteNumber must be one of the Current quotes numbers, or null. Never invent a quote number.
+
 Use only these keys: styleId, width, length, height, sidingTypeId, roofTypeId, sidingColorId, trimColorId, roofColorId, shutterColorId, flooringId, hasLoft, hasWindow, hasVent, doorStyle, wallFace, zip.
 Name fields must be an id from the lists below, never a label.
 Match a full option name to that option. If they use one word, choose the first option in that list whose name contains the word. If no listed option matches, omit the field.
@@ -71,14 +76,15 @@ ${catalogOptions}
 If nothing matches, return an empty intents array.
 Do not invent prices or products they did not mention.
 
-In each intent, write kind first, then configChanges, then messageIndexes, then summary.
+In each intent, write kind first, then configChanges, then quoteNumber, then messageIndexes, then summary.
 Reply with JSON only:
-{"intents":[{"kind":"configuration"|"quote_request","configChanges":{},"messageIndexes":[1],"summary":""}]}`;
+{"intents":[{"kind":"configuration"|"quote_request","configChanges":{},"quoteNumber":null,"messageIndexes":[1],"summary":""}]}`;
 
 export type InboundAnalysis = {
   messages: string[];
   currentChanges: SuggestionConfigChanges;
   revisions: Array<{ name: string; selections: QuoteSelections }>;
+  quotes: Array<{ number: number; name: string }>;
   dealId?: string | null;
   activityIds?: number[];
 };
@@ -112,7 +118,22 @@ function requestText(input: InboundAnalysis): string {
     input.revisions.length > 0
       ? input.revisions.map((revision) => `${revision.name}\n${JSON.stringify(revision.selections)}`).join("\n\n")
       : "None";
-  return `Current changes:\n${JSON.stringify(input.currentChanges)}\n\nCurrent revisions:\n${revisions}\n\nMessages:\n${messages}`;
+  const quotes =
+    input.quotes.length > 0
+      ? input.quotes.map((quote) => `${quote.number}: ${quote.name}`).join("\n")
+      : "None";
+  return `Current changes:\n${JSON.stringify(input.currentChanges)}\n\nCurrent quotes:\n${quotes}\n\nCurrent revisions:\n${revisions}\n\nMessages:\n${messages}`;
+}
+
+function quoteNumberFrom(value: unknown, allowed: number[]): number | null {
+  const number =
+    typeof value === "number" && Number.isInteger(value)
+      ? value
+      : typeof value === "string" && value.trim() && Number.isInteger(Number(value.trim()))
+        ? Number(value.trim())
+        : null;
+  if (number == null || number <= 0) return null;
+  return allowed.includes(number) ? number : null;
 }
 
 function configChangesFrom(value: Record<string, SuggestionConfigValue> | undefined): Record<string, SuggestionConfigValue> {
@@ -206,7 +227,11 @@ function indexesFor(raw: number[] | undefined, count: number): number[] {
   return [...new Set(indexes.filter((index) => index >= 0 && index < count))];
 }
 
-function readModelIntents(text: string, count: number): { ok: boolean; intents: InboundIntent[] } {
+function readModelIntents(
+  text: string,
+  count: number,
+  allowedQuoteNumbers: number[],
+): { ok: boolean; intents: InboundIntent[] } {
   const start = text.indexOf("{");
   const end = text.lastIndexOf("}");
   if (start < 0 || end <= start) return { ok: false, intents: [] };
@@ -215,10 +240,10 @@ function readModelIntents(text: string, count: number): { ok: boolean; intents: 
   } catch {
     return { ok: false, intents: [] };
   }
-  return { ok: true, intents: parseIntents(text, count) };
+  return { ok: true, intents: parseIntents(text, count, allowedQuoteNumbers) };
 }
 
-function parseIntents(text: string, count: number): InboundIntent[] {
+function parseIntents(text: string, count: number, allowedQuoteNumbers: number[]): InboundIntent[] {
   const start = text.indexOf("{");
   const end = text.lastIndexOf("}");
   if (start < 0 || end <= start) return [];
@@ -239,12 +264,14 @@ function parseIntents(text: string, count: number): InboundIntent[] {
     if (!kind.success) continue;
     const current = byKind.get(kind.data);
     const configChanges = kind.data === "configuration" ? acceptedConfigChanges(intent.configChanges) : {};
+    const quoteNumber = quoteNumberFrom(intent.quoteNumber, allowedQuoteNumbers);
     const messageIndexes = indexesFor(intent.messageIndexes, count);
     if (!current) {
       byKind.set(kind.data, {
         kind: kind.data,
         summary: intent.summary?.trim() ?? "",
         configChanges,
+        quoteNumber,
         messageIndexes,
       });
       continue;
@@ -254,6 +281,7 @@ function parseIntents(text: string, count: number): InboundIntent[] {
       kind: kind.data,
       summary: summaries[0] ?? "",
       configChanges,
+      quoteNumber: current.quoteNumber ?? quoteNumber,
       messageIndexes: [...new Set([...current.messageIndexes, ...messageIndexes])],
     });
   }
@@ -271,6 +299,7 @@ function intentsFromSnapshot(snapshot: InboundIntentSnapshot | null, count: numb
     kind: intent.kind,
     summary: "",
     configChanges: intent.kind === "configuration" ? intent.configChanges : {},
+    quoteNumber: null,
     messageIndexes,
   }));
 }
@@ -333,7 +362,9 @@ export async function analyzeInboundIntent(
 ): Promise<InboundIntent[]> {
   const started = Date.now();
   const messages = input.messages.map((message) => message.trim()).filter(Boolean).slice(-40);
-  const request = { ...input, messages };
+  const quotes = input.quotes ?? [];
+  const allowedQuoteNumbers = quotes.map((quote) => quote.number);
+  const request = { ...input, messages, quotes };
   let model: string | null = null;
   let rawResponse: string | null = null;
   let parsedResponse: unknown = null;
@@ -392,7 +423,7 @@ export async function analyzeInboundIntent(
           if (published) break;
           continue;
         }
-        const parsed = readModelIntents(read.text, messages.length);
+        const parsed = readModelIntents(read.text, messages.length, allowedQuoteNumbers);
         parsedResponse = parsed.intents;
         if (!parsed.ok) {
           const partial = intentsFromSnapshot(latest, messages.length);

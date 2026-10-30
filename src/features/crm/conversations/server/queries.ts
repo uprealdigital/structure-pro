@@ -2,8 +2,9 @@ import "server-only";
 
 import { cache } from "react";
 import { getSupabase } from "@/src/common/lib/supabase/supabase.service";
+import { toE164 } from "@/src/common/utils/phone";
 import { getQuoteForPage } from "@/src/features/cpq/server/queries";
-import { readCustomer, readCustomers } from "@/src/features/crm/common/db/customer";
+import { readCustomer, readCustomerByPhone, readCustomers } from "@/src/features/crm/common/db/customer";
 import {
   readDealCustomers,
   readDealCustomersForCustomer,
@@ -69,6 +70,15 @@ export async function getLatestChannelConversationId(channel: "sms" | "telegram"
 export async function getConversationByCustomer(customerId: string) {
   const summaries = await readConversationSummariesForCustomer(customerId);
   return canonicalConversationByCustomer(summaries).get(customerId);
+}
+
+export async function getConversationIdByPhone(phone: string): Promise<string | undefined> {
+  const normalized = toE164(phone);
+  if (!normalized) return undefined;
+  const customer = await readCustomerByPhone(normalized);
+  if (!customer) return undefined;
+  const summary = await readConversationSummaryByCustomer(customer.id);
+  return summary?.id;
 }
 
 function byNewest(left: Deal, right: Deal): number {
@@ -145,6 +155,10 @@ async function quoteIdsForDeal(dealId: string, quoteId: string): Promise<string[
   const ids = links.map((link) => link.quoteId);
   if (quoteId && !ids.includes(quoteId)) ids.unshift(quoteId);
   return ids.length > 0 ? ids : quoteId ? [quoteId] : [];
+}
+
+export async function getConversationQuote(quoteId: string): Promise<ConversationQuote | undefined> {
+  return loadConversationQuote(quoteId);
 }
 
 async function loadConversationQuote(quoteId: string): Promise<ConversationQuote | undefined> {

@@ -46,6 +46,7 @@ import {
   getConversation,
   getConversationDealOption,
   getConversationInboxItem,
+  getConversationQuote,
   getConversationWorkspace,
   getCustomerDeals,
   getCustomerInboxItem,
@@ -58,8 +59,10 @@ import {
   activityInsertSchema,
   composerChannelSchema,
   conversationIdSchema,
+  conversationQuoteRequestSchema,
   conversationReadUpdateSchema,
   conversationSuggestionSchema,
+  quoteSendIdSchema,
   sendQuoteMessagesSchema,
   suggestionIdSchema,
   syncSuggestionsSchema,
@@ -73,6 +76,7 @@ import {
   type ConversationDealOption,
   type ConversationInboxItem,
   type ConversationParticipant,
+  type ConversationQuote,
   type ConversationSuggestion,
   type ConversationWorkspace,
   type SuggestionStreamEvent,
@@ -533,6 +537,20 @@ async function deliverText(body: string, phone: string) {
   await sendSms(phone, body);
 }
 
+const cancelledQuoteSends = new Set<string>();
+
+function quoteSendCancelled(sendId: string | undefined) {
+  return Boolean(sendId && cancelledQuoteSends.has(sendId));
+}
+
+export async function cancelQuoteSend(sendId: string): Promise<{ success: true } | { error: string }> {
+  const parsed = quoteSendIdSchema.safeParse(sendId);
+  if (!parsed.success) return { error: "A send is required" };
+  cancelledQuoteSends.add(parsed.data);
+  setTimeout(() => cancelledQuoteSends.delete(parsed.data), 120_000);
+  return { success: true };
+}
+
 export async function sendQuoteMessages(
   input: unknown,
 ): Promise<
@@ -545,12 +563,13 @@ export async function sendQuoteMessages(
         dealStatus: ConversationWorkspace["deal"]["status"];
       };
     }
+  | { cancelled: true }
   | { error: string }
 > {
   const parsed = sendQuoteMessagesSchema.safeParse(input);
   if (!parsed.success) return { error: "A quote, deal, and message are required" };
 
-  const { quoteId, revisionId, dealName, dealPrice, communication } = parsed.data;
+  const { quoteId, revisionId, dealName, dealPrice, quoteName, communication, sendId } = parsed.data;
   const emailIds = uniqueIds(communication.emailRecipientIds);
   const textIds = uniqueIds(communication.smsRecipientIds);
   if (emailIds.length === 0 && textIds.length === 0) return { error: copy.noRecipients };
@@ -582,10 +601,14 @@ export async function sendQuoteMessages(
       }
     }
 
+    if (quoteSendCancelled(sendId)) return { cancelled: true };
+
     const quoteLink = await currentQuoteLink(quoteId);
+    let delivered = false;
     for (const customer of emailRecipients) {
       if (!customer) continue;
-      const values = reviewMessageValues(customer.fullName, dealName, dealPrice, quoteLink);
+      if (quoteSendCancelled(sendId)) break;
+      const values = reviewMessageValues(customer.fullName, dealName, dealPrice, quoteName, quoteLink);
       const subject = fillReviewMessage(communication.subject, values).trim();
       const body = fillReviewMessage(communication.emailBody, values).trim();
       await sendMail({
@@ -596,16 +619,21 @@ export async function sendQuoteMessages(
       });
       const conversationId = await conversationForCustomer(customer);
       await recordOutbound(conversationId, "email", emailActivityText({ subject, body, attachments: [] }));
+      delivered = true;
     }
 
     for (const customer of textRecipients) {
       if (!customer) continue;
-      const values = reviewMessageValues(customer.fullName, dealName, dealPrice, quoteLink);
+      if (quoteSendCancelled(sendId)) break;
+      const values = reviewMessageValues(customer.fullName, dealName, dealPrice, quoteName, quoteLink);
       const body = fillReviewMessage(communication.smsBody, values).trim();
       await deliverText(body, customer.phone.trim());
       const conversationId = await conversationForCustomer(customer);
       await recordOutbound(conversationId, "sms", body);
+      delivered = true;
     }
+
+    if (!delivered && quoteSendCancelled(sendId)) return { cancelled: true };
 
     let latest: {
       revisionId: string;
@@ -625,6 +653,8 @@ export async function sendQuoteMessages(
     void recordCrmLog({ feature: "conversations", error });
     const message = error instanceof Error ? error.message : copy.sendQuoteError;
     return { error: message };
+  } finally {
+    if (sendId) cancelledQuoteSends.delete(sendId);
   }
 }
 
@@ -832,12 +862,6 @@ export async function moveQuoteToNewDeal(input: {
     }
     await deleteDealQuote({ dealId: deal.id, quoteId });
     createdId = "";
-    for (const customer of customers) {
-      const person = await readCustomer(customer.customerId);
-      if (person?.activeDealId === deal.id) {
-        await updateCustomer(person.id, { activeDealId: created.id });
-      }
-    }
     revalidateConversations();
     revalidatePath("/quotes");
     revalidatePath("/deals");
@@ -1107,15 +1131,23 @@ function hasConfigChanges(changes: ConfigChanges): boolean {
   return Object.keys(changes).length > 0;
 }
 
-async function dealRevisions(dealId: string): Promise<Array<{ name: string; selections: QuoteSelections }>> {
+async function dealQuotes(dealId: string): Promise<{
+  revisions: Array<{ name: string; selections: QuoteSelections }>;
+  quotes: Array<{ number: number; name: string }>;
+}> {
   const [deal, links] = await Promise.all([readDeal(dealId), readDealQuotes(dealId)]);
   const ids = [...new Set([deal?.quoteId, ...links.map((link) => link.quoteId)].filter((id): id is string => Boolean(id)))];
-  if (ids.length === 0) return [];
-  const quotes = await readQuotesByIds(ids);
-  return quotes.map((quote, index) => ({
-    name: quote.quoteNumber ? `Quote #${quote.quoteNumber}` : `Quote ${index + 1}`,
-    selections: quote.selections,
-  }));
+  if (ids.length === 0) return { revisions: [], quotes: [] };
+  const rows = await readQuotesByIds(ids);
+  const quotes = rows.map((quote, index) => {
+    const number = quote.quoteNumber ?? index + 1;
+    const name = quote.quoteNumber ? `Quote #${quote.quoteNumber}` : `Quote ${index + 1}`;
+    return { number, name, selections: quote.selections };
+  });
+  return {
+    quotes: quotes.map((quote) => ({ number: quote.number, name: quote.name })),
+    revisions: quotes.map((quote) => ({ name: quote.name, selections: quote.selections })),
+  };
 }
 
 function revisionChangesQuote(changes: ConfigChanges, selections: QuoteSelections[]): boolean {
@@ -1137,6 +1169,7 @@ async function pendingSuggestions(dealId: string): Promise<ConversationSuggestio
         id: row.id,
         intent: row.intent,
         configChanges: row.configChanges,
+        quoteNumber: row.quoteNumber,
         previewImageUrl: row.previewImageUrl,
         summary: row.intent === "new_quote" ? messages.join(" ") : "",
         messages,
@@ -1223,7 +1256,8 @@ async function runConversationSuggestionSync(
     const staleRevision = pending.some(
       (row) => row.intent === "revision" && !hasConfigChanges(row.configChanges) && row.messageIds.some((id) => !frozen.has(id)),
     );
-    const revisions = await dealRevisions(parsed.data.dealId);
+    const dealQuoteData = await dealQuotes(parsed.data.dealId);
+    const revisions = dealQuoteData.revisions;
     const quoteSelections = revisions.map((revision) => revision.selections);
     if (uncovered.length > 0 || staleRevision) {
       const known = new Set(candidates.map((row) => row.id));
@@ -1243,6 +1277,7 @@ async function runConversationSuggestionSync(
           messages: analyzed.map((row) => row.body.trim()),
           currentChanges,
           revisions,
+          quotes: dealQuoteData.quotes,
           dealId: parsed.data.dealId,
           activityIds: analyzed.map((row) => row.id),
         },
@@ -1289,6 +1324,7 @@ async function runConversationSuggestionSync(
         combined.sort((left, right) => (order.get(left) ?? 0) - (order.get(right) ?? 0));
         if (combined.length > 40) combined.splice(0, combined.length - 40);
         const configChanges = intent === "revision" ? hit.configChanges : {};
+        const quoteNumber = hit.quoteNumber;
         if (intent === "revision" && !revisionChangesQuote(configChanges, quoteSelections)) {
           if (!current) continue;
           await updateSuggestion(current.id, { status: "dismissed" });
@@ -1298,10 +1334,11 @@ async function runConversationSuggestionSync(
         }
         if (intent === "revision") await markDealQuoteChangesRequested(parsed.data.dealId);
         if (current) {
-          const saved = await updateSuggestion(current.id, { messageIds: combined, configChanges });
+          const saved = await updateSuggestion(current.id, { messageIds: combined, configChanges, quoteNumber });
           if (!saved) continue;
           current.messageIds = combined;
           current.configChanges = saved.configChanges;
+          current.quoteNumber = saved.quoteNumber;
           continue;
         }
         const created = await createSuggestion({
@@ -1309,6 +1346,7 @@ async function runConversationSuggestionSync(
           messageIds: combined,
           intent,
           configChanges,
+          quoteNumber,
         });
         pending.push(created);
       }
@@ -1441,6 +1479,22 @@ export async function applyConversationSuggestion(
     void recordCrmLog({ feature: "conversations", error });
     console.error(error);
     const message = error instanceof Error ? error.message : "Could not apply this suggestion";
+    return { error: message };
+  }
+}
+
+export async function loadConversationQuote(
+  input: unknown,
+): Promise<{ success: true; data: ConversationQuote } | { error: string }> {
+  const parsed = conversationQuoteRequestSchema.safeParse(input);
+  if (!parsed.success) return { error: "A quote is required" };
+  try {
+    const quote = await getConversationQuote(parsed.data.quoteId);
+    if (!quote) return { error: "Quote was not found" };
+    return { success: true, data: quote };
+  } catch (error) {
+    void recordCrmLog({ feature: "conversations", error });
+    const message = error instanceof Error ? error.message : "Could not load this quote";
     return { error: message };
   }
 }

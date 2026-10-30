@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
-import { notFound, redirect } from "next/navigation";
+import { redirect } from "next/navigation";
 import { QuotePortal } from "@/src/features/crm/quotes/components/quote-portal";
+import { QuoteUnavailable } from "@/src/features/crm/quotes/components/quote-unavailable";
 import { getQuotePortal } from "@/src/features/crm/quotes/server/queries";
 import type { QuotePortal as QuotePortalData } from "@/src/features/crm/quotes/types";
 import { quotePortalMode } from "@/src/features/crm/quotes/utils/formatting";
@@ -36,7 +37,7 @@ export default async function QuotePage({
   const portalMode = quotePortalMode(mode);
   if (firstQueryValue(revision)) redirect(portalMode === "internal" ? `/quote/${id}?mode=internal` : `/quote/${id}`);
   const quote = await publishedQuote(id, portalMode);
-  if (!quote) notFound();
+  if (!quote) return <QuoteUnavailable quoteId={id} mode={portalMode} />;
   return <QuotePortal quote={quote} mode={portalMode} />;
 }
 

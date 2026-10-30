@@ -45,11 +45,9 @@ function AttachmentChip({ attachment, sent }: { attachment: EmailAttachment; sen
 
 export function EmailCard({
   message,
-  clock,
   sent,
 }: {
   message: EmailMessage;
-  clock: string;
   sent: boolean;
 }) {
   const total = message.attachments.reduce((sum, item) => sum + item.bytes, 0);
@@ -60,22 +58,16 @@ export function EmailCard({
   const card = sent
     ? "rounded-2xl rounded-tr-sm bg-[#121314] text-white"
     : "rounded-2xl rounded-tl-sm border border-gray-200 bg-white text-gray-900";
-  const timeClass = sent ? "text-white/50" : "text-gray-400";
   const bodyClass = sent ? "text-white" : "text-gray-800";
   const summaryClass = sent ? "text-white/50" : "text-gray-400";
 
   return (
     <div className={`px-4 py-3.5 text-left text-xs shadow-xs ${card}`}>
-      {message.subject ? (
-        <div className="flex items-start justify-between gap-3">
-          <p className="min-w-0 font-bold leading-snug">{copy.emailSubjectLine(message.subject)}</p>
-          {clock ? <span className={`shrink-0 text-[10px] ${timeClass}`}>{clock}</span> : null}
-        </div>
-      ) : null}
+      {message.subject ? <p className="font-bold leading-snug">{copy.emailSubjectLine(message.subject)}</p> : null}
       {message.body ? (
         <MessageText
           text={message.body}
-          className={`leading-relaxed whitespace-pre-wrap break-words ${message.subject || clock ? "mt-3" : ""} ${bodyClass}`}
+          className={`leading-relaxed whitespace-pre-wrap break-words ${message.subject ? "mt-3" : ""} ${bodyClass}`}
         />
       ) : null}
       {summary ? (

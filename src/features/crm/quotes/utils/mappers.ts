@@ -2,10 +2,14 @@ import type { QuoteSelections } from "@/src/features/cpq/types";
 import {
   configChangesSchema,
   quoteCommunicationSchema,
+  quoteChangeEventSchema,
   quoteListItemSchema,
   quotePortalSchema,
   quoteRevisionRendersSchema,
   quoteRevisionSchema,
+  quoteStatusSchema,
+  type QuoteChangeEvent,
+  type QuoteChangeKind,
   type QuoteCommunication,
   type QuoteCustomer,
   type QuoteListItem,
@@ -109,6 +113,7 @@ export function toQuotePortal(input: {
   total: number;
   zip: string;
   won: boolean;
+  confirmedAt?: string;
   customers: QuotePortalCustomer[];
   recipients: QuotePortalRecipient[];
   dealIds: string[];
@@ -138,6 +143,7 @@ export function toQuotePortal(input: {
     totalLabel: formatQuoteCash(input.total),
     zip: input.zip,
     won: input.won,
+    confirmedAt: input.confirmedAt ?? "",
     customers: input.customers,
     recipients: input.recipients,
     dealIds: input.dealIds,
@@ -147,4 +153,31 @@ export function toQuotePortal(input: {
     status: input.status,
   });
   return portal.success ? portal.data : undefined;
+}
+
+export function toQuoteChangeEvent(
+  kind: QuoteChangeKind,
+  row: {
+    id?: unknown;
+    status?: unknown;
+    active_revision_id?: unknown;
+    updated_at?: unknown;
+  },
+): QuoteChangeEvent | undefined {
+  if (typeof row.id !== "string" || row.id.trim().length === 0) return undefined;
+  const status = quoteStatusSchema.safeParse(row.status === "declined" ? "changes_requested" : row.status);
+  const activeRevisionId =
+    typeof row.active_revision_id === "string"
+      ? row.active_revision_id
+      : row.active_revision_id === null
+        ? null
+        : undefined;
+  const event = quoteChangeEventSchema.safeParse({
+    id: row.id,
+    kind,
+    status: status.success ? status.data : undefined,
+    activeRevisionId,
+    updatedAt: typeof row.updated_at === "string" ? row.updated_at : undefined,
+  });
+  return event.success ? event.data : undefined;
 }

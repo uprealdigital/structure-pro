@@ -1,6 +1,6 @@
 "use client";
 
-import { Calculator, Mail, MessageSquare, Plus, Send, X } from "lucide-react";
+import { ExternalLink, Mail, MessageSquare, Plus, Send, X } from "lucide-react";
 import {
   memo,
   useCallback,
@@ -18,6 +18,7 @@ import { createPortal } from "react-dom";
 import { Toast } from "@/src/common/components/toast";
 import { contactInitials } from "@/src/features/crm/common/utils/formatting";
 import { copy } from "@/src/features/crm/conversations/locales/en";
+import { cancelQuoteSend } from "@/src/features/crm/conversations/server/actions";
 import type { ConversationParticipant } from "@/src/features/crm/conversations/types";
 import type { QuoteCommunication } from "@/src/features/crm/quotes/types";
 import {
@@ -245,6 +246,7 @@ const messageTokens = [
   { id: "lastName", token: reviewMessageToken.lastName, label: copy.lastNameToken, group: "customer" },
   { id: "dealName", token: reviewMessageToken.dealName, label: copy.dealNameToken, group: "deal" },
   { id: "dealPrice", token: reviewMessageToken.dealPrice, label: copy.dealPriceToken, group: "deal" },
+  { id: "quoteName", token: reviewMessageToken.quoteName, label: copy.quoteNameToken, group: "quote" },
   { id: "quoteLink", token: reviewMessageToken.quoteLink, label: copy.quoteLinkToken, group: "quote" },
   { id: "companyName", token: reviewMessageToken.companyName, label: copy.companyNameToken, group: "company" },
   { id: "userFirstName", token: reviewMessageToken.userFirstName, label: copy.userFirstNameToken, group: "user" },
@@ -631,6 +633,62 @@ function savedCommunication(
   };
 }
 
+function SendMeter({ complete, onFilled }: { complete: boolean; onFilled: () => void }) {
+  const [shown, setShown] = useState(0);
+  const shownRef = useRef(0);
+  const completeRef = useRef(complete);
+  const onFilledRef = useRef(onFilled);
+  const filledRef = useRef(false);
+  completeRef.current = complete;
+  onFilledRef.current = onFilled;
+
+  useEffect(() => {
+    let frame = 0;
+    const tick = () => {
+      const done = completeRef.current;
+      const current = shownRef.current;
+      const cap = done ? 100 : 90;
+      const step = done ? Math.max(2.2, (100 - current) * 0.2) : Math.max(0.28, (90 - current) * 0.025);
+      const next = Math.min(cap, current + step);
+      if (next !== current) {
+        shownRef.current = next;
+        setShown(next);
+      }
+      if (done && next >= 99.5) {
+        if (!filledRef.current) {
+          filledRef.current = true;
+          onFilledRef.current();
+        }
+        return;
+      }
+      frame = requestAnimationFrame(tick);
+    };
+    frame = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(frame);
+  }, []);
+
+  const radius = 5.25;
+  const circumference = 2 * Math.PI * radius;
+  const offset = circumference - (Math.min(100, shown) / 100) * circumference;
+
+  return (
+    <svg className="h-3.5 w-3.5 -rotate-90" viewBox="0 0 14 14" aria-hidden="true">
+      <circle cx="7" cy="7" r={radius} fill="none" stroke="currentColor" strokeOpacity="0.35" strokeWidth="1.6" />
+      <circle
+        cx="7"
+        cy="7"
+        r={radius}
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.6"
+        strokeLinecap="round"
+        strokeDasharray={circumference}
+        strokeDashoffset={offset}
+      />
+    </svg>
+  );
+}
+
 export function ReviewSendModal({
   participants,
   title,
@@ -653,7 +711,10 @@ export function ReviewSendModal({
   statusLabel: string;
   communication: QuoteCommunication | null;
   onSave: (communication: QuoteCommunication) => Promise<void>;
-  onSend: (communication: QuoteCommunication) => Promise<void>;
+  onSend: (
+    communication: QuoteCommunication,
+    attempt: { sendId: string; active: () => boolean },
+  ) => Promise<void>;
   onClose: () => void;
 }) {
   const people = dealRecipients(participants);
@@ -661,7 +722,10 @@ export function ReviewSendModal({
     savedCommunication(communication, people, defaultCommunication(people)),
   );
   const [sending, setSending] = useState(false);
+  const [sendComplete, setSendComplete] = useState(false);
   const [sendError, setSendError] = useState<{ id: number; message: string } | null>(null);
+  const sendAttempt = useRef(0);
+  const activeSendId = useRef<string | null>(null);
   const draftRef = useRef(draft);
   const savedKey = useRef(communication ? JSON.stringify(draft) : "");
   const defaultKey = useRef(JSON.stringify(defaultCommunication(people)));
@@ -696,32 +760,54 @@ export function ReviewSendModal({
   }, [flush]);
 
   const dismiss = useCallback(() => {
+    const sendId = activeSendId.current;
+    if (sendId) {
+      activeSendId.current = null;
+      sendAttempt.current += 1;
+      void cancelQuoteSend(sendId);
+    }
     void flush()
       .then(() => onCloseRef.current())
       .catch(() => setSendError({ id: Date.now(), message: copy.saveQuoteError }));
   }, [flush]);
 
+  const finishSend = useCallback(() => {
+    onCloseRef.current();
+  }, []);
+
   async function submit() {
     if (sending) return;
+    const attempt = ++sendAttempt.current;
+    const sendId = crypto.randomUUID();
+    activeSendId.current = sendId;
     setSending(true);
+    setSendComplete(false);
     setSendError(null);
     try {
       await flush();
     } catch {
+      if (sendAttempt.current !== attempt) return;
+      activeSendId.current = null;
       setSendError({ id: Date.now(), message: copy.saveQuoteError });
       setSending(false);
       return;
     }
+    if (sendAttempt.current !== attempt) return;
     try {
-      await onSend(draftRef.current);
-      onClose();
+      await onSend(draftRef.current, { sendId, active: () => sendAttempt.current === attempt });
     } catch (error) {
+      if (sendAttempt.current !== attempt) return;
+      activeSendId.current = null;
       setSendError({
         id: Date.now(),
         message: error instanceof Error && error.message ? error.message : copy.sendQuoteError,
       });
       setSending(false);
+      return;
     }
+    if (sendAttempt.current !== attempt) return;
+    activeSendId.current = null;
+    setSendComplete(true);
   }
 
   useEffect(() => {
@@ -775,8 +861,8 @@ export function ReviewSendModal({
               rel="noopener noreferrer"
               className="inline-flex shrink-0 cursor-pointer items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 shadow-xs transition-colors hover:bg-gray-50"
             >
-              <Calculator className="h-3.5 w-3.5 text-gray-500" strokeWidth={1.8} aria-hidden="true" />
-              <span>{copy.seeQuoteDetails}</span>
+              <ExternalLink className="h-3.5 w-3.5 shrink-0 text-gray-500" aria-hidden="true" />
+              <span>{copy.openQuote}</span>
             </a>
           </div>
 
@@ -851,11 +937,20 @@ export function ReviewSendModal({
           <button
             type="button"
             disabled={sending}
+            aria-busy={sending}
             onClick={() => void submit()}
-            className="flex cursor-pointer items-center gap-2 rounded-lg bg-black px-5 py-2 text-xs font-semibold text-white shadow-sm transition-all hover:bg-gray-800 disabled:opacity-60"
+            className={
+              sending
+                ? "flex cursor-default items-center gap-2 rounded-lg bg-gray-400 px-5 py-2 text-xs font-semibold text-white shadow-sm"
+                : "flex cursor-pointer items-center gap-2 rounded-lg bg-black px-5 py-2 text-xs font-semibold text-white shadow-sm transition-all hover:bg-gray-800"
+            }
           >
-            <span>{copy.sendNow}</span>
-            <Send className="h-3.5 w-3.5" aria-hidden="true" />
+            <span>{sending ? copy.sendingNow : copy.sendNow}</span>
+            {sending ? (
+              <SendMeter complete={sendComplete} onFilled={finishSend} />
+            ) : (
+              <Send className="h-3.5 w-3.5" aria-hidden="true" />
+            )}
           </button>
         </div>
       </div>

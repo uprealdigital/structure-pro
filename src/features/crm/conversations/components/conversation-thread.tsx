@@ -113,14 +113,22 @@ function NamedChange({ name, badge }: { name: string; badge: string }) {
   );
 }
 
-function SystemActivity({ activity }: { activity: Activity }) {
+function SystemActivity({
+  activity,
+  showTime = true,
+  compact = false,
+}: {
+  activity: Activity;
+  showTime?: boolean;
+  compact?: boolean;
+}) {
   const clock = activity.createdAt ? formatMessageClock(activity.createdAt) : "";
   const event = systemEventText(activity.text);
   const statusChange = (event.kind === "dealStatus" || event.kind === "quoteStatus") && event.status;
 
   return (
-    <div className="my-2 flex flex-col items-center justify-center">
-      <div className="inline-flex max-w-full flex-wrap items-center justify-center gap-x-1.5 gap-y-1 rounded-full border border-gray-200/80 bg-transparent px-3 py-1 text-center text-xs text-gray-600 shadow-xs transition-colors hover:bg-gray-50">
+    <div className={compact ? "flex flex-col items-center justify-center" : "my-2 flex flex-col items-center justify-center"}>
+      <div className="inline-flex max-w-full flex-wrap items-center justify-center gap-x-1.5 gap-y-1 rounded-full border border-gray-200 bg-transparent px-3 py-1 text-center text-xs text-gray-600 transition-colors hover:bg-gray-50">
         {logSubjectIcon(event.kind)}
         {event.kind === "renamed" && event.previousName ? (
           <span>
@@ -150,7 +158,7 @@ function SystemActivity({ activity }: { activity: Activity }) {
           </span>
         )}
       </div>
-      {clock ? (
+      {showTime && clock ? (
         <span className="mt-1 text-[10px] text-gray-400">
           {clock} • {copy.systemEvent}
         </span>
@@ -159,7 +167,15 @@ function SystemActivity({ activity }: { activity: Activity }) {
   );
 }
 
-function CallActivity({ activity }: { activity: Activity }) {
+function CallActivity({
+  activity,
+  showTime = true,
+  compact = false,
+}: {
+  activity: Activity;
+  showTime?: boolean;
+  compact?: boolean;
+}) {
   const duration = formatCallDuration(activity.call?.durationSeconds);
   const directionLabel = callDirectionLabel(activity);
   const label = duration ? `${directionLabel} (${duration})` : directionLabel;
@@ -169,7 +185,7 @@ function CallActivity({ activity }: { activity: Activity }) {
   const dotClass = highMatch ? "bg-emerald-500" : "bg-red-500";
 
   return (
-    <div className="flex flex-col items-center gap-1 py-1">
+    <div className={compact ? "flex flex-col items-center gap-1" : "flex flex-col items-center gap-1 py-1"}>
       <div className="inline-flex items-center gap-2 rounded-full border border-gray-200 bg-white px-3 py-1.5 text-[11px] text-gray-700 shadow-xs">
         <Phone className="h-3.5 w-3.5 shrink-0 text-gray-500" strokeWidth={1.8} aria-hidden="true" />
         <span className="font-medium text-gray-800">{label}</span>
@@ -184,7 +200,7 @@ function CallActivity({ activity }: { activity: Activity }) {
           <span aria-hidden="true"> ›</span>
         </button>
       </div>
-      {clock ? (
+      {showTime && clock ? (
         <span className="text-[10px] text-gray-400">
           {clock} • {callDirectionLabel(activity)}
         </span>
@@ -341,7 +357,6 @@ function messageStamp(sentAt: string | undefined, channel: ActivityChannel, rece
 function EmailActivity({
   message,
   sent,
-  clock,
   stamp,
   initials,
   ai = false,
@@ -350,7 +365,6 @@ function EmailActivity({
 }: {
   message: EmailMessage;
   sent: boolean;
-  clock: string;
   stamp: string;
   initials: string;
   ai?: boolean;
@@ -365,7 +379,7 @@ function EmailActivity({
         </span>
       )}
       <div className="min-w-0 flex-1">
-        <EmailCard message={message} clock={clock} sent={sent} />
+        <EmailCard message={message} sent={sent} />
         {stamp ? (
           <span className={`mt-1 block text-[10px] text-gray-400 ${sent ? "pr-1 text-right" : "pl-1"}`}>{stamp}</span>
         ) : null}
@@ -457,6 +471,81 @@ function StaffAvatar() {
       </div>
     </div>
   );
+}
+
+type ThreadPiece = {
+  item?: OutgoingMessage;
+  row?: {
+    fromCustomer: boolean;
+    showDay: boolean;
+    activity: Activity;
+  };
+};
+
+function activityMinute(iso: string | undefined): string {
+  if (!iso) return "";
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return "";
+  return `${date.getFullYear()}-${date.getMonth()}-${date.getDate()}-${date.getHours()}-${date.getMinutes()}`;
+}
+
+function pieceMinute(piece: ThreadPiece): string {
+  return activityMinute(piece.item ? piece.item.sentAt : piece.row?.activity.createdAt);
+}
+
+function pieceGroup(piece: ThreadPiece): string {
+  if (piece.item) return `staff:${piece.item.channel}`;
+  const activity = piece.row?.activity;
+  if (!activity) return "";
+  if (activity.channel === "system") return "internal";
+  if (activity.channel === "call") return `call:${activity.call?.direction ?? ""}`;
+  const side = piece.row?.fromCustomer ? "customer" : "staff";
+  if (activity.generatedBy === "ai" && activity.channel === "sms") return `${side}:sms:ai`;
+  return `${side}:${activity.channel}`;
+}
+
+function sameActivityGroup(left: ThreadPiece, right: ThreadPiece): boolean {
+  if (right.row?.showDay) return false;
+  const minute = pieceMinute(left);
+  return minute !== "" && minute === pieceMinute(right) && pieceGroup(left) === pieceGroup(right);
+}
+
+function displaysTime(piece: ThreadPiece): boolean {
+  if (piece.item) return piece.item.kind !== "file" && Boolean(piece.item.sentAt);
+  const activity = piece.row?.activity;
+  if (!activity?.createdAt) return false;
+  if (activity.channel === "system" || activity.channel === "call" || activity.channel === "email") return true;
+  if (piece.row?.fromCustomer) return true;
+  return !fileAttachment(activity.text);
+}
+
+function activityLayout(pieces: ThreadPiece[]) {
+  const layout = pieces.map(() => ({ showTime: true, tight: false, compact: false }));
+  let start = 0;
+  const close = (end: number) => {
+    if (end - start < 2) return;
+    let keeper = -1;
+    for (let index = start; index < end; index += 1) {
+      layout[index].compact = true;
+      if (index > start) layout[index].tight = true;
+      if (displaysTime(pieces[index])) keeper = index;
+    }
+    for (let index = start; index < end; index += 1) {
+      if (index !== keeper) layout[index].showTime = false;
+    }
+  };
+  for (let index = 1; index <= pieces.length; index += 1) {
+    if (index === pieces.length || !sameActivityGroup(pieces[index - 1], pieces[index])) {
+      close(index);
+      start = index;
+    }
+  }
+  return layout;
+}
+
+function threadItemClass(index: number, tight: boolean): string {
+  const space = index === 0 ? "" : tight ? "mt-1" : "mt-4";
+  return space ? `flex flex-col gap-4 ${space}` : "flex flex-col gap-4";
 }
 
 export function ConversationThread({
@@ -555,21 +644,23 @@ export function ConversationThread({
     });
   });
   pieces.sort((left, right) => left.at - right.at || left.seq - right.seq);
+  const layout = activityLayout(pieces);
 
   return (
     <>
-    <ol className="flex flex-col gap-4 px-6 py-5" aria-label={copy.messages}>
-      {pieces.map((piece) => {
+    <ol className="flex flex-col px-6 py-5" aria-label={copy.messages}>
+      {pieces.map((piece, index) => {
+        const { showTime, tight, compact } = layout[index];
         if (piece.item) {
           const item = piece.item;
+          const stamp = showTime ? messageStamp(item.sentAt, item.channel) : "";
           return (
-            <li key={piece.key} className="flex flex-col gap-4">
+            <li key={piece.key} className={threadItemClass(index, tight)}>
               {item.channel === "email" ? (
                 <EmailActivity
                   message={parseEmailActivity(item.text)}
                   sent
-                  clock={item.sentAt ? formatMessageClock(item.sentAt) : ""}
-                  stamp={messageStamp(item.sentAt, "email")}
+                  stamp={stamp}
                   initials={operatorInitials}
                   error={item.status === "failed" ? item.error : ""}
                   onRetry={() => onRetry?.(item.id)}
@@ -577,7 +668,7 @@ export function ConversationThread({
               ) : item.kind === "text" ? (
                 <StaffText
                   text={item.text}
-                  stamp={messageStamp(item.sentAt, item.channel)}
+                  stamp={stamp}
                   initials={operatorInitials}
                   error={item.status === "failed" ? item.error : ""}
                   onRetry={() => onRetry?.(item.id)}
@@ -595,7 +686,7 @@ export function ConversationThread({
                         onRetry={() => onRetry?.(item.id)}
                         onView={() => item.previewUrl && setViewing({ src: item.previewUrl, name: item.name })}
                       />
-                      <span className="mt-1 block pr-1 text-right text-[10px] text-gray-400">{messageStamp(item.sentAt, item.channel)}</span>
+                      {stamp ? <span className="mt-1 block pr-1 text-right text-[10px] text-gray-400">{stamp}</span> : null}
                     </div>
                   ) : (
                     <FilePreview
@@ -615,9 +706,10 @@ export function ConversationThread({
         const { activity, fromCustomer, showDay, day, stamp } = piece.row;
         const image = imageAttachment(activity.text);
         const file = fileAttachment(activity.text);
+        const visibleStamp = showTime ? stamp : "";
 
         return (
-          <li key={piece.key} data-activity-position={activity.position} className="flex flex-col gap-4">
+          <li key={piece.key} data-activity-position={activity.position} className={threadItemClass(index, tight)}>
             {showDay ? (
               <div className="my-2 flex items-center justify-center">
                 <span className="rounded-full bg-gray-200/60 px-3 py-1 text-[11px] font-medium text-gray-400">
@@ -626,15 +718,14 @@ export function ConversationThread({
               </div>
             ) : null}
             {activity.channel === "system" ? (
-              <SystemActivity activity={activity} />
+              <SystemActivity activity={activity} showTime={showTime} compact={compact} />
             ) : isCall(activity.channel) ? (
-              <CallActivity activity={activity} />
+              <CallActivity activity={activity} showTime={showTime} compact={compact} />
             ) : activity.channel === "email" ? (
               <EmailActivity
                 message={parseEmailActivity(activity.text)}
                 sent={!fromCustomer}
-                clock={activity.createdAt ? formatMessageClock(activity.createdAt) : ""}
-                stamp={messageStamp(activity.createdAt, "email", fromCustomer)}
+                stamp={showTime ? messageStamp(activity.createdAt, "email", fromCustomer) : ""}
                 initials={fromCustomer ? contactInitials(contactName) : operatorInitials}
                 ai={!fromCustomer && activity.generatedBy === "ai"}
               />
@@ -647,7 +738,7 @@ export function ConversationThread({
                   <div className="rounded-2xl rounded-tl-sm border border-gray-200 bg-white p-3.5 text-xs text-gray-800 shadow-xs">
                     <MessageText text={activity.text} className="leading-relaxed break-words whitespace-pre-wrap" />
                   </div>
-                  {stamp ? <span className="mt-1 block pl-1 text-[10px] text-gray-400">{stamp}</span> : null}
+                  {visibleStamp ? <span className="mt-1 block pl-1 text-[10px] text-gray-400">{visibleStamp}</span> : null}
                 </div>
               </div>
             ) : file ? (
@@ -669,14 +760,14 @@ export function ConversationThread({
                       })
                     }
                   />
-                  {stamp ? <span className="mt-1 block pr-1 text-right text-[10px] text-gray-400">{stamp}</span> : null}
+                  {visibleStamp ? <span className="mt-1 block pr-1 text-right text-[10px] text-gray-400">{visibleStamp}</span> : null}
                 </div>
                 <StaffAvatar />
               </div>
             ) : (
               <StaffText
                 text={activity.text}
-                stamp={stamp}
+                stamp={visibleStamp}
                 initials={operatorInitials}
                 ai={activity.generatedBy === "ai"}
               />

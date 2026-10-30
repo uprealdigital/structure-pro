@@ -1,7 +1,11 @@
 import { demoChatId } from "@/src/common/lib/telegram/telegram.service";
 import { inboundActivitySchema, type InboundActivityChannel } from "@/src/features/ai/types";
-import { appendActivity, attachConversationChannel } from "@/src/features/crm/conversations/server/actions";
-import { getConversation, getLatestChannelConversationId } from "@/src/features/crm/conversations/server/queries";
+import { recordCrmLog } from "@/src/features/crm/common/db/log";
+import { appendActivity } from "@/src/features/crm/conversations/server/actions";
+import { getConversation, getConversationIdByPhone } from "@/src/features/crm/conversations/server/queries";
+
+// Temporary demo routing. Inbound Telegram is recorded on this customer only.
+const demoInboundPhone = "646-284-0831";
 
 export async function recordInboundActivity(input: unknown): Promise<void> {
   const parsed = inboundActivitySchema.safeParse(input);
@@ -11,10 +15,10 @@ export async function recordInboundActivity(input: unknown): Promise<void> {
 
   const channelKey = await targetChannelKey(parsed.data.channel, parsed.data.channelKey);
   if (!channelKey) return;
-  const conversation = await conversationForChannel(parsed.data.channel, channelKey);
-  if (!conversation) return;
+  const conversationId = await conversationIdForChannel(parsed.data.channel, channelKey);
+  if (!conversationId) return;
 
-  await appendActivity(conversation.id, {
+  await appendActivity(conversationId, {
     role: "user",
     channel: parsed.data.channel,
     text,
@@ -27,12 +31,21 @@ async function targetChannelKey(channel: InboundActivityChannel, channelKey: str
   return channelKey === demoChatId() ? channelKey : undefined;
 }
 
-async function conversationForChannel(channel: InboundActivityChannel, channelKey: string) {
-  const existing = await getConversation(channelKey);
-  if (existing) return existing;
-  if (channel !== "telegram") return undefined;
-  const conversationId = await getLatestChannelConversationId("telegram");
-  if (!conversationId) return undefined;
-  await attachConversationChannel(conversationId, { channelKey, chatId: channelKey });
-  return getConversation(channelKey);
+async function conversationIdForChannel(
+  channel: InboundActivityChannel,
+  channelKey: string,
+): Promise<string | undefined> {
+  if (channel !== "telegram") {
+    const existing = await getConversation(channelKey);
+    return existing?.id;
+  }
+
+  const conversationId = await getConversationIdByPhone(demoInboundPhone);
+  if (conversationId) return conversationId;
+
+  await recordCrmLog({
+    feature: "conversations",
+    error: `Could not find conversation for ${demoInboundPhone}`,
+  });
+  return undefined;
 }

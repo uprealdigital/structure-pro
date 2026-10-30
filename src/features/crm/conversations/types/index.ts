@@ -240,6 +240,10 @@ export const conversationQuoteRevisionSchema = z.object({
 
 export type ConversationQuoteRevision = z.infer<typeof conversationQuoteRevisionSchema>;
 
+export const conversationQuoteRequestSchema = z.object({
+  quoteId: z.string().trim().min(1),
+});
+
 export const conversationQuoteSchema = z.object({
   id: z.string(),
   invoiceId: z.string(),
@@ -311,13 +315,17 @@ export const conversationWorkspaceSchema = z.object({
 
 export type ConversationWorkspace = z.infer<typeof conversationWorkspaceSchema>;
 
+export const quoteSendIdSchema = z.string().uuid();
+
 export const sendQuoteMessagesSchema = z.object({
   quoteId: z.string().trim().min(1),
   revisionId: z.string().trim().min(1),
   dealIds: z.array(z.string().trim().min(1)).min(1),
   dealName: z.string(),
   dealPrice: z.string(),
+  quoteName: z.string(),
   communication: quoteCommunicationSchema,
+  sendId: quoteSendIdSchema.optional(),
 });
 
 export type SendQuoteMessages = z.infer<typeof sendQuoteMessagesSchema>;
@@ -336,6 +344,7 @@ export const conversationSuggestionSchema = z.object({
   id: z.string().trim().min(1),
   intent: suggestionIntentSchema,
   configChanges: configChangesSchema.default({}),
+  quoteNumber: z.number().int().positive().nullable().default(null),
   previewImageUrl: z.string().nullable().default(null),
   summary: z.string().default(""),
   messages: z.array(z.string()),

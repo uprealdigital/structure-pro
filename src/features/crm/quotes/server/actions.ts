@@ -28,15 +28,49 @@ import {
   quoteCommunicationWriteSchema,
   quoteRevisionActivateSchema,
   quoteRevisionRenderFilesSchema,
+  type QuoteListItem,
+  type QuotePortal,
   type QuoteRevisionRenders,
   type QuoteStatus,
 } from "@/src/features/crm/quotes/types";
 import { quoteWindowExpired } from "@/src/features/crm/quotes/utils/status";
 import { recordCrmLog } from "@/src/features/crm/common/db/log";
+import { getQuoteListItem, getQuotePortal } from "@/src/features/crm/quotes/server/queries";
 
 function revalidateConversations() {
   revalidatePath("/");
   revalidatePath("/conversations");
+}
+
+export async function loadQuotePortal(
+  input: unknown,
+): Promise<{ success: true; data: QuotePortal } | { error: string }> {
+  const parsed = payQuoteDepositSchema.safeParse(input);
+  if (!parsed.success) return { error: "A quote is required" };
+  try {
+    const quote = await getQuotePortal(parsed.data.quoteId);
+    if (!quote) return { error: "Quote was not found" };
+    return { success: true, data: quote };
+  } catch (error) {
+    void recordCrmLog({ feature: "quotes", error });
+    const message = error instanceof Error ? error.message : "Could not load this quote";
+    return { error: message };
+  }
+}
+
+export async function loadQuoteListItem(
+  input: unknown,
+): Promise<{ success: true; data: QuoteListItem | null } | { error: string }> {
+  const parsed = payQuoteDepositSchema.safeParse(input);
+  if (!parsed.success) return { error: "A quote is required" };
+  try {
+    const item = await getQuoteListItem(parsed.data.quoteId);
+    return { success: true, data: item ?? null };
+  } catch (error) {
+    void recordCrmLog({ feature: "quotes", error });
+    const message = error instanceof Error ? error.message : "Could not load this quote";
+    return { error: message };
+  }
 }
 
 export async function saveQuoteSelections(input: {

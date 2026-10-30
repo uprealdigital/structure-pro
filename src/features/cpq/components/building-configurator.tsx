@@ -825,6 +825,25 @@ function QuoteField({
   );
 }
 
+function QuoteSubmitProgress() {
+  return (
+    <svg
+      className="h-4 w-4 shrink-0 animate-spin"
+      viewBox="0 0 16 16"
+      fill="none"
+      aria-hidden="true"
+    >
+      <circle cx="8" cy="8" r="6" stroke="currentColor" strokeOpacity="0.28" strokeWidth="2" />
+      <path
+        d="M14 8a6 6 0 0 0-6-6"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+      />
+    </svg>
+  );
+}
+
 function QuoteModal({
   config,
   zip,
@@ -1055,9 +1074,12 @@ function QuoteModal({
             <div className="pt-2">
               <button
                 type="submit"
-                className="w-full rounded-full bg-black px-6 py-3.5 text-center text-sm font-medium text-white shadow-md transition-all hover:bg-stone-900 active:scale-95"
+                disabled={submitting}
+                aria-busy={submitting}
+                className="flex w-full items-center justify-center gap-2.5 rounded-full bg-black px-6 py-3.5 text-center text-sm font-medium text-white shadow-md transition-all hover:bg-stone-900 active:scale-95 disabled:cursor-not-allowed disabled:opacity-80 disabled:hover:bg-black disabled:active:scale-100"
               >
-                {submitting ? copy.quoteSubmitting : copy.submitQuote}
+                <span>{submitting ? copy.quoteSubmitting : copy.submitQuote}</span>
+                {submitting ? <QuoteSubmitProgress /> : null}
               </button>
             </div>
           </form>

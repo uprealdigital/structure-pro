@@ -550,7 +550,7 @@ export function DealHeading({
               {title || copy.quote}
             </span>
             {hasNewDeal ? (
-              <span className="ml-1.5 inline-flex animate-pulse items-center rounded-full bg-[#121314] px-1.5 py-0.5 text-[10px] leading-none font-medium text-white [animation-duration:2.8s] motion-reduce:animate-none">
+              <span className="ml-1.5 inline-flex items-center rounded-full bg-[#121314] px-1.5 py-0.5 text-[10px] leading-none font-medium text-white">
                 {copy.newDeal}
               </span>
             ) : null}

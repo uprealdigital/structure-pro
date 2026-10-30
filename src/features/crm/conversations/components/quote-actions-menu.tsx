@@ -89,6 +89,26 @@ export function QuoteActionsMenu({
           <button
             type="button"
             role="menuitem"
+            onClick={openQuote}
+            className="flex w-full cursor-pointer items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-xs font-medium text-gray-700 transition-colors hover:bg-gray-50 hover:text-black"
+          >
+            <ExternalLink className="h-3.5 w-3.5 shrink-0 text-gray-500" aria-hidden="true" />
+            <span>{copy.openQuote}</span>
+          </button>
+          {published ? (
+            <button
+              type="button"
+              role="menuitem"
+              onClick={() => void copyPublishLink()}
+              className="flex w-full cursor-pointer items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-xs font-medium text-gray-700 transition-colors hover:bg-gray-50 hover:text-black"
+            >
+              <Link className="h-3.5 w-3.5 shrink-0 text-gray-500" aria-hidden="true" />
+              <span>{copy.copyPublishLink}</span>
+            </button>
+          ) : null}
+          <button
+            type="button"
+            role="menuitem"
             disabled={adding || pending}
             onClick={() => {
               setOpen(false);
@@ -125,26 +145,6 @@ export function QuoteActionsMenu({
             >
               <FolderOutput className="h-3.5 w-3.5 shrink-0 text-gray-500" aria-hidden="true" />
               <span>{copy.moveQuoteToNewDeal}</span>
-            </button>
-          ) : null}
-          <button
-            type="button"
-            role="menuitem"
-            onClick={openQuote}
-            className="flex w-full cursor-pointer items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-xs font-medium text-gray-700 transition-colors hover:bg-gray-50 hover:text-black"
-          >
-            <ExternalLink className="h-3.5 w-3.5 shrink-0 text-gray-500" aria-hidden="true" />
-            <span>{copy.openQuote}</span>
-          </button>
-          {published ? (
-            <button
-              type="button"
-              role="menuitem"
-              onClick={() => void copyPublishLink()}
-              className="flex w-full cursor-pointer items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-xs font-medium text-gray-700 transition-colors hover:bg-gray-50 hover:text-black"
-            >
-              <Link className="h-3.5 w-3.5 shrink-0 text-gray-500" aria-hidden="true" />
-              <span>{copy.copyPublishLink}</span>
             </button>
           ) : null}
           {menuAction ? (

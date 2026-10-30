@@ -1,6 +1,10 @@
 "use client";
 
 import { useMemo, useRef, useState } from "react";
+import { useDealStream } from "@/src/features/crm/deals/hooks/use-deal-stream";
+import type { DealChangeEvent } from "@/src/features/crm/deals/types";
+import { useQuoteStream } from "@/src/features/crm/quotes/hooks/use-quote-stream";
+import type { QuoteChangeEvent } from "@/src/features/crm/quotes/types";
 import { ConversationDetail, type ThreadReadNotice } from "@/src/features/crm/conversations/components/conversation-detail";
 import { ConversationDetailSkeleton } from "@/src/features/crm/conversations/components/conversation-skeleton";
 import { ConversationList } from "@/src/features/crm/conversations/components/conversation-list";
@@ -92,6 +96,8 @@ export function ConversationWorkspaceView({
   const serverUnreadCount = useRef(new Map<string, number>());
   const [liveActivities, setLiveActivities] = useState<Record<string, Activity[]>>({});
   const [readNotice, setReadNotice] = useState<ThreadReadNotice | null>(null);
+  const [quoteChange, setQuoteChange] = useState<QuoteChangeEvent | null>(null);
+  const [dealChange, setDealChange] = useState<DealChangeEvent | null>(null);
   const readToken = useRef(0);
   const knownIds = useRef(new Set<string>());
   const requestedIds = useRef(new Set<string>());
@@ -118,6 +124,16 @@ export function ConversationWorkspaceView({
     },
     newestActivityAt(inbox, workspace),
   );
+
+  useQuoteStream((event) => {
+    setQuoteChange(event);
+  });
+
+  useDealStream((event) => {
+    if (!event.status) return;
+    setDealChange(event);
+    applyDealStatus(event.id, event.status);
+  });
 
   function applyActivity(event: ActivityEvent) {
     const { conversationId, activity } = event;
@@ -278,7 +294,7 @@ export function ConversationWorkspaceView({
     const before = filters.visibleItems(displayed);
     const index = before.findIndex((item) => item.id === currentId);
     const nextPatches = { ...statusByDeal, [dealId]: nextStatus };
-    setStatusByDeal(nextPatches);
+    setStatusByDeal((current) => ({ ...current, [dealId]: nextStatus }));
     selection.patchDealStatus(dealId, nextStatus);
 
     const stillVisible = filters.visibleItems(shownInbox(mergedInbox, nextPatches, activeDealByConversation)).some(
@@ -391,6 +407,8 @@ export function ConversationWorkspaceView({
               setUnreadCountById((current) => ({ ...current, [id]: unreadCount }));
             }}
             readNotice={readNotice}
+            quoteChange={quoteChange}
+            dealChange={dealChange}
           />
         ) : showDetail && selection.status === "pending" ? (
           <ConversationDetailSkeleton />

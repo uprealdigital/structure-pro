@@ -8,6 +8,14 @@ const dateFormat = new Intl.DateTimeFormat("en-US", {
   year: "numeric",
 });
 
+const dateTimeFormat = new Intl.DateTimeFormat("en-US", {
+  month: "short",
+  day: "numeric",
+  year: "numeric",
+  hour: "numeric",
+  minute: "2-digit",
+});
+
 const priceFormat = new Intl.NumberFormat("en-US", {
   style: "currency",
   currency: "USD",
@@ -26,6 +34,13 @@ export function formatQuoteDate(iso: string): string {
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) return "";
   return dateFormat.format(date);
+}
+
+export function formatQuoteDateTime(iso: string): string {
+  if (!iso) return "";
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return "";
+  return dateTimeFormat.format(date);
 }
 
 export function formatQuotePrice(amount: number): string {

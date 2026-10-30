@@ -2,7 +2,8 @@
 
 import { ChevronLeft, ChevronRight, Filter, Globe, ImageIcon, List, Plus, Search } from "lucide-react";
 import Link from "next/link";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { useDealStream } from "@/src/features/crm/deals/hooks/use-deal-stream";
 import { DealStatusBadge } from "@/src/features/crm/deals/components/deal-status-badge";
 import { copy } from "@/src/features/crm/deals/locales/en";
 import type { DealBoardItem, DealSource, DealStatus } from "@/src/features/crm/deals/types";
@@ -110,9 +111,20 @@ function KanbanIcon() {
   );
 }
 
-export function DealsBoard({ deals, loadError }: { deals: DealBoardItem[]; loadError: boolean }) {
+export function DealsBoard({ deals: initialDeals, loadError }: { deals: DealBoardItem[]; loadError: boolean }) {
+  const [deals, setDeals] = useState(initialDeals);
   const [query, setQuery] = useState("");
   const [mode, setMode] = useState<"kanban" | "list">("kanban");
+  useEffect(() => {
+    setDeals(initialDeals);
+  }, [initialDeals]);
+  useDealStream((event) => {
+    const status = event.status;
+    if (!status) return;
+    setDeals((current) =>
+      current.map((deal) => (deal.id === event.id ? { ...deal, stage: status } : deal)),
+    );
+  });
   const scroller = useRef<HTMLDivElement>(null);
   const needle = query.trim().toLowerCase();
   const visible = needle

@@ -193,10 +193,17 @@ export function useConversationSuggestions(dealId: string, conversationId: strin
     },
     dismiss: async (id: string) => {
       const previous = suggestions;
+      const suggestion = previous.find((item) => item.id === id);
+      if (suggestion) dismissedIntents.current.add(suggestion.intent);
       hide(id);
+      setStreaming((current) => ({
+        revision: suggestion?.intent === "revision" ? null : current.revision,
+        quote: suggestion?.intent === "new_quote" ? null : current.quote,
+      }));
       const result = await dismissConversationSuggestion({ id });
       if (!("error" in result)) return true;
       hiddenIds.current.delete(id);
+      if (suggestion) dismissedIntents.current.delete(suggestion.intent);
       setSuggestions(previous);
       return false;
     },

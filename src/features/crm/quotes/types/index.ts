@@ -187,6 +187,7 @@ export const quotePortalSchema = z.object({
   totalLabel: z.string(),
   zip: z.string(),
   won: z.boolean(),
+  confirmedAt: z.string().default(""),
   customers: z.array(quotePortalCustomerSchema),
   recipients: z.array(quotePortalRecipientSchema),
   dealIds: z.array(z.string()),
@@ -201,3 +202,17 @@ export type QuotePortal = z.infer<typeof quotePortalSchema>;
 export const payQuoteDepositSchema = z.object({
   quoteId: z.string().trim().min(1),
 });
+
+export const quoteChangeKindSchema = z.enum(["insert", "update", "delete"]);
+export type QuoteChangeKind = z.infer<typeof quoteChangeKindSchema>;
+
+export const quoteChangeEventSchema = z.object({
+  id: z.string().min(1),
+  kind: quoteChangeKindSchema,
+  status: quoteStatusSchema.optional(),
+  activeRevisionId: z.string().min(1).nullable().optional(),
+  updatedAt: z.string().optional(),
+  dealIds: z.array(z.string()).default([]),
+});
+
+export type QuoteChangeEvent = z.infer<typeof quoteChangeEventSchema>;

@@ -323,6 +323,7 @@ export const reviewMessageToken = {
   lastName: "{{lastName}}",
   dealName: "{{dealName}}",
   dealPrice: "{{dealPrice}}",
+  quoteName: "{{quoteName}}",
   quoteLink: "{{quoteLink}}",
   companyName: "{{companyName}}",
   userFirstName: "{{userFirstName}}",

@@ -1,5 +1,8 @@
 import { portalCopy } from "@/src/features/crm/quotes/locales/en";
 import type { QuotePortal } from "@/src/features/crm/quotes/types";
+import { formatQuoteDateTime } from "@/src/features/crm/quotes/utils/formatting";
+
+export type QuotePdfKind = "quote" | "agreement" | "receipt";
 
 function pdfText(value: string): string {
   return value
@@ -33,8 +36,22 @@ function wrap(value: string, width: number): string[] {
   return lines.length > 0 ? lines : [""];
 }
 
-function quoteLines(quote: QuotePortal): string[] {
+function quoteLines(quote: QuotePortal, kind: QuotePdfKind): string[] {
+  const confirmedAt = formatQuoteDateTime(quote.confirmedAt);
+  const header =
+    kind === "receipt"
+      ? [
+          portalCopy.depositReceipt,
+          portalCopy.orderConfirmed,
+          ...(confirmedAt ? [confirmedAt] : []),
+          portalCopy.depositConfirmed,
+          "",
+        ]
+      : kind === "agreement"
+        ? [portalCopy.agreementSigned, ""]
+        : [];
   const lines = [
+    ...header,
     quote.dealName,
     "",
     `${quote.versionLabel}    ${quote.dateLabel}`,
@@ -57,17 +74,18 @@ function chunk(lines: string[], size: number): string[][] {
   return pages.length > 0 ? pages : [[""]];
 }
 
-export function quotePdfFilename(quote: QuotePortal): string {
+export function quotePdfFilename(quote: QuotePortal, kind: QuotePdfKind = "quote"): string {
   const name = pdfText(quote.dealName)
     .trim()
     .replace(/[^\w.-]+/g, "-")
     .replace(/-+/g, "-")
     .replace(/^-|-$/g, "");
-  return `${name || quote.invoiceId}.pdf`;
+  const suffix = kind === "quote" ? "" : `-${kind}`;
+  return `${name || quote.invoiceId}${suffix}.pdf`;
 }
 
-export function quotePdfBytes(quote: QuotePortal): Uint8Array {
-  const pages = chunk(quoteLines(quote), 42);
+export function quotePdfBytes(quote: QuotePortal, kind: QuotePdfKind = "quote"): Uint8Array {
+  const pages = chunk(quoteLines(quote, kind), 42);
   const encoder = new TextEncoder();
   const objects: string[] = [
     "<< /Type /Catalog /Pages 2 0 R >>",
@@ -114,18 +132,18 @@ export function quotePdfBytes(quote: QuotePortal): Uint8Array {
   return bytes;
 }
 
-export function quotePdfBlob(quote: QuotePortal): Blob {
-  const bytes = quotePdfBytes(quote);
+export function quotePdfBlob(quote: QuotePortal, kind: QuotePdfKind = "quote"): Blob {
+  const bytes = quotePdfBytes(quote, kind);
   const buffer = new ArrayBuffer(bytes.byteLength);
   new Uint8Array(buffer).set(bytes);
   return new Blob([buffer], { type: "application/pdf" });
 }
 
-export function downloadQuotePdf(quote: QuotePortal) {
-  const url = URL.createObjectURL(quotePdfBlob(quote));
+export function downloadQuotePdf(quote: QuotePortal, kind: QuotePdfKind = "quote") {
+  const url = URL.createObjectURL(quotePdfBlob(quote, kind));
   const link = document.createElement("a");
   link.href = url;
-  link.download = quotePdfFilename(quote);
+  link.download = quotePdfFilename(quote, kind);
   link.click();
   URL.revokeObjectURL(url);
 }
