@@ -61,8 +61,33 @@ export async function sendTelegramFile(
   }
 }
 
+const localHosts = new Set(["localhost", "127.0.0.1", "::1", "0.0.0.0"]);
+
 function escapeTelegramHtml(value: string): string {
   return value.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;");
+}
+
+/** Telegram rejects localhost targets and drops the link, so send the public site instead. */
+function publicTelegramHref(href: string): string {
+  let url: URL;
+  try {
+    url = new URL(href);
+  } catch {
+    return href;
+  }
+  const host = url.hostname.replace(/^\[|\]$/g, "").toLowerCase();
+  if (!localHosts.has(host)) return href;
+  const webhook = process.env.TELEGRAM_WEBHOOK_URL?.trim();
+  if (!webhook) return href;
+  try {
+    const origin = new URL(webhook);
+    url.protocol = origin.protocol;
+    url.hostname = origin.hostname;
+    url.port = origin.port;
+    return url.href;
+  } catch {
+    return href;
+  }
 }
 
 /** Wrap detected links in HTML anchors. Other text is escaped and otherwise unchanged. */
@@ -72,8 +97,10 @@ function telegramHtml(text: string): string | undefined {
   return parts
     .map((part) => {
       if (part.kind === "text") return escapeTelegramHtml(part.value);
-      const href = escapeTelegramHtml(part.href).replaceAll('"', "&quot;");
-      return `<a href="${href}">${escapeTelegramHtml(part.label)}</a>`;
+      const href = publicTelegramHref(part.href);
+      const label = href === part.href ? part.label : href;
+      const escapedHref = escapeTelegramHtml(href).replaceAll('"', "&quot;");
+      return `<a href="${escapedHref}">${escapeTelegramHtml(label)}</a>`;
     })
     .join("");
 }

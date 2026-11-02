@@ -10,7 +10,16 @@ import { quoteDisplayName } from "@/src/features/crm/quotes/utils/formatting";
 import { readDeal, readDealsByIds, readDealsByQuoteId, updateDeal } from "@/src/features/crm/deals/db/deal";
 import { createDealQuote, readDealQuotes, readDealQuotesForQuote } from "@/src/features/crm/deals/db/deal-quote";
 import { newInvoiceId } from "@/src/features/cpq/utils/id";
-import { createQuote, deleteQuote, readActiveRevisionId, readQuote, readQuoteStatus, setQuoteStatus, updateQuote } from "@/src/features/crm/quotes/db/quote";
+import {
+  createQuote,
+  deleteQuote,
+  readActiveRevisionId,
+  readQuote,
+  readQuoteStatus,
+  setQuoteStatus,
+  updateQuote,
+  writeQuoteStatus,
+} from "@/src/features/crm/quotes/db/quote";
 import {
   createQuoteRevision,
   readQuoteRevision,
@@ -432,25 +441,7 @@ export async function payQuoteDeposit(
   if (!parsed.success) return { error: "A quote is required" };
 
   try {
-    const revisionId = await readActiveRevisionId(parsed.data.quoteId);
-    if (!revisionId) return { error: "Quote was not found" };
-    const [direct, linked] = await Promise.all([
-      readDealsByQuoteId(parsed.data.quoteId),
-      readDealQuotesForQuote(parsed.data.quoteId),
-    ]);
-    const seen = new Set(direct.map((deal) => deal.id));
-    const extra = await readDealsByIds(linked.map((link) => link.dealId).filter((id) => !seen.has(id)));
-    const deals = [...direct, ...extra];
-    if (deals.length === 0) return { error: "This quote is not attached to a deal" };
-    for (const deal of deals) {
-      if (deal.status === "deal_won") continue;
-      await updateDeal(deal.id, { status: "deal_won" });
-    }
-    await setQuoteStatus(parsed.data.quoteId, "deposit_paid");
-    revalidateConversations();
-    revalidatePath("/quotes");
-    revalidatePath("/deals");
-    revalidatePath(`/quote/${parsed.data.quoteId}`);
+    await writeQuoteStatus(parsed.data.quoteId, "deposit_paid");
     return { success: true };
   } catch (error) {
     void recordCrmLog({ feature: "quotes", error });
@@ -531,7 +522,6 @@ export async function signQuoteAgreement(
     const status = await readQuoteStatus(parsed.data.quoteId);
     if (status !== "sent" && status !== "viewed") return { error: "This quote cannot be signed" };
     await setQuoteStatus(parsed.data.quoteId, "signed");
-    revalidateQuote(parsed.data.quoteId);
     return { success: true, data: { status: "signed" } };
   } catch (error) {
     void recordCrmLog({ feature: "quotes", error });
@@ -553,12 +543,10 @@ export async function refreshQuoteLifecycle(
     const revision = revisionId ? await readQuoteRevision(revisionId) : undefined;
     if (revision && quoteWindowExpired(status, revision.sharedQuoteAt)) {
       await setQuoteStatus(parsed.data.quoteId, "expired");
-      revalidateQuote(parsed.data.quoteId);
       return { success: true, data: { status: "expired" } };
     }
     if (parsed.data.openedByCustomer && status === "sent") {
       await setQuoteStatus(parsed.data.quoteId, "viewed");
-      revalidateQuote(parsed.data.quoteId);
       return { success: true, data: { status: "viewed" } };
     }
     return { success: true, data: { status } };

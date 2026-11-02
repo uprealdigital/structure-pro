@@ -100,6 +100,15 @@ export async function readQuoteRevisions(quoteId: string): Promise<QuoteRevision
   return toRevisions(rows);
 }
 
+export async function updateQuoteRevisionStatus(id: string, status: unknown): Promise<void> {
+  const next = quoteRevisionPatchSchema.parse({ status });
+  const { error } = await crm()
+    .from("quote_revisions")
+    .update({ status: next.status, updated_at: new Date().toISOString() })
+    .eq("id", id);
+  throwIfError(error);
+}
+
 export async function updateQuoteRevision(
   id: string,
   patch: { status: unknown; sharedQuoteAt?: unknown },

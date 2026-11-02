@@ -15,7 +15,7 @@ const selectedStatusClass: Record<DealStatus, string> = {
   new_lead: "border-gray-300 bg-gray-100 text-gray-800 shadow-xs",
   active_quote: "border-blue-200 bg-blue-50 text-blue-700 shadow-xs",
   pending_deposit: "border-violet-200 bg-violet-50 text-violet-700 shadow-xs",
-  deal_won: "border-gray-200 bg-gray-50 text-emerald-700 shadow-xs",
+  deal_won: "border-emerald-200 bg-emerald-50 text-emerald-700 shadow-xs",
   deal_lost: "border-red-200 bg-red-50 text-red-600 shadow-xs",
 };
 

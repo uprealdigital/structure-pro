@@ -5,7 +5,12 @@ import { toListedQuote, type QuoteListRow } from "@/src/features/cpq/utils/mappe
 import { describeSelections } from "@/src/features/cpq/utils/pricing";
 import { recordQuoteStatusActivity } from "@/src/features/crm/conversations/server/status-activity";
 import { quoteStatuses } from "@/src/features/crm/quotes/config/status";
-import { createQuoteRevision, readQuoteRevisionsByIds, updateQuoteRevision } from "@/src/features/crm/quotes/db/quote-revision";
+import {
+  createQuoteRevision,
+  readQuoteRevisionsByIds,
+  updateQuoteRevision,
+  updateQuoteRevisionStatus,
+} from "@/src/features/crm/quotes/db/quote-revision";
 import { portalCopy } from "@/src/features/crm/quotes/locales/en";
 import { quoteStatusSchema, type QuoteStatus } from "@/src/features/crm/quotes/types";
 import { quoteDisplayName, quoteNumberValue } from "@/src/features/crm/quotes/utils/formatting";
@@ -246,6 +251,20 @@ export async function setQuoteStatus(id: string, status: QuoteStatus): Promise<v
   const revisionId = await readActiveRevisionId(id);
   if (!revisionId) return;
   await updateQuoteRevision(revisionId, { status: next });
+}
+
+export async function writeQuoteStatus(id: string, status: QuoteStatus): Promise<void> {
+  const next = quoteStatusSchema.parse(status);
+  const { data, error } = await crm()
+    .from("quotes")
+    .update({ status: next, updated_at: new Date().toISOString() })
+    .eq("id", id)
+    .select("active_revision_id")
+    .maybeSingle();
+  throwIfError(error);
+  if (!data) throw new Error("Quote was not found");
+  if (typeof data.active_revision_id !== "string") return;
+  await updateQuoteRevisionStatus(data.active_revision_id, next);
 }
 
 export async function markQuoteSent(id: string): Promise<void> {

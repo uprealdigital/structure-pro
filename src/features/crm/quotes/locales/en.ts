@@ -54,6 +54,7 @@ export const portalCopy = {
   payError: "Could not record this deposit. Try again.",
   collectDepositUnavailable: "This feature is not yet available.",
   reviewAndSign: "Review and sign agreement",
+  signing: "Signing…",
   noPaymentToday: "No payment required today to review terms.",
   agreementSigned: "Agreement signed",
   downloadAgreement: "Download agreement",

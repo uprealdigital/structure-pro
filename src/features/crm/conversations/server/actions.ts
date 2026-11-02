@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { headers } from "next/headers";
-import { sendMail } from "@/src/common/utils/mail";
+import { sendMail, type MailAttachment } from "@/src/common/utils/mail";
 import { demoChatId, sendTelegramFile, sendTelegramMessage } from "@/src/common/lib/telegram/telegram.service";
 import { sendSms } from "@/src/common/lib/twilio/twilio.service";
 import { createSuggestion, readSuggestions, storeSuggestionPreview, updateSuggestion } from "@/src/features/ai/db/suggestion";
@@ -72,6 +72,7 @@ import {
   setDealPersonSchema,
   type Activity,
   type ActivityInsert,
+  type ComposerChannel,
   type ConversationDealListItem,
   type ConversationDealOption,
   type ConversationInboxItem,
@@ -85,7 +86,7 @@ import { readCustomer, readCustomers, updateCustomer } from "@/src/features/crm/
 import { createDealCustomer, deleteDealCustomer, readDealCustomer, readDealCustomersForCustomer, readDealCustomersForDeal } from "@/src/features/crm/common/db/deal-customer";
 import { assignDefaultDealName, createDeal, deleteDeal, readDeal, updateDeal } from "@/src/features/crm/deals/db/deal";
 import { fileActivityText, imageActivityText } from "@/src/features/crm/conversations/utils/attachments";
-import { emailActivityText } from "@/src/features/crm/conversations/utils/email-message";
+import { emailActivityText, parseEmailActivity } from "@/src/features/crm/conversations/utils/email-message";
 import { systemEventBody } from "@/src/features/crm/conversations/utils/formatting";
 import {
   emailHtml,
@@ -178,6 +179,40 @@ export async function removeLatestActivity(conversationId: string): Promise<void
   revalidateConversations();
 }
 
+function composerDeliversToTelegram(channel: ComposerChannel) {
+  return channel === "telegram" || channel === "sms";
+}
+
+async function deliverComposerEmail(conversationId: string, text: string) {
+  const message = parseEmailActivity(text);
+  const conversation = await readConversationById(conversationId);
+  if (!conversation) throw new Error("Conversation was not found");
+  const customer = await readCustomer(conversation.customerId);
+  if (!customer) throw new Error(copy.missingCustomer);
+  const address = customer.email.trim();
+  if (!address) throw new Error(copy.missingEmail(customer.fullName || "This customer"));
+
+  const attachments: MailAttachment[] = [];
+  for (const item of message.attachments) {
+    const stored = await readAttachmentFile(item.id);
+    if (!stored) throw new Error(copy.attachmentUploadFailed);
+    attachments.push({
+      filename: item.name,
+      content: Buffer.from(stored.bytes),
+      contentType: stored.type || "application/octet-stream",
+    });
+  }
+
+  const body = message.body.trim();
+  await sendMail({
+    to: address,
+    subject: message.subject.trim(),
+    text: body,
+    html: emailHtml(body),
+    attachments,
+  });
+}
+
 export async function sendWebsiteQuoteMessage(input: {
   dealId: string;
   customerId: string;
@@ -260,7 +295,9 @@ export async function sendManualActivity(input: {
   }
 
   try {
-    if (channel.data === "telegram") {
+    if (channel.data === "email") {
+      await deliverComposerEmail(conversationId.data, text);
+    } else if (composerDeliversToTelegram(channel.data)) {
       const conversation = await readConversationById(conversationId.data);
       await sendTelegramMessage(conversation?.chatId?.trim() || demoChatId(), text);
     }
@@ -331,7 +368,7 @@ export async function sendStoredAttachment(input: {
   try {
     const stored = await readAttachmentFile(input.id);
     if (!stored) return { error: copy.attachmentUploadFailed };
-    if (channel.data === "telegram") {
+    if (composerDeliversToTelegram(channel.data)) {
       const conversation = await readConversationById(conversationId.data);
       await sendTelegramFile(conversation?.chatId?.trim() || demoChatId(), {
         name,

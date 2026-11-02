@@ -148,7 +148,9 @@ export function QuotePortal({
     if (event.id !== current.id || event.kind === "delete") return;
     const statusChanged = event.status != null && event.status !== current.status;
     const revisionChanged = typeof event.activeRevisionId === "string" && event.activeRevisionId !== current.revisionId;
-    if (statusChanged || revisionChanged) setUpdateReady(true);
+    const markedViewed = statusChanged && current.status === "sent" && event.status === "viewed";
+    if (markedViewed) replaceQuote({ ...current, status: "viewed" });
+    if (revisionChanged || (statusChanged && !markedViewed)) setUpdateReady(true);
   }
 
   function releaseLocalWrite() {
@@ -172,12 +174,13 @@ export function QuotePortal({
   useEffect(() => {
     const current = quoteRef.current;
     if (current.status !== "sent" && current.status !== "viewed" && current.status !== "changes_requested") return;
+    const started = current.status;
     let cancelled = false;
     suppressRemote.current = true;
     void refreshQuoteLifecycle({ quoteId: current.id, openedByCustomer: !internal })
       .then((result) => {
-        if (cancelled) return;
-        if (!("error" in result) && result.data.status !== quoteRef.current.status) {
+        if (cancelled || quoteRef.current.status !== started) return;
+        if (!("error" in result) && result.data.status !== started) {
           replaceQuote({ ...quoteRef.current, status: result.data.status });
         }
       })
@@ -322,11 +325,11 @@ export function QuotePortal({
       document.getElementById("quote-summary")?.scrollIntoView({ behavior: "smooth", block: "start" });
       return;
     }
-    if (id === "collect_deposit") {
+    if (id === "collect_deposit" || id === "view_signed_quote") {
       showError(portalCopy.collectDepositUnavailable);
       return;
     }
-    if (id === "view_signed_quote" || id === "view_deposit_receipt") {
+    if (id === "view_deposit_receipt") {
       window.open(customerQuotePath(quote.id), "_blank", "noopener,noreferrer");
       return;
     }
@@ -338,17 +341,18 @@ export function QuotePortal({
   }
 
   async function payDeposit() {
+    if (pending || depositPaid) return;
+    const previous = quoteRef.current;
+    replaceQuote({
+      ...previous,
+      status: "deposit_paid",
+      won: true,
+      confirmedAt: new Date().toISOString(),
+    });
     suppressRemote.current = true;
     try {
       const paid = await pay();
-      if (paid) {
-        replaceQuote({
-          ...quoteRef.current,
-          status: "deposit_paid",
-          won: true,
-          confirmedAt: new Date().toISOString(),
-        });
-      }
+      if (!paid && quoteRef.current.id === previous.id) replaceQuote(previous);
     } finally {
       releaseLocalWrite();
     }
@@ -368,17 +372,23 @@ export function QuotePortal({
 
   async function signAgreement() {
     if (signing) return;
+    const current = quoteRef.current;
+    if (current.status !== "sent" && current.status !== "viewed") return;
     setSigning(true);
     suppressRemote.current = true;
     try {
-      const result = await signQuoteAgreement({ quoteId: quoteRef.current.id });
+      const result = await signQuoteAgreement({ quoteId: current.id });
       if ("error" in result) {
         showError(result.error || portalCopy.signError);
-        setSigning(false);
         return;
       }
-      replaceQuote({ ...quoteRef.current, status: result.data.status });
+      if (quoteRef.current.id === current.id) {
+        replaceQuote({ ...quoteRef.current, status: result.data.status });
+      }
+    } catch {
+      showError(portalCopy.signError);
     } finally {
+      setSigning(false);
       releaseLocalWrite();
     }
   }
@@ -621,7 +631,7 @@ export function QuotePortal({
                       onClick={() => void signAgreement()}
                       className={primaryCtaClass}
                     >
-                      {portalCopy.reviewAndSign}
+                      {signing ? portalCopy.signing : portalCopy.reviewAndSign}
                     </button>
                     <p className="text-center text-xs text-[#655d55]">{portalCopy.noPaymentToday}</p>
                   </div>
