@@ -1,4 +1,6 @@
 import { Mail, Phone } from "lucide-react";
+import { CrmMobileBackHeader } from "@/src/features/crm/common/components/crm-mobile-back-header";
+import { copy as navCopy } from "@/src/features/crm/common/locales/en";
 import { copy } from "@/src/features/crm/support/locales/en";
 
 const channels = [
@@ -20,8 +22,10 @@ const channels = [
 
 export function SupportWorkspace() {
   return (
-    <main className="flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-y-auto bg-[#f9f9fb]">
-      <div className="w-full max-w-7xl flex-1 space-y-6 p-8">
+    <div className="flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-[#f9f9fb]">
+      <CrmMobileBackHeader title={navCopy.help} />
+      <main className="flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto">
+        <div className="w-full max-w-7xl flex-1 space-y-6 p-8">
         <section>
           <div className="mx-auto grid max-w-4xl grid-cols-1 gap-8 pt-4 md:grid-cols-2">
             {channels.map((channel) => {
@@ -57,7 +61,8 @@ export function SupportWorkspace() {
             })}
           </div>
         </section>
-      </div>
-    </main>
+        </div>
+      </main>
+    </div>
   );
 }

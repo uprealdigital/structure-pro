@@ -1,10 +1,14 @@
+import { CrmMobileBackHeader } from "@/src/features/crm/common/components/crm-mobile-back-header";
 import { Bone, SkeletonStatus } from "@/src/features/crm/common/components/skeleton";
+import { copy } from "@/src/features/crm/common/locales/en";
 
 export function SupportSkeleton() {
   return (
     <SkeletonStatus>
-      <main className="flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-[#f9f9fb]" aria-busy="true">
-        <div className="w-full max-w-7xl flex-1 p-8">
+      <div className="flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-[#f9f9fb]" aria-busy="true">
+        <CrmMobileBackHeader title={copy.help} />
+        <main className="min-h-0 flex-1 overflow-hidden">
+          <div className="w-full max-w-7xl flex-1 p-8">
           <div className="mx-auto grid max-w-4xl grid-cols-1 gap-8 pt-4 md:grid-cols-2">
             {Array.from({ length: 2 }, (_, index) => (
               <article
@@ -26,8 +30,9 @@ export function SupportSkeleton() {
               </article>
             ))}
           </div>
-        </div>
-      </main>
+          </div>
+        </main>
+      </div>
     </SkeletonStatus>
   );
 }

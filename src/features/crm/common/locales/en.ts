@@ -19,6 +19,8 @@ export const copy = {
   account: "Account",
   accountMenu: "Account and profile menu",
   closeAccount: "Close account menu",
+  back: "Back",
+  dealership: "Dealership",
   switchOrganization: "Switch organization",
   organizations: "Organizations",
   dealerships: "Dealerships",

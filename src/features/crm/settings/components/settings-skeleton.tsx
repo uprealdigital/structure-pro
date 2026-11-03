@@ -1,3 +1,4 @@
+import { CrmMobileBackHeader } from "@/src/features/crm/common/components/crm-mobile-back-header";
 import { Bone, SkeletonStatus } from "@/src/features/crm/common/components/skeleton";
 import { copy } from "@/src/features/crm/settings/locales/en";
 
@@ -6,8 +7,10 @@ const groups = [3, 1, 3, 2];
 export function SettingsSkeleton() {
   return (
     <SkeletonStatus>
-      <div className="flex min-h-0 min-w-0 flex-1 overflow-hidden" aria-busy="true">
-        <aside className="z-10 flex h-full min-w-0 flex-1 flex-col bg-white lg:w-64 lg:flex-none lg:border-r lg:border-gray-200">
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden" aria-busy="true">
+        <CrmMobileBackHeader title={copy.settingsMenu} />
+        <div className="flex min-h-0 min-w-0 flex-1 overflow-hidden">
+          <aside className="z-10 flex h-full min-w-0 flex-1 flex-col bg-white lg:w-64 lg:flex-none lg:border-r lg:border-gray-200">
           <div className="flex-1 space-y-6 overflow-hidden p-3">
             {groups.map((count, groupIndex) => (
               <div key={groupIndex} className="space-y-1">
@@ -24,8 +27,9 @@ export function SettingsSkeleton() {
               <Bone className="h-4 w-10 rounded" />
             </div>
           </div>
-        </aside>
-        <main aria-label={copy.settingsMenu} className="hidden h-full min-w-0 flex-1 bg-[#f9f9fb] lg:block" />
+          </aside>
+          <main aria-label={copy.settingsMenu} className="hidden h-full min-w-0 flex-1 bg-[#f9f9fb] lg:block" />
+        </div>
       </div>
     </SkeletonStatus>
   );

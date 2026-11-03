@@ -13,6 +13,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { useState } from "react";
+import { CrmMobileBackHeader } from "@/src/features/crm/common/components/crm-mobile-back-header";
 import { copy } from "@/src/features/crm/settings/locales/en";
 
 type SettingsSectionId =
@@ -68,8 +69,10 @@ export function SettingsWorkspace() {
   const [active, setActive] = useState<SettingsSectionId>("general");
 
   return (
-    <div className="flex min-h-0 min-w-0 flex-1 overflow-hidden">
-      <aside className="z-10 flex h-full min-w-0 flex-1 flex-col bg-white select-none lg:w-64 lg:flex-none lg:border-r lg:border-gray-200">
+    <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+      <CrmMobileBackHeader title={copy.settingsMenu} />
+      <div className="flex min-h-0 min-w-0 flex-1 overflow-hidden">
+        <aside className="z-10 flex h-full min-w-0 flex-1 flex-col bg-white select-none lg:w-64 lg:flex-none lg:border-r lg:border-gray-200">
         <nav aria-label={copy.settingsMenu} className="flex-1 space-y-6 overflow-y-auto p-3">
           {groups.map((group) => (
             <div key={group.label} className="space-y-1">
@@ -124,8 +127,9 @@ export function SettingsWorkspace() {
             </span>
           </div>
         </div>
-      </aside>
-      <main className="hidden h-full min-w-0 flex-1 flex-col overflow-y-auto bg-[#f9f9fb] lg:flex" />
+        </aside>
+        <main className="hidden h-full min-w-0 flex-1 flex-col overflow-y-auto bg-[#f9f9fb] lg:flex" />
+      </div>
     </div>
   );
 }
