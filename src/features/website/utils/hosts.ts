@@ -1,6 +1,6 @@
 import { productionAppOrigin } from "@/src/features/website/config/site";
 
-const appHostNames = new Set(["shedgrowth.app", "www.shedgrowth.app", "app.shedgrowth.co"]);
+const appHostNames = new Set(["app.shedgrowth.co"]);
 
 export function requestHostname(hostHeader: string): string {
   const host = hostHeader.split(",")[0]?.trim().toLowerCase() ?? "";
@@ -23,10 +23,6 @@ export function appOriginFrom(hostHeader: string): string {
 
   if (hostname === "localhost" || hostname === "127.0.0.1") {
     return `http://app.localhost${portSuffix}`;
-  }
-
-  if (hostname === "shedgrowth.app" || hostname === "www.shedgrowth.app") {
-    return "https://shedgrowth.app";
   }
 
   if (hostname.startsWith("app.")) {

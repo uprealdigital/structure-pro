@@ -2,11 +2,11 @@
 export const demoUrl = "https://zcal.co";
 
 /**
- * Where Login goes from the marketing site.
- * shedgrowth.app serves the CRM at / and the configurator at /cpq.
- * app.shedgrowth.co and app.localhost are treated as that same app host.
+ * Where Login goes from the marketing site (shedgrowth.co).
+ * app.shedgrowth.co serves the CRM at / and the configurator at /cpq.
+ * app.localhost is that same app host in local development.
  */
-export const productionAppOrigin = "https://shedgrowth.app";
+export const productionAppOrigin = "https://app.shedgrowth.co";
 
 export const termsPath = "/terms";
 export const privacyPath = "/privacy";
