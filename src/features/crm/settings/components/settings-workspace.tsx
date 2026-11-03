@@ -69,7 +69,7 @@ export function SettingsWorkspace() {
 
   return (
     <div className="flex min-h-0 min-w-0 flex-1 overflow-hidden">
-      <aside className="z-10 flex h-full w-64 shrink-0 flex-col border-r border-gray-200 bg-white select-none">
+      <aside className="z-10 flex h-full min-w-0 flex-1 flex-col bg-white select-none lg:w-64 lg:flex-none lg:border-r lg:border-gray-200">
         <nav aria-label={copy.settingsMenu} className="flex-1 space-y-6 overflow-y-auto p-3">
           {groups.map((group) => (
             <div key={group.label} className="space-y-1">
@@ -125,7 +125,7 @@ export function SettingsWorkspace() {
           </div>
         </div>
       </aside>
-      <main className="flex h-full min-w-0 flex-1 flex-col overflow-y-auto bg-[#f9f9fb]" />
+      <main className="hidden h-full min-w-0 flex-1 flex-col overflow-y-auto bg-[#f9f9fb] lg:flex" />
     </div>
   );
 }

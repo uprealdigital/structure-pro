@@ -37,14 +37,14 @@ export function DealsSkeleton() {
     <SkeletonStatus>
       <main className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-[#f9f9fb]" aria-busy="true">
         <header className="z-10 border-b border-gray-200/80 bg-white px-6 py-4">
-          <div className="flex flex-col gap-3 pt-1 sm:flex-row sm:items-center sm:gap-4">
+          <div className="flex flex-col gap-3 pt-1 lg:flex-row lg:items-center lg:gap-4">
             <div className="flex min-w-0 flex-1 items-center gap-3">
-              <Bone className="h-8 max-w-lg flex-1 rounded-md" />
+              <Bone className="h-8 flex-1 rounded-md lg:max-w-lg" />
               <Bone className="h-8 w-20 shrink-0 rounded-md" />
             </div>
             <div className="flex shrink-0 items-center gap-3">
               <Bone className="h-9 w-36 rounded-lg" />
-              <Bone className="h-8 w-24 rounded-md" />
+              <Bone className="hidden h-8 w-24 rounded-md lg:block" />
             </div>
           </div>
         </header>

@@ -4,6 +4,8 @@ import { ChevronRight, Filter, Plus, Search } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
+import { CrmMobileCreateButton } from "@/src/features/crm/common/components/crm-mobile-create-button";
+import { useCrmDesktop } from "@/src/features/crm/common/hooks/use-crm-desktop";
 import { QuoteCustomers } from "@/src/features/crm/quotes/components/quote-customers";
 import { QuoteStatusBadge } from "@/src/features/crm/quotes/components/quote-status-badge";
 import { useQuoteStream } from "@/src/features/crm/quotes/hooks/use-quote-stream";
@@ -16,6 +18,7 @@ const pageSize = 15;
 
 export function QuoteList({ quotes: initialQuotes, loadError }: { quotes: QuoteListItem[]; loadError: boolean }) {
   const router = useRouter();
+  const desktop = useCrmDesktop();
   const [quotes, setQuotes] = useState(initialQuotes);
   const [query, setQuery] = useState("");
   const [pageIndex, setPageIndex] = useState(0);
@@ -55,16 +58,16 @@ export function QuoteList({ quotes: initialQuotes, loadError }: { quotes: QuoteL
     : quotes;
   const pageCount = Math.max(1, Math.ceil(visible.length / pageSize));
   const page = Math.min(pageIndex, pageCount - 1);
-  const rows = visible.slice(page * pageSize, page * pageSize + pageSize);
+  const rows = desktop ? visible.slice(page * pageSize, page * pageSize + pageSize) : visible;
   const start = visible.length === 0 ? 0 : page * pageSize + 1;
   const end = Math.min(visible.length, (page + 1) * pageSize);
   const pages = quotePageNumbers(page + 1, pageCount);
 
   return (
-    <main className="flex h-full min-w-0 flex-1 flex-col overflow-y-auto bg-[#f9f9fb]">
+    <main className="flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-y-auto bg-[#f9f9fb]">
       <header className="sticky top-0 z-10 border-b border-gray-200/80 bg-white">
-        <div className="flex items-center justify-between gap-4 px-6 py-4">
-          <label className="relative w-full min-w-0 max-w-lg">
+        <div className="flex items-center gap-3 px-4 py-3.5 lg:justify-between lg:gap-4 lg:px-6 lg:py-4">
+          <label className="relative min-w-0 flex-1 lg:max-w-lg">
             <span className="sr-only">{copy.searchPlaceholder}</span>
             <span className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
               <Search className="h-4 w-4 text-gray-400" aria-hidden="true" />
@@ -90,7 +93,7 @@ export function QuoteList({ quotes: initialQuotes, loadError }: { quotes: QuoteL
           </div>
           <Link
             href="/cpq"
-            className="ml-auto inline-flex shrink-0 items-center gap-1.5 rounded bg-[#121314] px-3 py-1.5 text-xs font-semibold text-white shadow-xs transition-colors hover:bg-black"
+            className="ml-auto hidden shrink-0 items-center gap-1.5 rounded bg-[#121314] px-3 py-1.5 text-xs font-semibold text-white shadow-xs transition-colors hover:bg-black lg:inline-flex"
           >
             <Plus className="h-3.5 w-3.5" strokeWidth={2.2} aria-hidden="true" />
             {copy.newQuote}
@@ -108,9 +111,9 @@ export function QuoteList({ quotes: initialQuotes, loadError }: { quotes: QuoteL
           <p className="mt-2 max-w-sm text-sm leading-5 text-gray-500">{copy.emptyQuotesBody}</p>
         </div>
       ) : (
-        <div className="flex flex-1 flex-col px-6">
-          <div className="flex w-full flex-1 flex-col bg-transparent">
-            <div className="overflow-x-auto">
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col px-4 pb-20 lg:px-6 lg:pb-0">
+          <div className="flex w-full min-w-0 flex-1 flex-col bg-transparent">
+            <div className="min-w-0 overflow-x-auto">
               <table className="w-full text-left text-xs text-gray-600">
                 <thead className="border-b border-gray-200 bg-transparent font-serif text-[11px] font-bold tracking-wide text-gray-900 select-none">
                   <tr>
@@ -178,7 +181,7 @@ export function QuoteList({ quotes: initialQuotes, loadError }: { quotes: QuoteL
             </div>
           </div>
 
-          <div className="flex items-center justify-between border-t border-gray-200/80 bg-transparent px-6 py-4 text-xs text-gray-500">
+          <div className="hidden items-center justify-between border-t border-gray-200/80 bg-transparent px-6 py-4 text-xs text-gray-500 lg:flex">
             <div className="font-medium">
               {copy.showing} <span className="font-semibold text-gray-900">{start}</span> {copy.rangeTo}{" "}
               <span className="font-semibold text-gray-900">{end}</span> {copy.rangeOf}{" "}
@@ -233,6 +236,7 @@ export function QuoteList({ quotes: initialQuotes, loadError }: { quotes: QuoteL
           </div>
         </div>
       )}
+      <CrmMobileCreateButton label={copy.newQuote} href="/cpq" />
     </main>
   );
 }

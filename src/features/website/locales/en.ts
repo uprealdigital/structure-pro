@@ -5,6 +5,7 @@ export const copy = {
   brand: "Shed Growth",
   login: "Login",
   bookDemo: "Book my free demo",
+  freeDemo: "Free demo",
   headlineLead: "Turn Quotes into Closed Deals.",
   headlineAccent: "Fast.",
   subtitle:

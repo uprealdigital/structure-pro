@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { loadConversationWorkspace } from "@/src/features/crm/conversations/server/actions";
 import type { ConversationWorkspace } from "@/src/features/crm/conversations/types";
 import type { DealStatus } from "@/src/features/crm/deals/types";
@@ -10,6 +10,12 @@ type SelectionStatus = "ready" | "pending" | "missing" | "error";
 function conversationPath(id?: string): string {
   const base = window.location.pathname === "/conversations" ? "/conversations" : "/";
   return id ? `${base}?conversation=${encodeURIComponent(id)}` : base;
+}
+
+function showMobileInbox(): boolean {
+  if (typeof window === "undefined") return false;
+  if (window.matchMedia("(min-width: 1024px)").matches) return false;
+  return !new URLSearchParams(window.location.search).has("conversation");
 }
 
 export function useConversationSelection({
@@ -28,8 +34,22 @@ export function useConversationSelection({
   const serverWorkspace = useRef(initialWorkspace);
   serverWorkspace.current = initialWorkspace;
 
+  useLayoutEffect(() => {
+    if (!showMobileInbox()) return;
+    request.current += 1;
+    setSelectedId(undefined);
+    setWorkspace(undefined);
+    setStatus("ready");
+  }, [initialSelectedId, initialWorkspace?.id, initialWorkspace?.deal.id]);
+
   useEffect(() => {
     request.current += 1;
+    if (showMobileInbox()) {
+      setSelectedId(undefined);
+      setWorkspace(undefined);
+      setStatus("ready");
+      return;
+    }
     setSelectedId(initialSelectedId);
     setWorkspace(serverWorkspace.current);
     setStatus(initialSelectedId && !serverWorkspace.current ? "missing" : "ready");

@@ -2,6 +2,9 @@
 
 import { ChevronRight, Filter, Plus, Search } from "lucide-react";
 import { useState } from "react";
+import { CrmMobileCreateButton } from "@/src/features/crm/common/components/crm-mobile-create-button";
+import { useCrmDesktop } from "@/src/features/crm/common/hooks/use-crm-desktop";
+import { contactInitials } from "@/src/features/crm/common/utils/formatting";
 import { copy } from "@/src/features/crm/customers/locales/en";
 import type { CustomerListItem } from "@/src/features/crm/customers/types";
 import {
@@ -19,6 +22,7 @@ export function CustomerList({
   customers: CustomerListItem[];
   loadError: boolean;
 }) {
+  const desktop = useCrmDesktop();
   const [query, setQuery] = useState("");
   const [pageIndex, setPageIndex] = useState(0);
   const needle = query.trim().toLowerCase();
@@ -32,16 +36,16 @@ export function CustomerList({
     : customers;
   const pageCount = Math.max(1, Math.ceil(visible.length / pageSize));
   const page = Math.min(pageIndex, pageCount - 1);
-  const rows = visible.slice(page * pageSize, page * pageSize + pageSize);
+  const rows = desktop ? visible.slice(page * pageSize, page * pageSize + pageSize) : visible;
   const start = visible.length === 0 ? 0 : page * pageSize + 1;
   const end = Math.min(visible.length, (page + 1) * pageSize);
   const pages = customerPageNumbers(page + 1, pageCount);
 
   return (
-    <main className="flex h-full min-w-0 flex-1 flex-col overflow-y-auto bg-[#f9f9fb]">
+    <main className="flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-y-auto bg-[#f9f9fb]">
       <header className="sticky top-0 z-10 border-b border-gray-200/80 bg-white">
-        <div className="flex items-center gap-4 px-6 py-3.5">
-          <label className="relative w-full min-w-0 max-w-lg">
+        <div className="flex items-center gap-3 px-4 py-3.5 lg:gap-4 lg:px-6">
+          <label className="relative min-w-0 flex-1 lg:max-w-lg">
             <span className="sr-only">{copy.searchPlaceholder}</span>
             <span className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
               <Search className="h-4 w-4 text-gray-400" aria-hidden="true" />
@@ -65,7 +69,7 @@ export function CustomerList({
               {copy.filters}
             </button>
           </div>
-          <div className="ml-auto shrink-0">
+          <div className="ml-auto hidden shrink-0 lg:block">
             <button
               type="button"
               className="inline-flex cursor-pointer items-center gap-2 rounded-md bg-black px-3.5 py-1.5 text-xs font-medium text-white shadow-xs transition-colors hover:bg-neutral-800"
@@ -87,11 +91,11 @@ export function CustomerList({
           <p className="mt-2 max-w-sm text-sm leading-5 text-gray-500">{copy.emptyCustomersBody}</p>
         </div>
       ) : (
-        <div className="flex flex-1 flex-col px-6">
-          <div className="flex w-full flex-1 flex-col bg-transparent">
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs text-gray-600">
-                <thead className="border-b border-gray-200 bg-transparent font-serif text-[11px] font-bold tracking-wide text-gray-900 select-none">
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col px-4 pb-20 lg:px-6 lg:pb-0">
+          <div className="flex w-full min-w-0 flex-1 flex-col bg-transparent">
+            <div className="min-w-0 overflow-x-hidden lg:overflow-x-auto">
+              <table className="w-full table-fixed text-left text-xs text-gray-600 lg:table-auto">
+                <thead className="hidden border-b border-gray-200 bg-transparent font-serif text-[11px] font-bold tracking-wide text-gray-900 select-none lg:table-header-group">
                   <tr>
                     <th className="py-3.5 pr-4 pl-6 font-semibold text-gray-900">{copy.dateCreated}</th>
                     <th className="px-4 py-3.5 font-semibold text-gray-900">{copy.firstName}</th>
@@ -113,27 +117,45 @@ export function CustomerList({
                   ) : (
                     rows.map((customer) => (
                       <tr key={customer.id} className="group cursor-pointer transition-colors hover:bg-gray-50/80">
-                        <td className="py-2.5 pr-4 pl-6 text-xs whitespace-nowrap text-gray-500">
+                        <td className="hidden py-2.5 pr-4 pl-6 text-xs whitespace-nowrap text-gray-500 lg:table-cell">
                           {formatCustomerDate(customer.createdAt)}
                         </td>
-                        <td className="px-4 py-2.5 font-medium text-gray-900">
+                        <td className="max-w-0 py-3 pr-3 align-middle lg:hidden">
+                          <div className="flex min-w-0 items-center gap-2.5">
+                            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-gray-200 bg-gray-100 text-[11px] font-medium text-gray-700">
+                              {contactInitials(`${customer.firstName} ${customer.lastName}`)}
+                            </span>
+                            <span className="truncate text-xs font-semibold text-gray-950 group-hover:text-black">
+                              {customer.firstName} {customer.lastName}
+                            </span>
+                          </div>
+                        </td>
+                        <td className="hidden px-4 py-2.5 font-medium text-gray-900 lg:table-cell">
                           <div className="flex items-center space-x-3">
                             <span className="text-xs font-semibold text-gray-950 group-hover:text-black">
                               {customer.firstName}
                             </span>
                           </div>
                         </td>
-                        <td className="px-4 py-2.5 text-xs font-semibold text-gray-950 group-hover:text-black">
+                        <td className="hidden px-4 py-2.5 text-xs font-semibold text-gray-950 group-hover:text-black lg:table-cell">
                           {customer.lastName}
                         </td>
-                        <td className="px-4 py-2.5 font-mono text-xs text-gray-900">
+                        <td className="hidden px-4 py-2.5 font-mono text-xs text-gray-900 lg:table-cell">
                           {formatCustomerPhone(customer.phone)}
                         </td>
-                        <td className="max-w-[140px] truncate px-4 py-2.5 text-xs text-gray-600" title={customer.email}>
+                        <td className="hidden max-w-[140px] truncate px-4 py-2.5 text-xs text-gray-600 lg:table-cell" title={customer.email}>
                           {customer.email}
                         </td>
-                        <td className="py-2.5 pr-6 pl-4 text-center">
-                          <div className="flex items-center justify-end pr-2">
+                        <td className="max-w-0 py-3 pl-3 lg:hidden">
+                          <div className="truncate text-xs text-gray-600" title={customer.email}>
+                            {customer.email}
+                          </div>
+                          <div className="mt-0.5 truncate font-mono text-xs text-gray-900">
+                            {formatCustomerPhone(customer.phone)}
+                          </div>
+                        </td>
+                        <td className="w-6 py-3 text-right lg:w-auto lg:py-2.5 lg:pr-6 lg:pl-4 lg:text-center">
+                          <div className="flex items-center justify-end lg:pr-2">
                             <ChevronRight
                               className="h-4 w-4 text-gray-400 transition-colors group-hover:text-gray-700"
                               aria-hidden="true"
@@ -148,7 +170,7 @@ export function CustomerList({
             </div>
           </div>
 
-          <div className="flex items-center justify-between border-t border-gray-200/80 bg-transparent px-6 py-4 text-xs text-gray-500">
+          <div className="hidden items-center justify-between border-t border-gray-200/80 bg-transparent px-6 py-4 text-xs text-gray-500 lg:flex">
             <div className="font-medium">
               {copy.showing} <span className="font-semibold text-gray-900">{start}</span> {copy.rangeTo}{" "}
               <span className="font-semibold text-gray-900">{end}</span> {copy.rangeOf}{" "}
@@ -203,6 +225,7 @@ export function CustomerList({
           </div>
         </div>
       )}
+      <CrmMobileCreateButton label={copy.newCustomer} />
     </main>
   );
 }

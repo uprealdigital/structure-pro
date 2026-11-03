@@ -113,6 +113,7 @@ export function toDealBoardItem(input: {
   detail: string;
   valueLabel: string;
   conversationId?: string;
+  customers: { id: string; name: string }[];
 }): DealBoardItem | undefined {
   const item = dealBoardItemSchema.safeParse({
     id: input.deal.id,
@@ -123,6 +124,7 @@ export function toDealBoardItem(input: {
     source: input.deal.source,
     stage: input.deal.status,
     valueLabel: input.valueLabel,
+    customers: input.customers,
   });
   return item.success ? item.data : undefined;
 }

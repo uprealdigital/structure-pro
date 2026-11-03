@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { CrmMobileShell } from "@/src/features/crm/common/components/crm-mobile-nav";
 import { CrmNav } from "@/src/features/crm/common/components/crm-nav";
 import { getOrganizationDirectory } from "@/src/features/crm/common/server/queries";
 import type { OrganizationDirectoryEntry } from "@/src/features/crm/common/types";
@@ -12,9 +13,9 @@ export default async function CrmLayout({ children }: { children: ReactNode }) {
   }
 
   return (
-    <div className="flex min-h-0 flex-1 overflow-hidden bg-[#f9f9fb] text-gray-950">
+    <CrmMobileShell organizations={organizations}>
       <CrmNav organizations={organizations} />
       {children}
-    </div>
+    </CrmMobileShell>
   );
 }

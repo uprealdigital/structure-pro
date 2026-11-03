@@ -7,7 +7,7 @@ export function SettingsSkeleton() {
   return (
     <SkeletonStatus>
       <div className="flex min-h-0 min-w-0 flex-1 overflow-hidden" aria-busy="true">
-        <aside className="z-10 flex h-full w-64 shrink-0 flex-col border-r border-gray-200 bg-white">
+        <aside className="z-10 flex h-full min-w-0 flex-1 flex-col bg-white lg:w-64 lg:flex-none lg:border-r lg:border-gray-200">
           <div className="flex-1 space-y-6 overflow-hidden p-3">
             {groups.map((count, groupIndex) => (
               <div key={groupIndex} className="space-y-1">
@@ -25,7 +25,7 @@ export function SettingsSkeleton() {
             </div>
           </div>
         </aside>
-        <main aria-label={copy.settingsMenu} className="h-full min-w-0 flex-1 bg-[#f9f9fb]" />
+        <main aria-label={copy.settingsMenu} className="hidden h-full min-w-0 flex-1 bg-[#f9f9fb] lg:block" />
       </div>
     </SkeletonStatus>
   );

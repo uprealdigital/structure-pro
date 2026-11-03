@@ -10,9 +10,9 @@ export function QuotesSkeleton() {
       <main className="flex h-full min-w-0 flex-1 flex-col overflow-hidden bg-[#f9f9fb]" aria-busy="true">
         <header className="border-b border-gray-200/80 bg-white">
           <div className="flex items-center gap-4 px-6 py-4">
-            <Bone className="h-8 w-full max-w-lg rounded-md" />
+            <Bone className="h-8 min-w-0 flex-1 rounded-md lg:max-w-lg" />
             <Bone className="h-8 w-20 shrink-0 rounded-md" />
-            <Bone className="ml-auto h-8 w-24 shrink-0 rounded" />
+            <Bone className="ml-auto hidden h-8 w-24 shrink-0 rounded lg:block" />
           </div>
         </header>
         <div className="flex flex-1 flex-col px-6">

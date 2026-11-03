@@ -3,11 +3,14 @@
 import { ChevronLeft, ChevronRight, Filter, Globe, ImageIcon, List, Plus, Search } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
+import { useBoardScroll } from "@/src/features/crm/deals/hooks/use-board-scroll";
 import { useDealStream } from "@/src/features/crm/deals/hooks/use-deal-stream";
 import { DealStatusBadge } from "@/src/features/crm/deals/components/deal-status-badge";
 import { copy } from "@/src/features/crm/deals/locales/en";
 import type { DealBoardItem, DealSource, DealStatus } from "@/src/features/crm/deals/types";
 import { dealStatusOption, dealStatusOptions, type DealStatusOption } from "@/src/features/crm/deals/utils/status";
+import { CrmMobileCreateButton } from "@/src/features/crm/common/components/crm-mobile-create-button";
+import { useReserveCrmMobileNavSpace } from "@/src/features/crm/common/hooks/use-crm-mobile-nav";
 import { contactInitials } from "@/src/features/crm/common/utils/formatting";
 
 function dealConversationHref(deal: { id: string; conversationId?: string }): string | undefined {
@@ -97,6 +100,63 @@ function DealCard({ deal }: { deal: DealBoardItem }) {
   );
 }
 
+function DealListMobileRow({ deal }: { deal: DealBoardItem }) {
+  const customers = deal.customers;
+  const primary = customers[0];
+  const extra = Math.max(0, customers.length - 1);
+  const stage = dealStatusOption(deal.stage);
+  const href = dealConversationHref(deal);
+  const name = deal.productName || deal.contactName;
+  const Icon = deal.source === "yard_preview" ? ImageIcon : Globe;
+  const body = (
+    <div className="grid grid-cols-[minmax(0,1fr)_5rem_3.75rem] items-center gap-x-2">
+      <div className="min-w-0">
+        <div className="flex min-w-0 items-center gap-1.5">
+          {customers.length > 0 ? (
+            <span className="flex shrink-0 items-center -space-x-2">
+              {customers.map((customer, index) => (
+                <span
+                  key={customer.id}
+                  className="flex h-7 w-7 items-center justify-center rounded-full border-2 border-white bg-gray-100 text-xs font-semibold text-gray-800 ring-1 ring-gray-200"
+                  style={{ zIndex: customers.length - index }}
+                >
+                  {contactInitials(customer.name)}
+                </span>
+              ))}
+            </span>
+          ) : null}
+          {primary ? (
+            <span className="truncate font-serif text-xs font-semibold text-gray-950">{primary.name}</span>
+          ) : null}
+          {extra > 0 ? <span className="shrink-0 font-serif text-xs font-semibold text-gray-500">+{extra}</span> : null}
+        </div>
+        <div className="mt-1 truncate text-xs font-medium text-gray-900">{name}</div>
+      </div>
+      <div className="flex w-[5rem] flex-col items-start gap-1">
+        <span className="inline-flex items-center gap-1 text-[10px] font-medium whitespace-nowrap text-gray-600">
+          <Icon className="h-3 w-3 shrink-0 text-gray-500" strokeWidth={2} aria-hidden="true" />
+          {sourceLabel(deal.source)}
+        </span>
+        <span
+          className={`inline-flex items-center rounded-full border px-1.5 py-0.5 text-[10px] font-medium whitespace-nowrap ${stage?.badge ?? ""}`}
+        >
+          {stage?.label}
+        </span>
+      </div>
+      <div className="w-[3.75rem] text-right font-serif text-xs font-semibold whitespace-nowrap text-gray-950 tabular-nums">
+        {deal.valueLabel || "—"}
+      </div>
+    </div>
+  );
+  const className = "block border-b border-gray-100 px-4 py-3";
+  if (!href) return <article className={className}>{body}</article>;
+  return (
+    <Link href={href} scroll={false} aria-label={`${copy.openDeal}: ${name}`} className={className}>
+      {body}
+    </Link>
+  );
+}
+
 function KanbanIcon() {
   return (
     <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" aria-hidden="true">
@@ -115,6 +175,7 @@ export function DealsBoard({ deals: initialDeals, loadError }: { deals: DealBoar
   const [deals, setDeals] = useState(initialDeals);
   const [query, setQuery] = useState("");
   const [mode, setMode] = useState<"kanban" | "list">("kanban");
+  useReserveCrmMobileNavSpace(mode !== "list");
   useEffect(() => {
     setDeals(initialDeals);
   }, [initialDeals]);
@@ -136,9 +197,16 @@ export function DealsBoard({ deals: initialDeals, loadError }: { deals: DealBoar
       )
     : deals;
 
+  const { canScrollLeft, canScrollRight } = useBoardScroll(scroller, `${mode}:${visible.length}`);
+
   function scrollBoard(direction: -1 | 1) {
     scroller.current?.scrollBy({ left: direction * 320, behavior: "smooth" });
   }
+
+  const scrollButtonClass = (visible: boolean) =>
+    `absolute top-1/2 z-20 h-10 w-10 -translate-y-1/2 cursor-pointer items-center justify-center rounded-full border border-gray-200 bg-white text-gray-700 shadow-md transition-all hover:text-black hover:shadow-lg ${
+      visible ? "flex" : "hidden"
+    }`;
 
   const toggleClass = (active: boolean) =>
     `flex cursor-pointer items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-all ${
@@ -148,9 +216,9 @@ export function DealsBoard({ deals: initialDeals, loadError }: { deals: DealBoar
   return (
     <main className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-[#f9f9fb]">
       <header className="z-10 border-b border-gray-200/80 bg-white px-6 py-4">
-        <div className="flex flex-col gap-3 pt-1 sm:flex-row sm:items-center sm:gap-4">
+        <div className="flex flex-col gap-3 pt-1 lg:flex-row lg:items-center lg:gap-4">
           <div className="flex min-w-0 flex-1 items-center gap-3">
-            <label className="relative min-w-0 max-w-lg flex-1">
+            <label className="relative min-w-0 flex-1 lg:max-w-lg">
               <span className="sr-only">{copy.dealSearchPlaceholder}</span>
               <span className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
                 <Search className="h-4 w-4 text-gray-400" aria-hidden="true" />
@@ -183,7 +251,7 @@ export function DealsBoard({ deals: initialDeals, loadError }: { deals: DealBoar
             </div>
             <button
               type="button"
-              className="inline-flex cursor-pointer items-center gap-2 rounded-md bg-[#121314] px-4 py-2 text-xs font-medium text-white shadow-sm transition-colors hover:bg-black"
+              className="hidden cursor-pointer items-center gap-2 rounded-md bg-[#121314] px-4 py-2 text-xs font-medium text-white shadow-sm transition-colors hover:bg-black lg:inline-flex"
             >
               <Plus className="h-4 w-4" aria-hidden="true" />
               {copy.newDeal}
@@ -207,7 +275,7 @@ export function DealsBoard({ deals: initialDeals, loadError }: { deals: DealBoar
             type="button"
             aria-label={copy.scrollLeft}
             onClick={() => scrollBoard(-1)}
-            className="absolute top-1/2 left-3 z-20 flex h-10 w-10 -translate-y-1/2 cursor-pointer items-center justify-center rounded-full border border-gray-200 bg-white text-gray-700 shadow-md transition-all hover:text-black hover:shadow-lg"
+            className={`left-3 ${scrollButtonClass(canScrollLeft)}`}
           >
             <ChevronLeft className="h-5 w-5" aria-hidden="true" />
           </button>
@@ -215,13 +283,13 @@ export function DealsBoard({ deals: initialDeals, loadError }: { deals: DealBoar
             type="button"
             aria-label={copy.scrollRight}
             onClick={() => scrollBoard(1)}
-            className="absolute top-1/2 right-3 z-20 flex h-10 w-10 -translate-y-1/2 cursor-pointer items-center justify-center rounded-full border border-gray-200 bg-white text-gray-700 shadow-md transition-all hover:text-black hover:shadow-lg"
+            className={`right-3 ${scrollButtonClass(canScrollRight)}`}
           >
             <ChevronRight className="h-5 w-5" aria-hidden="true" />
           </button>
           <div
             ref={scroller}
-            className="flex h-full min-h-0 flex-1 items-stretch gap-3 overflow-x-auto scroll-smooth p-6"
+            className="flex h-full min-h-0 flex-1 items-stretch gap-3 overflow-x-auto scroll-smooth px-6 pt-6 pb-20 lg:p-6"
           >
             {needle && visible.length === 0 ? (
               <p className="px-2 py-6 text-sm text-gray-500">{copy.emptyDealSearch}</p>
@@ -256,11 +324,18 @@ export function DealsBoard({ deals: initialDeals, loadError }: { deals: DealBoar
           </div>
         </div>
       ) : (
-        <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-6">
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
           {visible.length === 0 ? (
-            <p className="py-8 text-sm text-gray-500">{copy.emptyDealSearch}</p>
+            <p className="px-6 py-8 text-sm text-gray-500">{copy.emptyDealSearch}</p>
           ) : (
             <>
+              <div className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto lg:hidden">
+                {visible.map((deal) => (
+                  <DealListMobileRow key={deal.id} deal={deal} />
+                ))}
+                <div className="h-[calc(4rem+env(safe-area-inset-bottom))]" />
+              </div>
+              <div className="hidden min-h-0 flex-1 flex-col overflow-y-auto px-6 lg:flex">
               <div className="overflow-x-auto">
                 <table className="w-full text-left text-xs text-gray-600">
                   <thead className="border-b border-gray-200 text-[11px] font-bold tracking-wide text-gray-900 select-none">
@@ -330,10 +405,12 @@ export function DealsBoard({ deals: initialDeals, loadError }: { deals: DealBoar
                   <span className="font-semibold text-gray-900">{deals.length}</span> {copy.deals.toLowerCase()}
                 </p>
               </div>
+              </div>
             </>
           )}
         </div>
       )}
+      <CrmMobileCreateButton label={copy.newDeal} />
     </main>
   );
 }

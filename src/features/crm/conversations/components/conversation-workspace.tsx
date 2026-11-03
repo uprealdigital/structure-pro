@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useRef, useState } from "react";
+import { useHideCrmMobileNav } from "@/src/features/crm/common/hooks/use-crm-mobile-nav";
 import { useDealStream } from "@/src/features/crm/deals/hooks/use-deal-stream";
 import type { DealChangeEvent } from "@/src/features/crm/deals/types";
 import { useQuoteStream } from "@/src/features/crm/quotes/hooks/use-quote-stream";
@@ -238,6 +239,7 @@ export function ConversationWorkspaceView({
     return { ...item, unreadCount: count, unread: count > 0 };
   });
   const showDetail = Boolean(selection.selectedId);
+  useHideCrmMobileNav(showDetail);
   const showLoadError = loadError || (showDetail && selection.status === "error");
 
   async function markRead(ids: string[], read: boolean) {

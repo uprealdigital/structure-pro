@@ -408,6 +408,7 @@ export function DebugLogPill() {
   const measured = viewport.width > 0 && viewport.height > 0;
   const point = measured && drag ? drag : measured ? place(dock, viewport, pillSize) : { x: margin, y: margin };
   const placed = drag ? dockFor(point, viewport, pillSize) : dock;
+  const mobile = viewport.width > 0 && viewport.width < 1024;
   const unreadCount = sections.reduce((sum, section) => sum + section.unreadCount, 0);
   const levelCounts = sections.reduce((sum, section) => {
     for (const level of logLevels) sum[level] += section.unreadByLevel[level] ?? 0;
@@ -415,30 +416,39 @@ export function DebugLogPill() {
   }, emptyLogLevelCounts());
   const visibleLevels = logLevels.filter((level) => levels.includes(level));
   const loadError = sections.some((section) => section.error != null && section.error !== "");
-  const panelWidth = Math.min(420, Math.max(280, viewport.width - margin * 2));
-  const space =
-    placed.edge === "bottom"
-      ? point.y - margin - 8
-      : placed.edge === "top"
-        ? viewport.height - (point.y + pillSize.height) - margin - 8
-        : viewport.height - margin * 2;
-  const panelMaxHeight = Math.min(520, Math.max(160, space));
-  const panelLeft =
+  const panelGap = 8;
+  const above = point.y - margin - panelGap;
+  const below = viewport.height - (point.y + pillSize.height) - margin - panelGap;
+  const space = placed.edge === "bottom" ? above : placed.edge === "top" ? below : viewport.height - margin * 2;
+  let panelWidth = Math.min(420, Math.max(280, viewport.width - margin * 2));
+  let panelMaxHeight = Math.min(520, Math.max(160, space));
+  let panelLeft: number | undefined =
     placed.edge === "right"
       ? undefined
       : Math.min(
-          Math.max(margin, placed.edge === "left" ? point.x + pillSize.width + 8 : point.x),
+          Math.max(margin, placed.edge === "left" ? point.x + pillSize.width + panelGap : point.x),
           viewport.width - panelWidth - margin,
         );
-  const panelRight = placed.edge === "right" ? viewport.width - point.x + 8 : undefined;
-  const panelTop =
+  let panelRight: number | undefined = placed.edge === "right" ? viewport.width - point.x + panelGap : undefined;
+  let panelTop: number | undefined =
     placed.edge === "bottom"
       ? undefined
       : Math.min(
-          Math.max(margin, placed.edge === "top" ? point.y + pillSize.height + 8 : point.y),
+          Math.max(margin, placed.edge === "top" ? point.y + pillSize.height + panelGap : point.y),
           viewport.height - panelMaxHeight - margin,
         );
-  const panelBottom = placed.edge === "bottom" ? viewport.height - point.y + 8 : undefined;
+  let panelBottom: number | undefined = placed.edge === "bottom" ? viewport.height - point.y + panelGap : undefined;
+  if (mobile) {
+    const leftGap = point.x;
+    const stretched = viewport.width - leftGap * 2;
+    panelLeft = stretched >= 160 ? leftGap : margin;
+    panelRight = undefined;
+    panelWidth = stretched >= 160 ? stretched : Math.max(160, viewport.width - margin * 2);
+    const openAbove = above >= below;
+    panelMaxHeight = Math.min(520, Math.max(160, openAbove ? above : below));
+    panelTop = openAbove ? undefined : point.y + pillSize.height + panelGap;
+    panelBottom = openAbove ? viewport.height - point.y + panelGap : undefined;
+  }
 
   function onPointerDown(event: ReactPointerEvent<HTMLButtonElement>) {
     if (event.button !== 0) return;

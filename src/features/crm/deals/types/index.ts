@@ -54,6 +54,13 @@ export const dealStageSchema = dealStatusSchema;
 
 export type DealStage = DealStatus;
 
+export const dealBoardCustomerSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+});
+
+export type DealBoardCustomer = z.infer<typeof dealBoardCustomerSchema>;
+
 export const dealBoardItemSchema = z.object({
   id: z.string(),
   conversationId: z.string().optional(),
@@ -63,6 +70,7 @@ export const dealBoardItemSchema = z.object({
   source: dealSourceSchema,
   stage: dealStageSchema,
   valueLabel: z.string(),
+  customers: z.array(dealBoardCustomerSchema),
 });
 
 export type DealBoardItem = z.infer<typeof dealBoardItemSchema>;
