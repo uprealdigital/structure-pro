@@ -9,13 +9,28 @@ export function CustomersSkeleton() {
     <SkeletonStatus>
       <main className="flex h-full min-w-0 flex-1 flex-col overflow-hidden bg-[#f9f9fb]" aria-busy="true">
         <header className="border-b border-gray-200/80 bg-white">
-          <div className="flex items-center gap-4 px-6 py-3.5">
+          <div className="flex items-center gap-3 px-4 py-3.5 lg:gap-4 lg:px-6">
             <Bone className="h-8 min-w-0 flex-1 rounded-md lg:max-w-lg" />
             <Bone className="h-8 w-20 shrink-0 rounded-md" />
             <Bone className="ml-auto hidden h-8 w-28 shrink-0 rounded-md lg:block" />
           </div>
         </header>
-        <div className="flex flex-1 flex-col px-6">
+        <div className="flex min-h-0 flex-1 flex-col overflow-x-hidden overflow-y-auto lg:hidden">
+          {Array.from({ length: rows }, (_, index) => (
+            <div key={index} className="flex items-center gap-3 px-4 py-3">
+              <div className="flex min-w-0 flex-1 items-center gap-2.5">
+                <Bone className="h-7 w-7 shrink-0 rounded-full" />
+                <Bone className="h-3 w-28" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <Bone className="h-3 w-32 max-w-full" />
+                <Bone className="mt-1.5 h-3 w-24" />
+              </div>
+              <Bone className="h-4 w-4 shrink-0" />
+            </div>
+          ))}
+        </div>
+        <div className="hidden min-h-0 flex-1 flex-col px-6 lg:flex">
           <table className="w-full text-left text-xs">
             <thead className="border-b border-gray-200 font-serif text-[11px] font-bold tracking-wide text-gray-400">
               <tr>

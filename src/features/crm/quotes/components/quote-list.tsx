@@ -28,9 +28,10 @@ function QuoteListMobileRow({ quote, onOpen }: { quote: QuoteListItem; onOpen: (
       onClick={onOpen}
       className="block w-full cursor-pointer border-b border-gray-100 px-4 py-3 text-left transition-colors hover:bg-gray-50/80"
     >
-      <div className="grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-x-2">
+      <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3">
         <div className="min-w-0">
-          <div className="flex min-w-0 items-center gap-1.5">
+          <div className="truncate text-xs font-medium text-gray-900">{quote.dealLabel}</div>
+          <div className="mt-1 flex min-w-0 items-center gap-1.5">
             {customers.length > 0 ? (
               <span className="flex shrink-0 items-center -space-x-2">
                 {customers.map((customer, index) => (
@@ -51,13 +52,11 @@ function QuoteListMobileRow({ quote, onOpen }: { quote: QuoteListItem; onOpen: (
             )}
             {extra > 0 ? <span className="shrink-0 font-serif text-xs font-semibold text-gray-500">+{extra}</span> : null}
           </div>
-          <div className="mt-1 truncate text-xs font-medium text-gray-900">{quote.dealLabel}</div>
         </div>
-        <div className="shrink-0">
+        <div className="flex shrink-0 flex-col items-end gap-1">
           <div className="font-mono text-xs font-semibold whitespace-nowrap text-gray-950">{quote.priceLabel}</div>
-          <div className="mt-0.5 text-[10px] whitespace-nowrap text-gray-500">{quote.monthlyLabel}</div>
+          <QuoteStatusBadge status={quote.status} />
         </div>
-        <QuoteStatusBadge status={quote.status} />
       </div>
     </button>
   );

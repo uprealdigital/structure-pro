@@ -18,19 +18,18 @@ export function QuotesSkeleton() {
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden lg:hidden">
           {Array.from({ length: rows }, (_, index) => (
             <div key={index} className="border-b border-gray-100 px-4 py-3">
-              <div className="grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-x-2">
+              <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3">
                 <div className="min-w-0">
-                  <div className="flex items-center gap-1.5">
+                  <Bone className="h-3 w-32" />
+                  <div className="mt-2 flex items-center gap-1.5">
                     <Bone className="h-7 w-7 shrink-0 rounded-full" />
                     <Bone className="h-3 w-24" />
                   </div>
-                  <Bone className="mt-2 h-3 w-32" />
                 </div>
-                <div>
+                <div className="flex flex-col items-end gap-1">
                   <Bone className="h-3 w-14" />
-                  <Bone className="mt-1.5 h-2.5 w-12" />
+                  <Bone className="h-5 w-14 rounded-full" />
                 </div>
-                <Bone className="h-5 w-14 rounded-full" />
               </div>
             </div>
           ))}

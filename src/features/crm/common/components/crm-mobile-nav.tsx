@@ -76,39 +76,38 @@ function AccountSheet({
   }, [onClose]);
 
   return (
-    <div className="fixed inset-0 z-50 lg:hidden">
+    <div className="fixed inset-x-0 top-0 bottom-[calc(4rem+env(safe-area-inset-bottom))] z-50 lg:hidden">
       <button type="button" aria-label={copy.closeAccount} className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
       <div
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
-        className="absolute inset-x-0 bottom-0 flex max-h-[88vh] flex-col overflow-y-auto rounded-t-2xl border-t border-gray-200 bg-white pb-[env(safe-area-inset-bottom)] text-gray-900 shadow-2xl"
+        className="absolute inset-x-0 bottom-0 flex max-h-full flex-col overflow-y-auto rounded-t-2xl border-t border-gray-200 bg-white text-gray-900"
       >
-        <div className="sticky top-0 z-10 border-b border-gray-200 bg-white px-3 py-3">
-          <div className="absolute top-2 left-1/2 h-1 w-10 -translate-x-1/2 rounded-full bg-gray-300" />
-          <div className="flex items-center justify-between gap-2 pt-2">
-            <div className="flex min-w-0 items-center gap-2">
-              <div className="relative shrink-0">
-                <div className="flex h-10 w-10 items-center justify-center rounded-full border border-gray-200 bg-gray-100 font-serif text-sm font-semibold text-gray-900">
-                  {contactInitials(copy.operatorName)}
-                </div>
-                <span className="absolute right-0 bottom-0 h-2.5 w-2.5 rounded-full bg-[#047857] ring-2 ring-white" />
-              </div>
-              <div className="min-w-0">
-                <h2 id={titleId} className="truncate font-serif text-sm font-semibold text-gray-900">
-                  {copy.operatorName}
-                </h2>
-                <p className="truncate text-[11px] text-gray-500">{copy.operatorEmail}</p>
-              </div>
-            </div>
+        <div className="sticky top-0 z-10 border-b border-gray-200 bg-white px-3 pt-2 pb-3">
+          <div className="mb-2 flex justify-end">
             <button
               type="button"
               aria-label={copy.closeAccount}
               onClick={onClose}
-              className="mt-2 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-gray-100 text-gray-500 transition-colors hover:bg-gray-200 hover:text-gray-900"
+              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-gray-100 text-gray-500 transition-colors hover:bg-gray-200 hover:text-gray-900"
             >
               <X className="h-4 w-4" aria-hidden="true" />
             </button>
+          </div>
+          <div className="flex min-w-0 items-center gap-2">
+            <div className="relative shrink-0">
+              <div className="flex h-10 w-10 items-center justify-center rounded-full border border-gray-200 bg-gray-100 font-serif text-sm font-semibold text-gray-900">
+                {contactInitials(copy.operatorName)}
+              </div>
+              <span className="absolute right-0 bottom-0 h-2.5 w-2.5 rounded-full bg-[#047857] ring-2 ring-white" />
+            </div>
+            <div className="min-w-0">
+              <h2 id={titleId} className="truncate font-serif text-sm font-semibold text-gray-900">
+                {copy.operatorName}
+              </h2>
+              <p className="truncate text-[11px] text-gray-500">{copy.operatorEmail}</p>
+            </div>
           </div>
         </div>
         <div className="flex flex-col gap-3 px-3 py-3">
@@ -268,18 +267,24 @@ function CrmMobileNav({ organizations }: { organizations: OrganizationDirectoryE
           aria-haspopup="dialog"
           aria-expanded={accountOpen}
           aria-label={copy.accountMenu}
-          onClick={() => setAccountOpen(true)}
-          className="flex min-w-0 flex-1 flex-col items-center justify-center py-1 text-[#44474a]"
+          onClick={() => setAccountOpen((open) => !open)}
+          className={`flex min-w-0 flex-1 flex-col items-center justify-center py-1 ${accountOpen ? "text-black" : "text-[#44474a]"}`}
         >
           <span className="flex h-7 items-center justify-center">
             <span className="relative flex items-center justify-center">
-              <span className="flex h-7 w-7 items-center justify-center rounded-full bg-[#e8e8ea] text-[11px] font-semibold text-[#1a1c1d]">
+              <span
+                className={`flex h-7 w-7 items-center justify-center rounded-full text-[11px] font-semibold ${
+                  accountOpen ? "bg-black text-white" : "bg-[#e8e8ea] text-[#1a1c1d]"
+                }`}
+              >
                 {contactInitials(copy.operatorName)}
               </span>
               <span className="absolute right-0 bottom-0 h-2.5 w-2.5 rounded-full bg-[#047857] ring-2 ring-white" />
             </span>
           </span>
-          <span className="mt-0.5 max-w-full truncate text-[10px] leading-none font-medium tracking-tight">{copy.account}</span>
+          <span className={`mt-0.5 max-w-full truncate text-[10px] leading-none tracking-tight ${accountOpen ? "font-semibold" : "font-medium"}`}>
+            {copy.account}
+          </span>
         </button>
       </nav>
       {accountOpen ? (
