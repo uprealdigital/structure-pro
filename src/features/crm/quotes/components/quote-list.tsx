@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { CrmMobileCreateButton } from "@/src/features/crm/common/components/crm-mobile-create-button";
 import { useCrmDesktop } from "@/src/features/crm/common/hooks/use-crm-desktop";
+import { contactInitials } from "@/src/features/crm/common/utils/formatting";
 import { QuoteCustomers } from "@/src/features/crm/quotes/components/quote-customers";
 import { QuoteStatusBadge } from "@/src/features/crm/quotes/components/quote-status-badge";
 import { useQuoteStream } from "@/src/features/crm/quotes/hooks/use-quote-stream";
@@ -15,6 +16,52 @@ import type { QuoteListItem } from "@/src/features/crm/quotes/types";
 import { formatQuoteDate, quotePageNumbers } from "@/src/features/crm/quotes/utils/formatting";
 
 const pageSize = 15;
+
+function QuoteListMobileRow({ quote, onOpen }: { quote: QuoteListItem; onOpen: () => void }) {
+  const customers = quote.customers;
+  const primary = customers[0];
+  const extra = Math.max(0, customers.length - 1);
+
+  return (
+    <button
+      type="button"
+      onClick={onOpen}
+      className="block w-full cursor-pointer border-b border-gray-100 px-4 py-3 text-left transition-colors hover:bg-gray-50/80"
+    >
+      <div className="grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-x-2">
+        <div className="min-w-0">
+          <div className="flex min-w-0 items-center gap-1.5">
+            {customers.length > 0 ? (
+              <span className="flex shrink-0 items-center -space-x-2">
+                {customers.map((customer, index) => (
+                  <span
+                    key={customer.id}
+                    className="flex h-7 w-7 items-center justify-center rounded-full border-2 border-white bg-gray-100 text-xs font-semibold text-gray-800 ring-1 ring-gray-200"
+                    style={{ zIndex: customers.length - index }}
+                  >
+                    {contactInitials(customer.name)}
+                  </span>
+                ))}
+              </span>
+            ) : null}
+            {primary ? (
+              <span className="truncate font-serif text-xs font-semibold text-gray-950">{primary.name}</span>
+            ) : (
+              <span className="text-xs text-gray-400">—</span>
+            )}
+            {extra > 0 ? <span className="shrink-0 font-serif text-xs font-semibold text-gray-500">+{extra}</span> : null}
+          </div>
+          <div className="mt-1 truncate text-xs font-medium text-gray-900">{quote.dealLabel}</div>
+        </div>
+        <div className="shrink-0">
+          <div className="font-mono text-xs font-semibold whitespace-nowrap text-gray-950">{quote.priceLabel}</div>
+          <div className="mt-0.5 text-[10px] whitespace-nowrap text-gray-500">{quote.monthlyLabel}</div>
+        </div>
+        <QuoteStatusBadge status={quote.status} />
+      </div>
+    </button>
+  );
+}
 
 export function QuoteList({ quotes: initialQuotes, loadError }: { quotes: QuoteListItem[]; loadError: boolean }) {
   const router = useRouter();
@@ -64,7 +111,7 @@ export function QuoteList({ quotes: initialQuotes, loadError }: { quotes: QuoteL
   const pages = quotePageNumbers(page + 1, pageCount);
 
   return (
-    <main className="flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-y-auto bg-[#f9f9fb]">
+    <main className="flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-[#f9f9fb] lg:overflow-y-auto">
       <header className="sticky top-0 z-10 border-b border-gray-200/80 bg-white">
         <div className="flex items-center gap-3 px-4 py-3.5 lg:justify-between lg:gap-4 lg:px-6 lg:py-4">
           <label className="relative min-w-0 flex-1 lg:max-w-lg">
@@ -111,8 +158,22 @@ export function QuoteList({ quotes: initialQuotes, loadError }: { quotes: QuoteL
           <p className="mt-2 max-w-sm text-sm leading-5 text-gray-500">{copy.emptyQuotesBody}</p>
         </div>
       ) : (
-        <div className="flex min-h-0 min-w-0 flex-1 flex-col px-4 pb-20 lg:px-6 lg:pb-0">
-          <div className="flex w-full min-w-0 flex-1 flex-col bg-transparent">
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col lg:px-6">
+          <div className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto lg:hidden">
+            {visible.length === 0 ? (
+              <p className="px-4 py-8 text-sm text-gray-500">{copy.emptyQuoteSearch}</p>
+            ) : (
+              visible.map((quote) => (
+                <QuoteListMobileRow
+                  key={quote.id}
+                  quote={quote}
+                  onOpen={() => router.push(`/quote/${quote.id}?mode=internal`)}
+                />
+              ))
+            )}
+            <div className="h-[calc(4rem+env(safe-area-inset-bottom))]" />
+          </div>
+          <div className="hidden min-h-0 w-full min-w-0 flex-1 flex-col bg-transparent lg:flex">
             <div className="min-w-0 overflow-x-auto">
               <table className="w-full text-left text-xs text-gray-600">
                 <thead className="border-b border-gray-200 bg-transparent font-serif text-[11px] font-bold tracking-wide text-gray-900 select-none">
