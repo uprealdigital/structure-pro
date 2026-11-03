@@ -1,12 +1,17 @@
 import type { MetadataRoute } from "next";
+import { headers } from "next/headers";
+import { isAppHost } from "@/src/features/website/utils/hosts";
 
-export default function manifest(): MetadataRoute.Manifest {
+export default async function manifest(): Promise<MetadataRoute.Manifest> {
+  const headerStore = await headers();
+  const host = headerStore.get("x-forwarded-host") ?? headerStore.get("host") ?? "";
+
   return {
     name: "TimberCraft 3D Studio",
     short_name: "TimberCraft",
     description: "Configure a building in 3D — style, siding, roof, and size.",
     id: "/",
-    start_url: "/",
+    start_url: isAppHost(host) ? "/" : "/open-app",
     scope: "/",
     display: "standalone",
     background_color: "#f9f9fb",

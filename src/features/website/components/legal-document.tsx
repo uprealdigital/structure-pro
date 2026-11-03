@@ -1,9 +1,10 @@
-import Link from "next/link";
-import { ArrowLeft } from "lucide-react";
+import { WebsiteBreadcrumb } from "@/src/features/website/components/website-breadcrumb";
+import { WebsiteFooter } from "@/src/features/website/components/website-footer";
+import { WebsiteMenu } from "@/src/features/website/components/website-menu";
 import {
   legalChrome,
-  type LegalDocument,
-} from "@/src/features/cpq/locales/legal";
+  type LegalDocument as LegalDocumentContent,
+} from "@/src/features/website/locales/legal";
 
 function LegalText({ text }: { text: string }) {
   const email = legalChrome.supportEmail;
@@ -27,38 +28,31 @@ function LegalText({ text }: { text: string }) {
   });
 }
 
-export function LegalDocument({ document }: { document: LegalDocument }) {
+export function LegalDocument({ document }: { document: LegalDocumentContent }) {
   return (
-    <div className="min-h-0 flex-1 overflow-y-auto bg-[#f9f9fb] text-[#1a1c1d] antialiased">
-      <header className="w-full border-b border-[#c5c6c9]/30 bg-[#f9f9fb]">
-        <div className="mx-auto flex h-16 max-w-4xl items-center px-6">
-          <Link
-            href="/cpq"
-            className="inline-flex items-center gap-2 text-sm text-[#655d55] transition-colors hover:text-[#1a1c1d]"
-          >
-            <ArrowLeft className="size-[18px]" aria-hidden />
-            {legalChrome.returnToConfigurator}
-          </Link>
-        </div>
-      </header>
-      <main className="w-full px-6 py-16 sm:py-20">
+    <div className="flex min-h-0 flex-1 flex-col overflow-y-auto bg-[#f9f9fb] text-[#1a1c1d] antialiased">
+      <WebsiteMenu />
+      <main className="w-full px-6 pt-10 pb-16 sm:pt-12 sm:pb-20">
         <article className="mx-auto max-w-3xl space-y-10">
-          <div className="space-y-4 border-b border-[#c5c6c9]/30 pb-8">
-            <h1 className="font-serif text-3xl font-semibold tracking-tight text-[#1a1c1d] sm:text-4xl lg:text-5xl">
-              {document.title}
-            </h1>
-            <div className="flex flex-col gap-2 text-sm text-[#655d55] sm:flex-row sm:items-center sm:gap-6">
-              <p>
-                <span className="font-medium text-[#1a1c1d]">{legalChrome.effectiveDate}</span>{" "}
-                {document.effectiveDate}
-              </p>
-              <span className="hidden text-[#c5c6c9] sm:inline" aria-hidden>
-                •
-              </span>
-              <p>
-                <span className="font-medium text-[#1a1c1d]">{legalChrome.lastUpdated}</span>{" "}
-                {document.lastUpdated}
-              </p>
+          <div className="border-b border-[#c5c6c9]/30 pb-8">
+            <WebsiteBreadcrumb current={document.title} />
+            <div className="mt-8 space-y-4">
+              <h1 className="font-serif text-3xl font-semibold tracking-tight text-[#1a1c1d] sm:text-4xl lg:text-5xl">
+                {document.title}
+              </h1>
+              <div className="flex flex-col gap-2 text-sm text-[#655d55] sm:flex-row sm:items-center sm:gap-6">
+                <p>
+                  <span className="font-medium text-[#1a1c1d]">{legalChrome.effectiveDate}</span>{" "}
+                  {document.effectiveDate}
+                </p>
+                <span className="hidden text-[#c5c6c9] sm:inline" aria-hidden>
+                  •
+                </span>
+                <p>
+                  <span className="font-medium text-[#1a1c1d]">{legalChrome.lastUpdated}</span>{" "}
+                  {document.lastUpdated}
+                </p>
+              </div>
             </div>
           </div>
           <p className="text-base leading-relaxed text-[#44474a] sm:text-lg">{document.intro}</p>
@@ -109,6 +103,7 @@ export function LegalDocument({ document }: { document: LegalDocument }) {
           ))}
         </article>
       </main>
+      <WebsiteFooter />
     </div>
   );
 }

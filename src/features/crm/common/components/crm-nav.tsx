@@ -1,9 +1,8 @@
 "use client";
 
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import {
   Calculator,
-  ChevronsUpDown,
   ChevronDown,
   CircleHelp,
   Handshake,
@@ -15,8 +14,10 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { OrganizationSwitcher } from "@/src/features/crm/common/components/organization-switcher";
 import { useNavCounts } from "@/src/features/crm/common/hooks/use-nav-counts";
 import { copy } from "@/src/features/crm/common/locales/en";
+import type { OrganizationDirectoryEntry } from "@/src/features/crm/common/types";
 import { contactInitials } from "@/src/features/crm/common/utils/formatting";
 
 function NavItem({
@@ -77,7 +78,7 @@ function NavItem({
   );
 }
 
-export function CrmNav() {
+export function CrmNav({ organizations }: { organizations: OrganizationDirectoryEntry[] }) {
   const counts = useNavCounts();
   const pathname = usePathname();
   const dealsActive = pathname === "/deals" || pathname.startsWith("/deals/");
@@ -88,35 +89,20 @@ export function CrmNav() {
   const settingsActive = pathname === "/settings" || pathname.startsWith("/settings/");
   const supportActive = pathname === "/support" || pathname.startsWith("/support/");
   const iconClass = "h-4 w-4";
+  const [switcherOpen, setSwitcherOpen] = useState(false);
 
   return (
-    <aside className="hidden h-full w-72 shrink-0 flex-col justify-between border-r border-[#1e2022] bg-[#121314] px-2.5 py-5 text-gray-300 select-none lg:flex">
+    <aside
+      className={`${switcherOpen ? "z-30" : ""} relative hidden h-full w-72 shrink-0 flex-col justify-between border-r border-[#1e2022] bg-[#121314] px-2.5 py-5 text-gray-300 select-none lg:flex`}
+    >
       <div className="space-y-8">
         <div className="px-2 pt-2">
-          <button
-            type="button"
-            className="group flex w-full cursor-pointer items-center justify-between rounded-lg border border-white/10 bg-white/[0.06] p-2.5 text-left shadow-sm transition-colors hover:bg-white/[0.09]"
-          >
-            <span className="flex min-w-0 items-center space-x-3">
-              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded bg-white font-serif text-xl font-black tracking-wider text-black shadow-sm">
-                {copy.mark}
-              </span>
-              <span className="min-w-0">
-                <span className="block truncate font-serif text-[14px] leading-tight font-bold tracking-wide text-white">
-                  {copy.brand}
-                </span>
-                <span className="mt-0.5 block truncate text-[10px] tracking-widest text-gray-400 uppercase">
-                  {copy.location}
-                </span>
-              </span>
-            </span>
-            <ChevronsUpDown className="ml-2 h-3.5 w-3.5 shrink-0 text-gray-400 group-hover:text-white" aria-hidden="true" />
-          </button>
+          <OrganizationSwitcher organizations={organizations} onOpenChange={setSwitcherOpen} />
         </div>
 
         <nav aria-label={copy.navigation} className="space-y-1 pr-1">
           <NavItem
-            href="/"
+            href="/conversations"
             current={conversationsActive}
             countStyle="pill"
             count={counts && counts.unreadActivityCount > 0 ? counts.unreadActivityCount : undefined}

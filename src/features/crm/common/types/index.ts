@@ -64,6 +64,65 @@ export const crmLogWriteSchema = z.object({
 
 export type CrmLogWrite = z.infer<typeof crmLogWriteSchema>;
 
+export const organizationSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  icon: z.string(),
+  description: z.string(),
+  position: z.number(),
+});
+
+export type Organization = z.infer<typeof organizationSchema>;
+
+export const organizationWriteSchema = z.object({
+  name: z.string().trim().min(1),
+  icon: z.string().trim().min(1).max(2),
+  description: z.string(),
+  position: z.number().int().nonnegative(),
+});
+
+export const organizationPatchSchema = organizationWriteSchema.partial();
+
+export const dealershipSchema = z.object({
+  id: z.string(),
+  organizationId: z.string(),
+  name: z.string(),
+  description: z.string(),
+  address: z.string(),
+  city: z.string(),
+  state: z.string(),
+  postalCode: z.string(),
+  hasPhysicalLocation: z.boolean(),
+  position: z.number(),
+});
+
+export type Dealership = z.infer<typeof dealershipSchema>;
+
+const dealershipWriteObject = z.object({
+  organizationId: z.string().trim().min(1),
+  name: z.string().trim().min(1),
+  description: z.string(),
+  address: z.string().trim().min(1),
+  city: z.string().trim().min(1),
+  state: z.string().trim().min(1),
+  postalCode: z.string().trim().min(1),
+  hasPhysicalLocation: z.boolean(),
+  position: z.number().int().nonnegative(),
+});
+
+export const dealershipWriteSchema = dealershipWriteObject.refine(
+  (dealership) => dealership.name === `${dealership.city}, ${dealership.state}`,
+  { path: ["name"] },
+);
+
+export const dealershipPatchSchema = dealershipWriteObject.partial();
+
+export const organizationDirectorySchema = organizationSchema.extend({
+  dealerships: z.array(dealershipSchema),
+});
+
+export type OrganizationDirectoryEntry = z.infer<typeof organizationDirectorySchema>;
+
 export const customerPatchSchema = z.object({
   fullName: z.string().optional(),
   email: z.string().optional(),

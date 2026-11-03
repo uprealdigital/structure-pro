@@ -2,9 +2,13 @@ import {
   crmLogSchema,
   customerSchema,
   dealCustomerSchema,
+  dealershipSchema,
+  organizationSchema,
   type CrmLog,
   type Customer,
   type DealCustomer,
+  type Dealership,
+  type Organization,
 } from "@/src/features/crm/common/types";
 
 export type CustomerRow = {
@@ -22,6 +26,27 @@ export type DealCustomerRow = {
   deal_id: string;
   is_primary: boolean;
   created_at?: string | null;
+};
+
+export type OrganizationRow = {
+  id: string;
+  name: string;
+  icon: string;
+  description: string;
+  position: number;
+};
+
+export type DealershipRow = {
+  id: string;
+  organization_id: string;
+  name: string;
+  description: string;
+  address: string;
+  city: string;
+  state: string;
+  postal_code: string;
+  has_physical_location: boolean;
+  position: number;
 };
 
 export type CrmLogRow = {
@@ -59,6 +84,33 @@ export function toCrmLog(row: CrmLogRow): CrmLog | undefined {
     createdAt: row.created_at,
   });
   return log.success ? log.data : undefined;
+}
+
+export function toOrganization(row: OrganizationRow): Organization | undefined {
+  const organization = organizationSchema.safeParse({
+    id: row.id,
+    name: row.name,
+    icon: row.icon,
+    description: row.description,
+    position: row.position,
+  });
+  return organization.success ? organization.data : undefined;
+}
+
+export function toDealership(row: DealershipRow): Dealership | undefined {
+  const dealership = dealershipSchema.safeParse({
+    id: row.id,
+    organizationId: row.organization_id,
+    name: row.name,
+    description: row.description,
+    address: row.address,
+    city: row.city,
+    state: row.state,
+    postalCode: row.postal_code,
+    hasPhysicalLocation: row.has_physical_location,
+    position: row.position,
+  });
+  return dealership.success ? dealership.data : undefined;
 }
 
 export function toCustomer(row: CustomerRow): Customer | undefined {

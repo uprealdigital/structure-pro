@@ -24,21 +24,20 @@ export type LegalDocument = {
   sections: LegalSection[];
 };
 
-const supportEmail = "support@uprealdigital.com";
-const supportMailto = `mailto:${supportEmail}`;
-const officeAddress = "188 Saint-Denis Saint-Jean-Sur-Richelieu, Quebec, Canada, J3B 1S5";
+const contactEmail = "hello@shedgrowth.co";
+const contactMailto = `mailto:${contactEmail}`;
+const officeAddress = "Saint-Jean-Sur-Richelieu, Quebec, Canada";
 
 export const legalChrome = {
-  returnToConfigurator: "Return to Configurator",
   effectiveDate: "Effective Date:",
   lastUpdated: "Last Updated:",
-  supportEmail,
+  supportEmail: contactEmail,
 } as const;
 
 export const termsDocument: LegalDocument = {
   title: "Terms and Conditions",
   effectiveDate: "October 14, 2026",
-  lastUpdated: "October 14, 2026",
+  lastUpdated: "November 3, 2026",
   intro:
     'Welcome to 17332521 CANADA INC. ("we," "us," or "our"). By accessing our website, using our custom building configurator, or requesting a quote, you agree to be bound by these Terms and Conditions.',
   sections: [
@@ -68,7 +67,7 @@ export const termsDocument: LegalDocument = {
         },
         {
           label: "Help:",
-          text: `If you experience issues with the messaging program, reply HELP for more assistance or contact ${supportEmail}.`,
+          text: `If you experience issues with the messaging program, reply HELP for more assistance or contact ${contactEmail}.`,
         },
         {
           label: "Carriers:",
@@ -92,7 +91,7 @@ export const termsDocument: LegalDocument = {
       title: "5. Contact Information",
       paragraphs: ["For questions regarding these Terms and Conditions, please contact:"],
       contacts: [
-        { label: "Email:", value: supportEmail, href: supportMailto },
+        { label: "Email:", value: contactEmail, href: contactMailto },
         { label: "Address:", value: officeAddress },
       ],
     },
@@ -102,7 +101,7 @@ export const termsDocument: LegalDocument = {
 export const privacyDocument: LegalDocument = {
   title: "Privacy Policy",
   effectiveDate: "October 14, 2026",
-  lastUpdated: "October 14, 2026",
+  lastUpdated: "November 3, 2026",
   intro:
     'At 17332521 CANADA INC. ("we," "us," or "our"), respecting your privacy and protecting your personal information is a top priority. This Privacy Policy outlines how we collect, use, and safeguard your personal data when you use our website, custom building configurator, and customer messaging services.',
   sections: [
@@ -144,7 +143,7 @@ export const privacyDocument: LegalDocument = {
     {
       title: "4. How to Opt-Out of SMS Communications",
       paragraphs: [
-        `If you no longer wish to receive text messages from us, you may opt out at any time by replying STOP to any text message you receive. For additional assistance, reply HELP or contact us at ${supportEmail}.`,
+        `If you no longer wish to receive text messages from us, you may opt out at any time by replying STOP to any text message you receive. For additional assistance, reply HELP or contact us at ${contactEmail}.`,
       ],
     },
     {
@@ -157,7 +156,7 @@ export const privacyDocument: LegalDocument = {
       title: "6. Contact Us",
       paragraphs: ["If you have questions about this Privacy Policy, please contact us at:"],
       contacts: [
-        { label: "Email:", value: supportEmail, href: supportMailto },
+        { label: "Email:", value: contactEmail, href: contactMailto },
         { label: "Address:", value: officeAddress },
       ],
     },

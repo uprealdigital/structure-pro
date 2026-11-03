@@ -15,6 +15,12 @@ export const copy = {
   operatorRole: "Admin",
   profileOptions: "Profile options",
   navigation: "CRM",
+  switchOrganization: "Switch organization",
+  organizations: "Organizations",
+  dealerships: "Dealerships",
+  locationCount(count: number) {
+    return count === 1 ? "1 location" : `${count} locations`;
+  },
   requiresAttention: "Requires your attention",
   loading: "Loading",
   primary: "Primary",

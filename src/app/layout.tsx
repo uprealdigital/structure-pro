@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Domine, Inter } from "next/font/google";
 import { ConfiguratorShareRedirect } from "@/src/common/components/configurator-share-redirect";
 import { DebugLogPill } from "@/src/common/components/debug-log-pill";
+import { InstalledAppRedirect } from "@/src/features/website/components/installed-app-redirect";
 import "./globals.css";
 
 const inter = Inter({
@@ -49,6 +50,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
     >
       <body className="flex h-full min-h-full flex-col">
         {children}
+        <InstalledAppRedirect />
         <ConfiguratorShareRedirect />
         {process.env.NODE_ENV === "development" ? <DebugLogPill /> : null}
       </body>
