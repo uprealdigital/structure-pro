@@ -2,7 +2,6 @@
 
 import { ChevronRight, Filter, Plus, Search } from "lucide-react";
 import { useState } from "react";
-import { CrmMobileCreateButton } from "@/src/features/crm/common/components/crm-mobile-create-button";
 import { useCrmDesktop } from "@/src/features/crm/common/hooks/use-crm-desktop";
 import { contactInitials } from "@/src/features/crm/common/utils/formatting";
 import { copy } from "@/src/features/crm/customers/locales/en";
@@ -225,7 +224,6 @@ export function CustomerList({
           </div>
         </div>
       )}
-      <CrmMobileCreateButton label={copy.newCustomer} />
     </main>
   );
 }

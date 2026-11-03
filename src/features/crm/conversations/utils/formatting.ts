@@ -360,7 +360,7 @@ export function reviewSmsBody(): string {
 }
 
 export function dealSummarySentence(input: {
-  source: "quote" | "yard_preview";
+  source: "quote" | "yard_preview" | "walk_in";
   style: string;
   size: string;
   siding: string;
@@ -374,6 +374,12 @@ export function dealSummarySentence(input: {
     input.roof ? `${input.roof} roof` : "",
   ].filter(Boolean);
   const interest = finishes.join(" and ");
+
+  if (input.source === "walk_in") {
+    if (product && interest) return `Walk-in customer interested in a ${product} with ${interest}.`;
+    if (product) return `Walk-in customer interested in a ${product}.`;
+    return "Walk-in customer.";
+  }
 
   if (input.source === "yard_preview") {
     const aligned = product

@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-export const dealSourceSchema = z.enum(["quote", "yard_preview"]);
+export const dealSourceSchema = z.enum(["quote", "yard_preview", "walk_in"]);
 export type DealSource = z.infer<typeof dealSourceSchema>;
 
 export const dealStatusSchema = z.enum([
@@ -35,6 +35,14 @@ export const dealWriteSchema = z.object({
   quoteId: z.string(),
   source: dealSourceSchema,
 });
+
+export const walkInDealSchema = z.object({
+  fullName: z.string().trim().min(1),
+  phone: z.string().trim().min(1),
+  email: z.string().trim().pipe(z.email()),
+});
+
+export type WalkInDealInput = z.infer<typeof walkInDealSchema>;
 
 export const dealPatchSchema = z.object({
   status: dealStatusSchema.optional(),

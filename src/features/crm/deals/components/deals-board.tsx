@@ -1,15 +1,17 @@
 "use client";
 
-import { ChevronLeft, ChevronRight, Filter, Globe, ImageIcon, List, Plus, Search } from "lucide-react";
+import { ChevronLeft, ChevronRight, Filter, Footprints, Globe, ImageIcon, List, Plus, Search } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
+import { Toast } from "@/src/common/components/toast";
 import { useBoardScroll } from "@/src/features/crm/deals/hooks/use-board-scroll";
+import { useCreateWalkInDeal } from "@/src/features/crm/deals/hooks/use-create-walk-in-deal";
 import { useDealStream } from "@/src/features/crm/deals/hooks/use-deal-stream";
+import { CreateWalkInDealSheet } from "@/src/features/crm/deals/components/create-walk-in-deal-sheet";
 import { DealStatusBadge } from "@/src/features/crm/deals/components/deal-status-badge";
 import { copy } from "@/src/features/crm/deals/locales/en";
 import type { DealBoardItem, DealSource, DealStatus } from "@/src/features/crm/deals/types";
 import { dealStatusOption, dealStatusOptions, type DealStatusOption } from "@/src/features/crm/deals/utils/status";
-import { CrmMobileCreateButton } from "@/src/features/crm/common/components/crm-mobile-create-button";
 import { useReserveCrmMobileNavSpace } from "@/src/features/crm/common/hooks/use-crm-mobile-nav";
 import { contactInitials } from "@/src/features/crm/common/utils/formatting";
 
@@ -23,7 +25,15 @@ function stageLabel(stage: DealStatus): string {
 }
 
 function sourceLabel(source: DealSource): string {
-  return source === "yard_preview" ? copy.sourceYardPreview : copy.sourceWebsite;
+  if (source === "yard_preview") return copy.sourceYardPreview;
+  if (source === "walk_in") return copy.sourceWalkIn;
+  return copy.sourceWebsite;
+}
+
+function sourceIcon(source: DealSource) {
+  if (source === "yard_preview") return ImageIcon;
+  if (source === "walk_in") return Footprints;
+  return Globe;
 }
 
 function showsValue(stage: DealStatus): boolean {
@@ -43,7 +53,7 @@ function columnClass(tone: DealStatusOption["tone"]): string {
 }
 
 function SourceBadge({ source }: { source: DealSource }) {
-  const Icon = source === "yard_preview" ? ImageIcon : Globe;
+  const Icon = sourceIcon(source);
   return (
     <span className="inline-flex items-center gap-1.5 rounded-full border border-gray-200/80 bg-gray-100 px-2 py-0.5 text-[11px] font-medium text-gray-700">
       <Icon className="h-3 w-3 text-gray-500" strokeWidth={2} aria-hidden="true" />
@@ -107,7 +117,7 @@ function DealListMobileRow({ deal }: { deal: DealBoardItem }) {
   const stage = dealStatusOption(deal.stage);
   const href = dealConversationHref(deal);
   const name = deal.productName || deal.contactName;
-  const Icon = deal.source === "yard_preview" ? ImageIcon : Globe;
+  const Icon = sourceIcon(deal.source);
   const body = (
     <div className="grid grid-cols-[minmax(0,1fr)_5rem_3.75rem] items-center gap-x-2">
       <div className="min-w-0">
@@ -172,6 +182,7 @@ function KanbanIcon() {
 }
 
 export function DealsBoard({ deals: initialDeals, loadError }: { deals: DealBoardItem[]; loadError: boolean }) {
+  const createDeal = useCreateWalkInDeal();
   const [deals, setDeals] = useState(initialDeals);
   const [query, setQuery] = useState("");
   const [mode, setMode] = useState<"kanban" | "list">("kanban");
@@ -251,6 +262,9 @@ export function DealsBoard({ deals: initialDeals, loadError }: { deals: DealBoar
             </div>
             <button
               type="button"
+              aria-haspopup="dialog"
+              aria-expanded={createDeal.open}
+              onClick={createDeal.toggle}
               className="hidden cursor-pointer items-center gap-2 rounded-md bg-[#121314] px-4 py-2 text-xs font-medium text-white shadow-sm transition-colors hover:bg-black lg:inline-flex"
             >
               <Plus className="h-4 w-4" aria-hidden="true" />
@@ -410,7 +424,27 @@ export function DealsBoard({ deals: initialDeals, loadError }: { deals: DealBoar
           )}
         </div>
       )}
-      <CrmMobileCreateButton label={copy.newDeal} />
+      {createDeal.open ? (
+        <CreateWalkInDealSheet
+          fullName={createDeal.fullName}
+          phone={createDeal.phone}
+          email={createDeal.email}
+          errors={createDeal.errors}
+          pending={createDeal.pending}
+          onChange={createDeal.change}
+          onSubmit={() => void createDeal.submit()}
+          onClose={createDeal.close}
+        />
+      ) : null}
+      {createDeal.toast ? (
+        <Toast
+          key={createDeal.toast.id}
+          message={createDeal.toast.message}
+          tone={createDeal.toast.tone}
+          dismissLabel={copy.dismiss}
+          onDismiss={createDeal.dismissToast}
+        />
+      ) : null}
     </main>
   );
 }

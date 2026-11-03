@@ -177,6 +177,7 @@ export const copy = {
   sourceQuote: "Quote",
   sourceWebsite: "Website",
   sourceYardPreview: "Yard preview",
+  sourceWalkIn: "Walk-in",
   ai: "AI",
   sentViaAi: "Sent via AI",
   messageSource: "Channel",

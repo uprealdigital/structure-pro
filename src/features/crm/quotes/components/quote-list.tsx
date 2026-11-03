@@ -1,12 +1,14 @@
 "use client";
 
 import { ChevronRight, Filter, Plus, Search } from "lucide-react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { CrmMobileCreateButton } from "@/src/features/crm/common/components/crm-mobile-create-button";
+import { Toast } from "@/src/common/components/toast";
 import { useCrmDesktop } from "@/src/features/crm/common/hooks/use-crm-desktop";
 import { contactInitials } from "@/src/features/crm/common/utils/formatting";
+import { CreateWalkInDealSheet } from "@/src/features/crm/deals/components/create-walk-in-deal-sheet";
+import { useCreateWalkInDeal } from "@/src/features/crm/deals/hooks/use-create-walk-in-deal";
+import { copy as dealCopy } from "@/src/features/crm/deals/locales/en";
 import { QuoteCustomers } from "@/src/features/crm/quotes/components/quote-customers";
 import { QuoteStatusBadge } from "@/src/features/crm/quotes/components/quote-status-badge";
 import { useQuoteStream } from "@/src/features/crm/quotes/hooks/use-quote-stream";
@@ -65,6 +67,7 @@ function QuoteListMobileRow({ quote, onOpen }: { quote: QuoteListItem; onOpen: (
 export function QuoteList({ quotes: initialQuotes, loadError }: { quotes: QuoteListItem[]; loadError: boolean }) {
   const router = useRouter();
   const desktop = useCrmDesktop();
+  const createDeal = useCreateWalkInDeal();
   const [quotes, setQuotes] = useState(initialQuotes);
   const [query, setQuery] = useState("");
   const [pageIndex, setPageIndex] = useState(0);
@@ -137,13 +140,16 @@ export function QuoteList({ quotes: initialQuotes, loadError }: { quotes: QuoteL
               {copy.filters}
             </button>
           </div>
-          <Link
-            href="/cpq"
-            className="ml-auto hidden shrink-0 items-center gap-1.5 rounded bg-[#121314] px-3 py-1.5 text-xs font-semibold text-white shadow-xs transition-colors hover:bg-black lg:inline-flex"
+          <button
+            type="button"
+            aria-haspopup="dialog"
+            aria-expanded={createDeal.open}
+            onClick={createDeal.toggle}
+            className="ml-auto hidden shrink-0 cursor-pointer items-center gap-1.5 rounded bg-[#121314] px-3 py-1.5 text-xs font-semibold text-white shadow-xs transition-colors hover:bg-black lg:inline-flex"
           >
             <Plus className="h-3.5 w-3.5" strokeWidth={2.2} aria-hidden="true" />
             {copy.newQuote}
-          </Link>
+          </button>
         </div>
       </header>
 
@@ -296,7 +302,27 @@ export function QuoteList({ quotes: initialQuotes, loadError }: { quotes: QuoteL
           </div>
         </div>
       )}
-      <CrmMobileCreateButton label={copy.newQuote} href="/cpq" />
+      {createDeal.open ? (
+        <CreateWalkInDealSheet
+          fullName={createDeal.fullName}
+          phone={createDeal.phone}
+          email={createDeal.email}
+          errors={createDeal.errors}
+          pending={createDeal.pending}
+          onChange={createDeal.change}
+          onSubmit={() => void createDeal.submit()}
+          onClose={createDeal.close}
+        />
+      ) : null}
+      {createDeal.toast ? (
+        <Toast
+          key={createDeal.toast.id}
+          message={createDeal.toast.message}
+          tone={createDeal.toast.tone}
+          dismissLabel={dealCopy.dismiss}
+          onDismiss={createDeal.dismissToast}
+        />
+      ) : null}
     </main>
   );
 }

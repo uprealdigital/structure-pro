@@ -3,6 +3,7 @@ import { dealNameMaxLength } from "@/src/features/crm/deals/types";
 const sourceLabels: Record<string, string> = {
   quote: "Web Inquiry",
   yard_preview: "Yard Preview",
+  walk_in: "Walk-in",
   lot_visit: "Lot Visit",
   lot_visitor: "Lot Visit",
   phone: "Phone Inquiry",

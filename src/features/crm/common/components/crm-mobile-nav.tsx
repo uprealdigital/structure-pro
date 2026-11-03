@@ -4,6 +4,8 @@ import { Children, useEffect, useId, useLayoutEffect, useRef, useState, type Rea
 import { Calculator, ChevronLeft, ChevronRight, CircleHelp, Eye, Handshake, LogOut, MapPin, MessageSquare, Settings, TriangleAlert, Users, X } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { Toast } from "@/src/common/components/toast";
+import { CrmMobileCreateButton } from "@/src/features/crm/common/components/crm-mobile-create-button";
 import {
   CrmMobileContentInsetContext,
   CrmMobileNavHiddenContext,
@@ -12,6 +14,9 @@ import { useNavCounts } from "@/src/features/crm/common/hooks/use-nav-counts";
 import { copy } from "@/src/features/crm/common/locales/en";
 import type { OrganizationDirectoryEntry } from "@/src/features/crm/common/types";
 import { contactInitials } from "@/src/features/crm/common/utils/formatting";
+import { CreateWalkInDealSheet } from "@/src/features/crm/deals/components/create-walk-in-deal-sheet";
+import { useCreateWalkInDeal } from "@/src/features/crm/deals/hooks/use-create-walk-in-deal";
+import { copy as dealCopy } from "@/src/features/crm/deals/locales/en";
 
 function MobileTab({
   href,
@@ -383,6 +388,9 @@ function AccountSheet({
 function CrmMobileNav({ organizations }: { organizations: OrganizationDirectoryEntry[] }) {
   const counts = useNavCounts();
   const pathname = usePathname();
+  const createDeal = useCreateWalkInDeal();
+  const closeCreate = useRef(createDeal.close);
+  closeCreate.current = createDeal.close;
   const [accountOpen, setAccountOpen] = useState(false);
   const seenPath = useRef(pathname);
 
@@ -390,6 +398,7 @@ function CrmMobileNav({ organizations }: { organizations: OrganizationDirectoryE
     if (seenPath.current === pathname) return;
     seenPath.current = pathname;
     setAccountOpen(false);
+    closeCreate.current();
   }, [pathname]);
   const dealsActive = pathname === "/deals" || pathname.startsWith("/deals/");
   const conversationsActive =
@@ -440,7 +449,12 @@ function CrmMobileNav({ organizations }: { organizations: OrganizationDirectoryE
           aria-haspopup="dialog"
           aria-expanded={accountOpen}
           aria-label={copy.accountMenu}
-          onClick={() => setAccountOpen((open) => !open)}
+          onClick={() => {
+            setAccountOpen((open) => {
+              if (!open) createDeal.close();
+              return !open;
+            });
+          }}
           className={`flex min-w-0 flex-1 flex-col items-center justify-center py-1 ${accountOpen ? "text-black" : "text-[#44474a]"}`}
         >
           <span className="flex h-7 items-center justify-center">
@@ -460,11 +474,40 @@ function CrmMobileNav({ organizations }: { organizations: OrganizationDirectoryE
           </span>
         </button>
       </nav>
+      <CrmMobileCreateButton
+        label={dealCopy.newDeal}
+        expanded={createDeal.open}
+        onClick={() => {
+          setAccountOpen(false);
+          createDeal.toggle();
+        }}
+      />
       {accountOpen ? (
         <AccountSheet
           organizations={organizations}
           attentionCount={counts?.conversationCount}
           onClose={() => setAccountOpen(false)}
+        />
+      ) : null}
+      {createDeal.open ? (
+        <CreateWalkInDealSheet
+          fullName={createDeal.fullName}
+          phone={createDeal.phone}
+          email={createDeal.email}
+          errors={createDeal.errors}
+          pending={createDeal.pending}
+          onChange={createDeal.change}
+          onSubmit={() => void createDeal.submit()}
+          onClose={createDeal.close}
+        />
+      ) : null}
+      {createDeal.toast ? (
+        <Toast
+          key={createDeal.toast.id}
+          message={createDeal.toast.message}
+          tone={createDeal.toast.tone}
+          dismissLabel={dealCopy.dismiss}
+          onDismiss={createDeal.dismissToast}
         />
       ) : null}
     </>

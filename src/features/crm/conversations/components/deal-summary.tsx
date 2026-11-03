@@ -1,6 +1,6 @@
 "use client";
 
-import { Calendar, Globe } from "lucide-react";
+import { Calendar, Footprints, Globe, ImageIcon } from "lucide-react";
 import { CustomerPills } from "@/src/features/crm/common/components/customer-pills";
 import { copy } from "@/src/features/crm/conversations/locales/en";
 import type { ConversationParticipant, ConversationWorkspace } from "@/src/features/crm/conversations/types";
@@ -9,7 +9,15 @@ import { orderedDealParticipants } from "@/src/features/crm/conversations/utils/
 import { specValue } from "@/src/features/crm/common/utils/formatting";
 
 function sourceLabel(source: ConversationWorkspace["deal"]["source"]): string {
-  return source === "yard_preview" ? copy.sourceYardPreview : copy.sourceWebsite;
+  if (source === "yard_preview") return copy.sourceYardPreview;
+  if (source === "walk_in") return copy.sourceWalkIn;
+  return copy.sourceWebsite;
+}
+
+function SourceIcon({ source }: { source: ConversationWorkspace["deal"]["source"] }) {
+  if (source === "yard_preview") return <ImageIcon className="h-3 w-3 shrink-0 text-gray-500" strokeWidth={1.8} aria-hidden="true" />;
+  if (source === "walk_in") return <Footprints className="h-3 w-3 shrink-0 text-gray-500" strokeWidth={1.8} aria-hidden="true" />;
+  return <Globe className="h-3 w-3 shrink-0 text-gray-500" strokeWidth={1.8} aria-hidden="true" />;
 }
 
 export function DealSummary({
@@ -53,7 +61,7 @@ export function DealSummary({
             <div className="flex flex-col gap-1">
               <span className="text-[11px] font-medium text-gray-400">{copy.source}</span>
               <span className="inline-flex w-fit items-center gap-1 rounded-full border border-gray-200 bg-gray-100 px-2 py-0.5 text-[10px] font-medium text-gray-800">
-                <Globe className="h-3 w-3 shrink-0 text-gray-500" strokeWidth={1.8} aria-hidden="true" />
+                <SourceIcon source={workspace.deal.source} />
                 {sourceLabel(workspace.deal.source)}
               </span>
             </div>
