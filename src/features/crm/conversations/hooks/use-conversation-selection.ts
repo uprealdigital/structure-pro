@@ -1,8 +1,8 @@
 "use client";
 
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { conversationDetailWireSchema, type ConversationWorkspace } from "@/src/features/crm/conversations/types";
-import { workspaceFromWire } from "@/src/features/crm/conversations/utils/wire";
+import { loadConversationWorkspace } from "@/src/features/crm/conversations/server/actions";
+import type { ConversationWorkspace } from "@/src/features/crm/conversations/types";
 import type { DealStatus } from "@/src/features/crm/deals/types";
 
 type SelectionStatus = "ready" | "pending" | "missing" | "error";
@@ -67,30 +67,22 @@ export function useConversationSelection({
     replaceUrl(id);
   }
 
-  async function loadWorkspace(id: string, dealId?: string): Promise<ConversationWorkspace | undefined> {
-    const query = dealId ? `?deal=${encodeURIComponent(dealId)}` : "";
-    const response = await fetch(`/api/crm/conversations/${encodeURIComponent(id)}${query}`);
-    if (!response.ok) return undefined;
-    const parsed = conversationDetailWireSchema.safeParse(await response.json());
-    if (!parsed.success) return undefined;
-    return workspaceFromWire(parsed.data);
-  }
-
   async function focusLoadedDeal(dealId: string): Promise<ConversationWorkspace | undefined> {
     const id = selectedId;
     if (!id) return undefined;
     const ticket = request.current + 1;
     request.current = ticket;
-    let workspace: ConversationWorkspace | undefined;
+    let result: Awaited<ReturnType<typeof loadConversationWorkspace>>;
     try {
-      workspace = await loadWorkspace(id, dealId);
+      result = await loadConversationWorkspace(id, dealId);
     } catch {
       return undefined;
     }
-    if (ticket !== request.current || !workspace) return undefined;
-    setWorkspace(workspace);
+    if (ticket !== request.current) return undefined;
+    if ("error" in result || !result.data) return undefined;
+    setWorkspace(result.data);
     setStatus("ready");
-    return workspace;
+    return result.data;
   }
 
   async function selectConversation(id: string, dealId?: string) {
@@ -102,9 +94,9 @@ export function useConversationSelection({
     setStatus("pending");
     replaceUrl(id);
 
-    let workspace: ConversationWorkspace | undefined;
+    let result: Awaited<ReturnType<typeof loadConversationWorkspace>>;
     try {
-      workspace = await loadWorkspace(id, dealId);
+      result = await loadConversationWorkspace(id, dealId);
     } catch {
       if (ticket !== request.current) return;
       setWorkspace(undefined);
@@ -112,8 +104,14 @@ export function useConversationSelection({
       return;
     }
     if (ticket !== request.current) return;
-    setWorkspace(workspace);
-    setStatus(workspace ? "ready" : "missing");
+    if ("error" in result) {
+      setWorkspace(undefined);
+      setStatus("error");
+      return;
+    }
+
+    setWorkspace(result.data ?? undefined);
+    setStatus(result.data ? "ready" : "missing");
   }
 
   function clearConversation() {

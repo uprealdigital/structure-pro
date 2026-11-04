@@ -1,7 +1,6 @@
 import { assertInternal } from "@/src/common/utils/internal-call";
 import { recordCrmLog } from "@/src/features/crm/common/db/log";
 import { createDeal } from "@/src/features/crm/deals/db/deal";
-import { getDealList } from "@/src/features/crm/deals/server/queries";
 import { createDealQuote } from "@/src/features/crm/deals/db/deal-quote";
 import type { DealSource } from "@/src/features/crm/deals/types";
 
@@ -24,17 +23,6 @@ async function payloadOf(request: Request): Promise<Record<string, unknown> | nu
 function sourceOf(value: unknown): DealSource | undefined {
   if (value === "quote" || value === "yard_preview") return value;
   return undefined;
-}
-
-export async function GET() {
-  try {
-    const deals = await getDealList();
-    return Response.json({ deals });
-  } catch (error) {
-    void recordCrmLog({ feature: "deals", error });
-    const message = error instanceof Error ? error.message : "Could not load deals";
-    return Response.json({ error: message }, { status: 500 });
-  }
 }
 
 export async function POST(request: Request) {

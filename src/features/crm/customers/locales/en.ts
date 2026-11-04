@@ -18,9 +18,4 @@ export const copy = {
   emptyCustomersBody: "People you talk with will show up here.",
   emptyCustomerSearch: "No customers match that search.",
   customersLoadError: "Customers could not be loaded.",
-  close: "Close",
-  deals: "Deals",
-  noDeals: "No deals yet.",
-  quote: "Quote",
-  conversation: "Conversation",
 };

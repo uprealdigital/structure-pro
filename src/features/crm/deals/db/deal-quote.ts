@@ -56,21 +56,6 @@ export async function readDealQuotesForQuote(
   return linksFrom(data ?? []);
 }
 
-export async function readDealQuotesForDeals(
-  dealIds: string[],
-): Promise<(DealQuoteLink & { createdAt: string })[]> {
-  const ids = [...new Set(dealIds.filter((id) => id.length > 0))];
-  if (ids.length === 0) return [];
-  const rows: (DealQuoteLink & { createdAt: string })[] = [];
-  for (let index = 0; index < ids.length; index += 100) {
-    const chunk = ids.slice(index, index + 100);
-    const { data, error } = await crm().from("deal_quotes").select(linkColumns).in("deal_id", chunk);
-    throwIfError(error);
-    rows.push(...linksFrom(data ?? []));
-  }
-  return rows;
-}
-
 export async function readAllDealQuotes(): Promise<(DealQuoteLink & { createdAt: string })[]> {
   const { data, error } = await crm()
     .from("deal_quotes")

@@ -38,53 +38,6 @@ export const quoteListItemSchema = z.object({
 
 export type QuoteListItem = z.infer<typeof quoteListItemSchema>;
 
-export const quoteRevisionWireSchema = z.object({
-  id: z.string(),
-  revision_number: z.number().int().positive(),
-  status: quoteStatusSchema,
-});
-
-export type QuoteRevisionWire = z.infer<typeof quoteRevisionWireSchema>;
-
-export const quoteNestedWireSchema = z.object({
-  id: z.string(),
-  quote_number: z.number().int().positive(),
-  status: quoteStatusSchema,
-  quote_revision: quoteRevisionWireSchema.nullable(),
-});
-
-export type QuoteNestedWire = z.infer<typeof quoteNestedWireSchema>;
-
-export const quoteSummaryWireSchema = z.object({
-  id: z.string(),
-  quote_number: z.number().int().positive(),
-  status: quoteStatusSchema,
-});
-
-export type QuoteSummaryWire = z.infer<typeof quoteSummaryWireSchema>;
-
-export const quoteCustomerWireSchema = z.object({
-  id: z.string(),
-  full_name: z.string(),
-});
-
-export type QuoteCustomerWire = z.infer<typeof quoteCustomerWireSchema>;
-
-export const quoteListWireSchema = z.object({
-  id: z.string(),
-  quote_number: z.number().int().positive(),
-  status: quoteStatusSchema,
-  created_at: z.string(),
-  customers: z.array(quoteCustomerWireSchema),
-  quote_revision: quoteRevisionWireSchema.nullable(),
-});
-
-export type QuoteListWire = z.infer<typeof quoteListWireSchema>;
-
-export const quoteListResponseSchema = z.object({
-  quotes: z.array(quoteListWireSchema),
-});
-
 export const quoteRevisionStatusSchema = quoteStatusSchema;
 export type QuoteRevisionStatus = QuoteStatus;
 

@@ -295,67 +295,6 @@ export async function readActivityRefsByIds(ids: number[]): Promise<ActivityRef[
   });
 }
 
-export type ActivityIndexRow = {
-  conversationId: string;
-  position: number;
-  channel: string;
-  role: string;
-  body: string;
-  readAt: string | null;
-  createdAt: string;
-};
-
-function activityIndexRow(row: {
-  conversation_id?: unknown;
-  position?: unknown;
-  channel?: unknown;
-  role?: unknown;
-  body?: unknown;
-  read_at?: unknown;
-  created_at?: unknown;
-}): ActivityIndexRow | undefined {
-  const position = typeof row.position === "number" ? row.position : Number(row.position);
-  if (typeof row.conversation_id !== "string" || !Number.isInteger(position) || position < 0) return undefined;
-  if (typeof row.channel !== "string" || typeof row.role !== "string" || typeof row.body !== "string") return undefined;
-  return {
-    conversationId: row.conversation_id,
-    position,
-    channel: row.channel,
-    role: row.role,
-    body: row.body,
-    readAt: typeof row.read_at === "string" ? row.read_at : null,
-    createdAt: typeof row.created_at === "string" ? row.created_at : "",
-  };
-}
-
-export async function readActivitiesForConversations(conversationIds: string[]): Promise<ActivityIndexRow[]> {
-  const ids = [...new Set(conversationIds.filter((id) => id.length > 0))];
-  if (ids.length === 0) return [];
-
-  const columns = "conversation_id, position, channel, role, body, read_at, created_at";
-  const rows: ActivityIndexRow[] = [];
-  for (let index = 0; index < ids.length; index += 100) {
-    const chunk = ids.slice(index, index + 100);
-    const pageSize = 1000;
-    for (let from = 0; ; from += pageSize) {
-      const { data, error } = await crm()
-        .from("activities")
-        .select(columns)
-        .in("conversation_id", chunk)
-        .order("position", { ascending: true })
-        .range(from, from + pageSize - 1);
-      throwIfError(error);
-      const page = data ?? [];
-      for (const row of page) {
-        const activity = activityIndexRow(row);
-        if (activity) rows.push(activity);
-      }
-      if (page.length < pageSize) break;
-    }
-  }
-  return rows;
-}
-
 export async function deleteLatestActivity(conversationId: string): Promise<void> {
   const existing = await crm()
     .from("activities")

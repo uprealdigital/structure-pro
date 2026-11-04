@@ -1,7 +1,7 @@
 import type { RouteContext } from "@/src/common/types";
 import { assertInternal } from "@/src/common/utils/internal-call";
 import { deleteConversation, updateConversation } from "@/src/features/crm/conversations/db/conversation";
-import { getConversationDetail } from "@/src/features/crm/conversations/server/queries";
+import { getConversation } from "@/src/features/crm/conversations/server/queries";
 import { recordCrmLog } from "@/src/features/crm/common/db/log";
 
 export const runtime = "nodejs";
@@ -17,12 +17,13 @@ async function payloadOf(request: Request): Promise<Record<string, unknown> | nu
 }
 
 export async function GET(request: Request, context: RouteContext) {
+  const denied = assertInternal(request);
+  if (denied) return denied;
   const { key } = await context.params;
   if (!key) return Response.json({ error: "key is required" }, { status: 400 });
-  const deal = new URL(request.url).searchParams.get("deal")?.trim();
 
   try {
-    const conversation = await getConversationDetail(key, deal || undefined);
+    const conversation = await getConversation(key);
     if (!conversation) return Response.json({ error: "Conversation not found" }, { status: 404 });
     return Response.json(conversation);
   } catch (error) {

@@ -19,7 +19,8 @@ function columnClass(tone: "default" | "won" | "lost"): string {
 function DealCardSkeleton() {
   return (
     <div className="rounded-md border border-gray-200/90 bg-white p-3.5 shadow-xs">
-      <div className="flex items-center gap-2">
+      <Bone className="h-3 w-14" />
+      <div className="mt-2 flex items-center gap-2">
         <Bone className="h-7 w-7 shrink-0 rounded-full" />
         <Bone className="h-3.5 w-24" />
       </div>

@@ -3,7 +3,7 @@ export const copy = {
   filters: "Filters",
   newQuote: "New Quote",
   dateCreated: "Date Created",
-  deal: "Quote",
+  deal: "Deal",
   customers: "Customers",
   price: "Price",
   status: "Status",

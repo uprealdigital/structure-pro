@@ -6,43 +6,25 @@ import { describeSelections } from "@/src/features/cpq/utils/pricing";
 import { readCustomers } from "@/src/features/crm/common/db/customer";
 import { readDealCustomers, readDealCustomersForDeals } from "@/src/features/crm/common/db/deal-customer";
 import { readDeals, readDealsByIds, readDealsByQuoteId } from "@/src/features/crm/deals/db/deal";
-import {
-  readAllDealQuotes,
-  readDealQuotes,
-  readDealQuotesForDeals,
-  readDealQuotesForQuote,
-} from "@/src/features/crm/deals/db/deal-quote";
+import { readAllDealQuotes, readDealQuotes, readDealQuotesForQuote } from "@/src/features/crm/deals/db/deal-quote";
 import {
   readActiveRevisionId,
   readListedQuote,
   readQuote,
-  readQuoteIdentities,
-  readQuoteIdentitiesByIds,
   readQuoteStatus,
   readQuoteUpdatedAt,
   readQuotes,
-  type QuoteIdentity,
 } from "@/src/features/crm/quotes/db/quote";
-import {
-  readQuoteRevision,
-  readQuoteRevisionIdentitiesByIds,
-  type QuoteRevisionIdentity,
-} from "@/src/features/crm/quotes/db/quote-revision";
+import { readQuoteRevision } from "@/src/features/crm/quotes/db/quote-revision";
 import {
   quoteChangeEventSchema,
-  quoteListWireSchema,
-  quoteNestedWireSchema,
-  quoteSummaryWireSchema,
   type QuoteChangeEvent,
   type QuoteChangeKind,
   type QuoteCustomer,
   type QuoteListItem,
-  type QuoteListWire,
-  type QuoteNestedWire,
   type QuotePortal,
   type QuotePortalCustomer,
   type QuotePortalRecipient,
-  type QuoteSummaryWire,
 } from "@/src/features/crm/quotes/types";
 import { quoteDisplayName, quotePortalDealName } from "@/src/features/crm/quotes/utils/formatting";
 import { toQuoteChangeEvent, toQuoteListItem, toQuotePortal } from "@/src/features/crm/quotes/utils/mappers";
@@ -115,116 +97,6 @@ export const getQuoteList = cache(async (): Promise<QuoteListItem[]> => {
 
   return items;
 });
-
-function nestedQuote(
-  quote: QuoteIdentity,
-  revision: QuoteRevisionIdentity | undefined,
-): QuoteNestedWire | undefined {
-  const parsed = quoteNestedWireSchema.safeParse({
-    id: quote.id,
-    quote_number: quote.quoteNumber,
-    status: quote.status,
-    quote_revision: revision
-      ? { id: revision.id, revision_number: revision.revisionNumber, status: revision.status }
-      : null,
-  });
-  return parsed.success ? parsed.data : undefined;
-}
-
-export async function readNestedQuotes(ids: string[]): Promise<Map<string, QuoteNestedWire>> {
-  const quotes = await readQuoteIdentitiesByIds(ids);
-  const revisions = await readQuoteRevisionIdentitiesByIds(
-    quotes.flatMap((quote) => (quote.activeRevisionId ? [quote.activeRevisionId] : [])),
-  );
-  const revisionById = new Map(revisions.map((revision) => [revision.id, revision]));
-  const byId = new Map<string, QuoteNestedWire>();
-  for (const quote of quotes) {
-    const nested = nestedQuote(
-      quote,
-      quote.activeRevisionId ? revisionById.get(quote.activeRevisionId) : undefined,
-    );
-    if (nested) byId.set(quote.id, nested);
-  }
-  return byId;
-}
-
-export async function readQuoteSummaries(ids: string[]): Promise<Map<string, QuoteSummaryWire>> {
-  const quotes = await readQuoteIdentitiesByIds(ids);
-  const byId = new Map<string, QuoteSummaryWire>();
-  for (const quote of quotes) {
-    const parsed = quoteSummaryWireSchema.safeParse({
-      id: quote.id,
-      quote_number: quote.quoteNumber,
-      status: quote.status,
-    });
-    if (parsed.success) byId.set(quote.id, parsed.data);
-  }
-  return byId;
-}
-
-export async function getQuoteDirectory(): Promise<QuoteListWire[]> {
-  const [quotes, deals, customers, links] = await Promise.all([
-    readQuoteIdentities(),
-    readDeals(),
-    readCustomers(),
-    readDealCustomers(),
-  ]);
-  const quoteLinks = await readDealQuotesForDeals(deals.map((deal) => deal.id));
-  const revisions = await readQuoteRevisionIdentitiesByIds(
-    quotes.flatMap((quote) => (quote.activeRevisionId ? [quote.activeRevisionId] : [])),
-  );
-  const revisionById = new Map(revisions.map((revision) => [revision.id, revision]));
-  const customerById = new Map(customers.map((customer) => [customer.id, customer]));
-  const customersByDeal = new Map<string, { id: string; fullName: string; isPrimary: boolean }[]>();
-  for (const link of links) {
-    const customer = customerById.get(link.customerId);
-    if (!customer) continue;
-    const related = customersByDeal.get(link.dealId) ?? [];
-    related.push({ id: customer.id, fullName: customer.fullName, isPrimary: link.isPrimary });
-    customersByDeal.set(link.dealId, related);
-  }
-  const dealsByQuote = new Map<string, string[]>();
-  for (const deal of deals) {
-    if (!deal.quoteId) continue;
-    const related = dealsByQuote.get(deal.quoteId) ?? [];
-    related.push(deal.id);
-    dealsByQuote.set(deal.quoteId, related);
-  }
-  for (const link of quoteLinks) {
-    const related = dealsByQuote.get(link.quoteId) ?? [];
-    if (!related.includes(link.dealId)) related.push(link.dealId);
-    dealsByQuote.set(link.quoteId, related);
-  }
-
-  const items: QuoteListWire[] = [];
-  for (const quote of quotes) {
-    const seen = new Set<string>();
-    const quoteCustomers: QuoteListWire["customers"] = [];
-    for (const dealId of dealsByQuote.get(quote.id) ?? []) {
-      const people = (customersByDeal.get(dealId) ?? []).sort(
-        (left, right) => Number(right.isPrimary) - Number(left.isPrimary),
-      );
-      for (const person of people) {
-        if (seen.has(person.id)) continue;
-        seen.add(person.id);
-        quoteCustomers.push({ id: person.id, full_name: person.fullName });
-      }
-    }
-    const revision = quote.activeRevisionId ? revisionById.get(quote.activeRevisionId) : undefined;
-    const parsed = quoteListWireSchema.safeParse({
-      id: quote.id,
-      quote_number: quote.quoteNumber,
-      status: quote.status,
-      created_at: quote.createdAt,
-      customers: quoteCustomers,
-      quote_revision: revision
-        ? { id: revision.id, revision_number: revision.revisionNumber, status: revision.status }
-        : null,
-    });
-    if (parsed.success) items.push(parsed.data);
-  }
-  return items;
-}
 
 export async function getQuoteCount(): Promise<number> {
   return (await getQuoteList()).length;
