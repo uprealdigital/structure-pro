@@ -1,74 +1,67 @@
 import "server-only";
 
-import { cache } from "react";
-import { getSupabase } from "@/src/common/lib/supabase/supabase.service";
-import { getQuoteForPage } from "@/src/features/cpq/server/queries";
-import { readCustomers } from "@/src/features/crm/common/db/customer";
-import { readDealCustomers } from "@/src/features/crm/common/db/deal-customer";
-import { readConversations } from "@/src/features/crm/conversations/db/conversation";
-import { canonicalConversationByCustomer } from "@/src/features/crm/conversations/utils/conversations";
-import { readDeal, readDeals } from "@/src/features/crm/deals/db/deal";
+import { throwIfError } from "@/src/common/utils/error-handling";
+import { db, getSupabase } from "@/src/common/lib/supabase/supabase.service";
 import {
   dealChangeEventSchema,
-  type DealBoardItem,
+  dealListItemSchema,
   type DealChangeEvent,
   type DealChangeKind,
+  type DealListItem,
 } from "@/src/features/crm/deals/types";
-import { dealDetailLine, dealProductName } from "@/src/features/crm/deals/utils/formatting";
-import { toDealBoardItem, toDealChangeEvent } from "@/src/features/crm/deals/utils/mappers";
+import { toDealChangeEvent } from "@/src/features/crm/deals/utils/mappers";
+
+function crm() {
+  return db("crm");
+}
 
 const dealIdPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
-export async function getDeal(id: string) {
-  return readDeal(id);
+const dealListSelect = `
+  id,
+  name,
+  source,
+  status,
+  customers!deal_customers!inner (
+    id,
+    full_name
+  ),
+  quote:quotes!quote_id (
+    id,
+    quote_number,
+    status,
+    quote_revision:quote_revisions!active_revision_id (
+      id,
+      revision_number,
+      status
+    )
+  )
+`;
+
+export async function getDeals(): Promise<DealListItem[]> {
+  const { data, error } = await crm()
+    .from("deals")
+    .select(dealListSelect)
+    .order("created_at", { ascending: true })
+    .limit(50);
+
+  throwIfError(error);
+  return dealListItemSchema.array().parse(data ?? []);
 }
 
-export async function getDealCount(): Promise<number> {
-  const deals = await readDeals();
-  return deals.length;
+export async function getDeal(id: string): Promise<DealListItem | undefined> {
+  const dealId = id.trim();
+  if (!dealId) return undefined;
+  const { data, error } = await crm()
+    .from("deals")
+    .select(dealListSelect)
+    .eq("id", dealId)
+    .maybeSingle();
+
+  throwIfError(error);
+  if (!data) return undefined;
+  return dealListItemSchema.parse(data);
 }
-
-export const getDealBoard = cache(async (): Promise<DealBoardItem[]> => {
-  const [deals, conversations, customers, links] = await Promise.all([
-    readDeals(),
-    readConversations(),
-    readCustomers(),
-    readDealCustomers(),
-  ]);
-  const customerById = new Map(customers.map((customer) => [customer.id, customer]));
-  const conversationByCustomer = canonicalConversationByCustomer(conversations);
-  const customersByDeal = new Map<string, { customer: (typeof customers)[number]; isPrimary: boolean }[]>();
-  for (const link of links) {
-    const customer = customerById.get(link.customerId);
-    if (!customer) continue;
-    const related = customersByDeal.get(link.dealId) ?? [];
-    related.push({ customer, isPrimary: link.isPrimary });
-    customersByDeal.set(link.dealId, related);
-  }
-
-  const items: DealBoardItem[] = [];
-  for (const deal of deals) {
-    const related = (customersByDeal.get(deal.id) ?? []).sort(
-      (left, right) => Number(right.isPrimary) - Number(left.isPrimary),
-    );
-    if (related.length === 0) continue;
-    const conversation = conversationByCustomer.get(related[0]?.customer.id ?? "");
-    const quote = deal.quoteId ? await getQuoteForPage(deal.quoteId) : undefined;
-    const specs = quote?.summary.specs ?? [];
-    const item = toDealBoardItem({
-      deal,
-      contactName: related.map((entry) => entry.customer.fullName).join(", "),
-      customers: related.map((entry) => ({ id: entry.customer.id, name: entry.customer.fullName })),
-      productName: deal.name?.trim() || dealProductName(specs),
-      detail: dealDetailLine(specs),
-      valueLabel: quote?.summary.totalLabel ?? "",
-      conversationId: conversation?.id,
-    });
-    if (item) items.push(item);
-  }
-
-  return items;
-});
 
 export function openDealStream(dealId: string | undefined, signal: AbortSignal): ReadableStream<Uint8Array> {
   const scoped = dealId?.trim();

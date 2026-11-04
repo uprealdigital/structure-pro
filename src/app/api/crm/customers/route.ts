@@ -1,7 +1,7 @@
 import { assertInternal } from "@/src/common/utils/internal-call";
 import { createDealCustomer, readDealCustomer, readDealCustomersForDeal } from "@/src/features/crm/common/db/deal-customer";
 import { createCustomer, ensureCustomerThread, readCustomerByPhone } from "@/src/features/crm/common/db/customer";
-import { assignDefaultDealName } from "@/src/features/crm/deals/db/deal";
+import { assignDefaultDealName } from "@/src/features/crm/deals/server/actions";
 import { recordCrmLog } from "@/src/features/crm/common/db/log";
 
 export const runtime = "nodejs";

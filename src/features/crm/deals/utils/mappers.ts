@@ -1,11 +1,9 @@
 import {
-  dealBoardItemSchema,
   dealChangeEventSchema,
   dealQuoteLinkSchema,
   dealSchema,
   dealStatusSchema,
   type Deal,
-  type DealBoardItem,
   type DealChangeEvent,
   type DealChangeKind,
   type DealQuoteLink,
@@ -104,27 +102,4 @@ export function contractOnDeal(
   if (!contractSent) return false;
   if (primaryDealCount <= 1) return true;
   return status === "pending_deposit" || status === "deal_won";
-}
-
-export function toDealBoardItem(input: {
-  deal: Deal;
-  contactName: string;
-  productName: string;
-  detail: string;
-  valueLabel: string;
-  conversationId?: string;
-  customers: { id: string; name: string }[];
-}): DealBoardItem | undefined {
-  const item = dealBoardItemSchema.safeParse({
-    id: input.deal.id,
-    conversationId: input.conversationId,
-    contactName: input.contactName,
-    productName: input.productName,
-    detail: input.detail,
-    source: input.deal.source,
-    stage: input.deal.status,
-    valueLabel: input.valueLabel,
-    customers: input.customers,
-  });
-  return item.success ? item.data : undefined;
 }

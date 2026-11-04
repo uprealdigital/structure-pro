@@ -1,7 +1,6 @@
 "use client";
 
 import { ChevronLeft, ChevronRight, Filter, Footprints, Globe, ImageIcon, List, Plus, Search } from "lucide-react";
-import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { Toast } from "@/src/common/components/toast";
 import { useBoardScroll } from "@/src/features/crm/deals/hooks/use-board-scroll";
@@ -10,14 +9,21 @@ import { useDealStream } from "@/src/features/crm/deals/hooks/use-deal-stream";
 import { CreateWalkInDealSheet } from "@/src/features/crm/deals/components/create-walk-in-deal-sheet";
 import { DealStatusBadge } from "@/src/features/crm/deals/components/deal-status-badge";
 import { copy } from "@/src/features/crm/deals/locales/en";
-import type { DealBoardItem, DealSource, DealStatus } from "@/src/features/crm/deals/types";
+import type { DealListItem, DealSource, DealStatus } from "@/src/features/crm/deals/types";
 import { dealStatusOption, dealStatusOptions, type DealStatusOption } from "@/src/features/crm/deals/utils/status";
 import { useReserveCrmMobileNavSpace } from "@/src/features/crm/common/hooks/use-crm-mobile-nav";
 import { contactInitials } from "@/src/features/crm/common/utils/formatting";
 
-function dealConversationHref(deal: { id: string; conversationId?: string }): string | undefined {
-  if (!deal.conversationId) return undefined;
-  return `/?conversation=${encodeURIComponent(deal.conversationId)}&deal=${encodeURIComponent(deal.id)}`;
+function customerNames(deal: DealListItem): string {
+  return deal.customers.map((customer) => customer.full_name).join(", ");
+}
+
+function dealTitle(deal: DealListItem): string {
+  return deal.name?.trim() || customerNames(deal);
+}
+
+function quoteNumber(deal: DealListItem): string {
+  return deal.quote ? String(deal.quote.quote_number) : "";
 }
 
 function stageLabel(stage: DealStatus): string {
@@ -36,16 +42,6 @@ function sourceIcon(source: DealSource) {
   return Globe;
 }
 
-function showsValue(stage: DealStatus): boolean {
-  return stage !== "new_lead";
-}
-
-function valueClass(stage: DealStatus): string {
-  if (stage === "deal_won") return "text-emerald-700";
-  if (stage === "deal_lost") return "text-gray-500";
-  return "text-gray-950";
-}
-
 function columnClass(tone: DealStatusOption["tone"]): string {
   if (tone === "won") return "border-emerald-200 bg-emerald-50/50";
   if (tone === "lost") return "border-red-100 bg-red-50/40";
@@ -62,108 +58,79 @@ function SourceBadge({ source }: { source: DealSource }) {
   );
 }
 
-function DealCard({ deal }: { deal: DealBoardItem }) {
-  const priced = showsValue(deal.stage) && deal.valueLabel;
+function DealCard({ deal }: { deal: DealListItem }) {
+  const names = customerNames(deal);
+  const title = dealTitle(deal);
   const cardClass =
-    deal.stage === "deal_won"
+    deal.status === "deal_won"
       ? "border-emerald-200 bg-white hover:border-emerald-500 hover:shadow-sm"
-      : deal.stage === "deal_lost"
+      : deal.status === "deal_lost"
         ? "border-gray-200 bg-white/80 hover:border-gray-400"
         : "border-gray-200/90 bg-white hover:border-gray-400 hover:shadow-sm";
 
-  const body = (
-    <>
-      {priced ? (
-        <span className={`font-serif text-xs font-semibold ${valueClass(deal.stage)}`}>{deal.valueLabel}</span>
-      ) : null}
-      <span className="mt-1 flex items-center gap-2">
+  return (
+    <article className={`block rounded-md border p-3.5 shadow-xs transition-all ${cardClass}`}>
+      <span className="flex items-center gap-2">
         <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-gray-200 bg-gray-100 text-xs font-semibold text-gray-800">
-          {contactInitials(deal.contactName)}
+          {contactInitials(names)}
         </span>
-        <span className="font-serif text-sm leading-tight font-semibold text-gray-950 group-hover:text-black">
-          {deal.contactName}
-        </span>
+        <span className="font-serif text-sm leading-tight font-semibold text-gray-950">{names}</span>
       </span>
-      {deal.productName ? (
-        <span className="mt-1 block text-xs leading-tight font-medium text-gray-500">{deal.productName}</span>
-      ) : null}
+      {title ? <span className="mt-1 block text-xs leading-tight font-medium text-gray-500">{title}</span> : null}
       <span className="mt-2 flex items-center border-t border-gray-100 pt-2">
         <SourceBadge source={deal.source} />
       </span>
-    </>
-  );
-
-  const className = `group block rounded-md border p-3.5 shadow-xs transition-all ${cardClass}`;
-
-  const href = dealConversationHref(deal);
-  if (!href) return <article className={className}>{body}</article>;
-
-  return (
-    <Link
-      href={href}
-      scroll={false}
-      aria-label={`${copy.openDeal}: ${deal.contactName}`}
-      className={`${className} cursor-pointer`}
-    >
-      {body}
-    </Link>
+    </article>
   );
 }
 
-function DealListMobileRow({ deal }: { deal: DealBoardItem }) {
+function DealListMobileRow({ deal }: { deal: DealListItem }) {
   const customers = deal.customers;
   const primary = customers[0];
   const extra = Math.max(0, customers.length - 1);
-  const stage = dealStatusOption(deal.stage);
-  const href = dealConversationHref(deal);
-  const name = deal.productName || deal.contactName;
+  const stage = dealStatusOption(deal.status);
   const Icon = sourceIcon(deal.source);
-  const body = (
-    <div className="grid grid-cols-[minmax(0,1fr)_5rem_3.75rem] items-center gap-x-2">
-      <div className="min-w-0">
-        <div className="flex min-w-0 items-center gap-1.5">
-          {customers.length > 0 ? (
-            <span className="flex shrink-0 items-center -space-x-2">
-              {customers.map((customer, index) => (
-                <span
-                  key={customer.id}
-                  className="flex h-7 w-7 items-center justify-center rounded-full border-2 border-white bg-gray-100 text-xs font-semibold text-gray-800 ring-1 ring-gray-200"
-                  style={{ zIndex: customers.length - index }}
-                >
-                  {contactInitials(customer.name)}
-                </span>
-              ))}
-            </span>
-          ) : null}
-          {primary ? (
-            <span className="truncate font-serif text-xs font-semibold text-gray-950">{primary.name}</span>
-          ) : null}
-          {extra > 0 ? <span className="shrink-0 font-serif text-xs font-semibold text-gray-500">+{extra}</span> : null}
-        </div>
-        <div className="mt-1 truncate text-xs font-medium text-gray-900">{name}</div>
-      </div>
-      <div className="flex w-[5rem] flex-col items-start gap-1">
-        <span className="inline-flex items-center gap-1 text-[10px] font-medium whitespace-nowrap text-gray-600">
-          <Icon className="h-3 w-3 shrink-0 text-gray-500" strokeWidth={2} aria-hidden="true" />
-          {sourceLabel(deal.source)}
-        </span>
-        <span
-          className={`inline-flex items-center rounded-full border px-1.5 py-0.5 text-[10px] font-medium whitespace-nowrap ${stage?.badge ?? ""}`}
-        >
-          {stage?.label}
-        </span>
-      </div>
-      <div className="w-[3.75rem] text-right font-serif text-xs font-semibold whitespace-nowrap text-gray-950 tabular-nums">
-        {deal.valueLabel || "—"}
-      </div>
-    </div>
-  );
-  const className = "block border-b border-gray-100 px-4 py-3";
-  if (!href) return <article className={className}>{body}</article>;
   return (
-    <Link href={href} scroll={false} aria-label={`${copy.openDeal}: ${name}`} className={className}>
-      {body}
-    </Link>
+    <article className="block border-b border-gray-100 px-4 py-3">
+      <div className="grid grid-cols-[minmax(0,1fr)_5rem_3.75rem] items-center gap-x-2">
+        <div className="min-w-0">
+          <div className="flex min-w-0 items-center gap-1.5">
+            {customers.length > 0 ? (
+              <span className="flex shrink-0 items-center -space-x-2">
+                {customers.map((customer, index) => (
+                  <span
+                    key={customer.id}
+                    className="flex h-7 w-7 items-center justify-center rounded-full border-2 border-white bg-gray-100 text-xs font-semibold text-gray-800 ring-1 ring-gray-200"
+                    style={{ zIndex: customers.length - index }}
+                  >
+                    {contactInitials(customer.full_name)}
+                  </span>
+                ))}
+              </span>
+            ) : null}
+            {primary ? (
+              <span className="truncate font-serif text-xs font-semibold text-gray-950">{primary.full_name}</span>
+            ) : null}
+            {extra > 0 ? <span className="shrink-0 font-serif text-xs font-semibold text-gray-500">+{extra}</span> : null}
+          </div>
+          <div className="mt-1 truncate text-xs font-medium text-gray-900">{dealTitle(deal)}</div>
+        </div>
+        <div className="flex w-[5rem] flex-col items-start gap-1">
+          <span className="inline-flex items-center gap-1 text-[10px] font-medium whitespace-nowrap text-gray-600">
+            <Icon className="h-3 w-3 shrink-0 text-gray-500" strokeWidth={2} aria-hidden="true" />
+            {sourceLabel(deal.source)}
+          </span>
+          <span
+            className={`inline-flex items-center rounded-full border px-1.5 py-0.5 text-[10px] font-medium whitespace-nowrap ${stage?.badge ?? ""}`}
+          >
+            {stage?.label}
+          </span>
+        </div>
+        <div className="w-[3.75rem] text-right font-serif text-xs font-semibold whitespace-nowrap text-gray-950 tabular-nums">
+          {quoteNumber(deal) || "—"}
+        </div>
+      </div>
+    </article>
   );
 }
 
@@ -181,7 +148,7 @@ function KanbanIcon() {
   );
 }
 
-export function DealsBoard({ deals: initialDeals, loadError }: { deals: DealBoardItem[]; loadError: boolean }) {
+export function DealsBoard({ deals: initialDeals, loadError }: { deals: DealListItem[]; loadError: boolean }) {
   const createDeal = useCreateWalkInDeal();
   const [deals, setDeals] = useState(initialDeals);
   const [query, setQuery] = useState("");
@@ -194,14 +161,14 @@ export function DealsBoard({ deals: initialDeals, loadError }: { deals: DealBoar
     const status = event.status;
     if (!status) return;
     setDeals((current) =>
-      current.map((deal) => (deal.id === event.id ? { ...deal, stage: status } : deal)),
+      current.map((deal) => (deal.id === event.id ? { ...deal, status } : deal)),
     );
   });
   const scroller = useRef<HTMLDivElement>(null);
   const needle = query.trim().toLowerCase();
   const visible = needle
     ? deals.filter((deal) =>
-        [deal.contactName, deal.productName, deal.detail, deal.valueLabel, stageLabel(deal.stage), sourceLabel(deal.source)]
+        [dealTitle(deal), customerNames(deal), quoteNumber(deal), stageLabel(deal.status), sourceLabel(deal.source)]
           .join(" ")
           .toLowerCase()
           .includes(needle),
@@ -309,7 +276,7 @@ export function DealsBoard({ deals: initialDeals, loadError }: { deals: DealBoar
               <p className="px-2 py-6 text-sm text-gray-500">{copy.emptyDealSearch}</p>
             ) : (
               dealStatusOptions.map((stage) => {
-                const cards = visible.filter((deal) => deal.stage === stage.id);
+                const cards = visible.filter((deal) => deal.status === stage.id);
                 return (
                   <section
                     key={stage.id}
@@ -358,36 +325,24 @@ export function DealsBoard({ deals: initialDeals, loadError }: { deals: DealBoar
                       <th className="px-4 py-3.5 font-serif font-semibold">{copy.customers}</th>
                       <th className="px-4 py-3.5 font-serif font-semibold">{copy.source}</th>
                       <th className="px-4 py-3.5 font-serif font-semibold">{copy.columnStage}</th>
-                      <th className="px-4 py-3.5 font-serif font-semibold">{copy.columnValue}</th>
-                      <th className="py-3.5 pr-6 pl-4" />
+                      <th className="py-3.5 pr-6 pl-4 font-serif font-semibold">{copy.columnValue}</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100">
                     {visible.map((deal) => {
-                      const stage = dealStatusOption(deal.stage);
-                      const href = dealConversationHref(deal);
+                      const stage = dealStatusOption(deal.status);
+                      const names = customerNames(deal);
                       return (
-                        <tr key={deal.id} className="group relative transition-colors hover:bg-gray-50/80">
+                        <tr key={deal.id}>
                           <td className="py-3.5 pr-4 pl-6">
-                            {href ? (
-                              <Link
-                                href={href}
-                                scroll={false}
-                                aria-label={`${copy.openDeal}: ${deal.productName || deal.contactName}`}
-                                className="absolute inset-0"
-                              />
-                            ) : null}
-                            <div className="font-serif font-semibold text-gray-950">{deal.productName || deal.contactName}</div>
-                            {deal.detail ? (
-                              <div className="font-sans text-[11px] text-gray-400">{deal.detail}</div>
-                            ) : null}
+                            <div className="font-serif font-semibold text-gray-950">{dealTitle(deal)}</div>
                           </td>
                           <td className="px-4 py-3.5">
                             <div className="flex items-center space-x-2">
                               <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-gray-200 bg-gray-100 text-xs font-semibold text-gray-800">
-                                {contactInitials(deal.contactName)}
+                                {contactInitials(names)}
                               </span>
-                              <span className="text-xs font-medium text-gray-900">{deal.contactName}</span>
+                              <span className="text-xs font-medium text-gray-900">{names}</span>
                             </div>
                           </td>
                           <td className="px-4 py-3.5">
@@ -400,11 +355,8 @@ export function DealsBoard({ deals: initialDeals, loadError }: { deals: DealBoar
                               {stage?.label}
                             </span>
                           </td>
-                          <td className={`px-4 py-3.5 font-serif text-xs font-semibold ${valueClass(deal.stage)}`}>
-                            {deal.valueLabel || "—"}
-                          </td>
-                          <td className="py-3.5 pr-6 pl-4 text-right">
-                            <ChevronRight className="ml-auto h-4 w-4 text-gray-400 transition-colors group-hover:text-gray-700" />
+                          <td className="py-3.5 pr-6 pl-4 font-serif text-xs font-semibold text-gray-950">
+                            {quoteNumber(deal) || "—"}
                           </td>
                         </tr>
                       );

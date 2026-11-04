@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { quoteStatusSchema } from "@/src/features/crm/quotes/types";
 
 export const dealSourceSchema = z.enum(["quote", "yard_preview", "walk_in"]);
 export type DealSource = z.infer<typeof dealSourceSchema>;
@@ -62,26 +63,48 @@ export const dealStageSchema = dealStatusSchema;
 
 export type DealStage = DealStatus;
 
-export const dealBoardCustomerSchema = z.object({
+export const dealListCustomerSchema = z.object({
   id: z.string(),
-  name: z.string(),
+  full_name: z.string(),
 });
 
-export type DealBoardCustomer = z.infer<typeof dealBoardCustomerSchema>;
+export type DealListCustomer = z.infer<typeof dealListCustomerSchema>;
 
-export const dealBoardItemSchema = z.object({
+export const dealListQuoteRevisionSchema = z.object({
   id: z.string(),
-  conversationId: z.string().optional(),
-  contactName: z.string(),
-  productName: z.string(),
-  detail: z.string(),
+  revision_number: z.number(),
+  status: quoteStatusSchema,
+});
+
+export type DealListQuoteRevision = z.infer<typeof dealListQuoteRevisionSchema>;
+
+export const dealListQuoteSchema = z.object({
+  id: z.string(),
+  quote_number: z.number(),
+  status: quoteStatusSchema,
+  quote_revision: dealListQuoteRevisionSchema.nullable(),
+});
+
+export type DealListQuote = z.infer<typeof dealListQuoteSchema>;
+
+export const dealListItemSchema = z.object({
+  id: z.string(),
+  name: z.string().nullable(),
   source: dealSourceSchema,
-  stage: dealStageSchema,
-  valueLabel: z.string(),
-  customers: z.array(dealBoardCustomerSchema),
+  status: dealStatusSchema,
+  customers: z.array(dealListCustomerSchema),
+  quote: dealListQuoteSchema.nullable(),
 });
 
-export type DealBoardItem = z.infer<typeof dealBoardItemSchema>;
+export type DealListItem = z.infer<typeof dealListItemSchema>;
+
+export const dealNameContextSchema = z.object({
+  source: z.string(),
+  createdAt: z.string(),
+  number: z.number().int().positive(),
+});
+
+export type DealNameContext = z.infer<typeof dealNameContextSchema>;
 
 export const dealChangeKindSchema = z.enum(["insert", "update", "delete"]);
 export type DealChangeKind = z.infer<typeof dealChangeKindSchema>;

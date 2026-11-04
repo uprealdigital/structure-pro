@@ -1,7 +1,7 @@
-import { QuoteList } from "@/src/features/crm/quotes/components/quote-list";
-import { getQuoteList } from "@/src/features/crm/quotes/server/queries";
-import type { QuoteListItem } from "@/src/features/crm/quotes/types";
 import { copy } from "@/src/features/crm/common/locales/en";
+import { QuoteList } from "@/src/features/crm/quotes/components/quote-list";
+import { getQuotes } from "@/src/features/crm/quotes/server/queries";
+import type { QuoteListItem } from "@/src/features/crm/quotes/types";
 
 export const dynamic = "force-dynamic";
 
@@ -14,7 +14,7 @@ export default async function QuotesPage() {
   let loadError = false;
 
   try {
-    quotes = await getQuoteList();
+    quotes = await getQuotes();
   } catch {
     loadError = true;
   }

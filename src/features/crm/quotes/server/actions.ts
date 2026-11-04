@@ -44,7 +44,7 @@ import {
 } from "@/src/features/crm/quotes/types";
 import { quoteWindowExpired } from "@/src/features/crm/quotes/utils/status";
 import { recordCrmLog } from "@/src/features/crm/common/db/log";
-import { getQuoteListItem, getQuotePortal } from "@/src/features/crm/quotes/server/queries";
+import { getQuote, getQuotePortal } from "@/src/features/crm/quotes/server/queries";
 
 function revalidateConversations() {
   revalidatePath("/");
@@ -73,7 +73,7 @@ export async function loadQuoteListItem(
   const parsed = payQuoteDepositSchema.safeParse(input);
   if (!parsed.success) return { error: "A quote is required" };
   try {
-    const item = await getQuoteListItem(parsed.data.quoteId);
+    const item = await getQuote(parsed.data.quoteId);
     return { success: true, data: item ?? null };
   } catch (error) {
     void recordCrmLog({ feature: "quotes", error });

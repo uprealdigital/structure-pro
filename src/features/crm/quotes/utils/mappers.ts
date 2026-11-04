@@ -3,7 +3,6 @@ import {
   configChangesSchema,
   quoteCommunicationSchema,
   quoteChangeEventSchema,
-  quoteListItemSchema,
   quotePortalSchema,
   quoteRevisionRendersSchema,
   quoteRevisionSchema,
@@ -11,8 +10,6 @@ import {
   type QuoteChangeEvent,
   type QuoteChangeKind,
   type QuoteCommunication,
-  type QuoteCustomer,
-  type QuoteListItem,
   type QuotePortal,
   type QuotePortalCustomer,
   type QuotePortalRecipient,
@@ -22,13 +19,8 @@ import {
 import {
   formatQuoteCash,
   formatQuoteDate,
-  formatQuoteMonthly,
-  formatQuotePrice,
-  quoteDealLabel,
-  quoteDisplayName,
   quoteMonthsLabel,
   quoteVersionLabel,
-  quoteZip,
 } from "@/src/features/crm/quotes/utils/formatting";
 
 export type QuoteRevisionRow = {
@@ -70,31 +62,6 @@ export function toQuoteRevision(row: QuoteRevisionRow): QuoteRevision | undefine
     updatedAt: row.updated_at ?? row.created_at ?? "",
   });
   return revision.success ? revision.data : undefined;
-}
-
-export function toQuoteListItem(input: {
-  id: string;
-  invoiceId: string;
-  quoteNumber?: number;
-  createdAt: string;
-  specs: { label: string; value: string }[];
-  total: number;
-  monthly: number;
-  customers: QuoteCustomer[];
-  status: QuoteStatus;
-}): QuoteListItem | undefined {
-  const item = quoteListItemSchema.safeParse({
-    id: input.id,
-    invoiceId: input.invoiceId,
-    createdAt: input.createdAt,
-    dealLabel: input.quoteNumber ? quoteDisplayName(input.quoteNumber, input.specs) : quoteDealLabel(input.specs),
-    zip: quoteZip(input.specs),
-    customers: input.customers,
-    priceLabel: formatQuotePrice(input.total),
-    monthlyLabel: formatQuoteMonthly(input.monthly),
-    status: input.status,
-  });
-  return item.success ? item.data : undefined;
 }
 
 export function toQuotePortal(input: {

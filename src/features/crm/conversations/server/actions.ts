@@ -84,7 +84,8 @@ import {
 } from "@/src/features/crm/conversations/types";
 import { readCustomer, readCustomers, updateCustomer } from "@/src/features/crm/common/db/customer";
 import { createDealCustomer, deleteDealCustomer, readDealCustomer, readDealCustomersForCustomer, readDealCustomersForDeal } from "@/src/features/crm/common/db/deal-customer";
-import { assignDefaultDealName, createDeal, deleteDeal, readDeal, updateDeal } from "@/src/features/crm/deals/db/deal";
+import { deleteDeal, readDeal, updateDeal } from "@/src/features/crm/deals/db/deal";
+import { assignDefaultDealName, createDeal } from "@/src/features/crm/deals/server/actions";
 import { fileActivityText, imageActivityText } from "@/src/features/crm/conversations/utils/attachments";
 import { emailActivityText, parseEmailActivity } from "@/src/features/crm/conversations/utils/email-message";
 import { systemEventBody } from "@/src/features/crm/conversations/utils/formatting";

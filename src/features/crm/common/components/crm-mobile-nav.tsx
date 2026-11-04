@@ -12,7 +12,7 @@ import {
 } from "@/src/features/crm/common/hooks/use-crm-mobile-nav";
 import { useNavCounts } from "@/src/features/crm/common/hooks/use-nav-counts";
 import { copy } from "@/src/features/crm/common/locales/en";
-import type { OrganizationDirectoryEntry } from "@/src/features/crm/common/types";
+import type { NavCounts, OrganizationDirectoryEntry } from "@/src/features/crm/common/types";
 import { contactInitials } from "@/src/features/crm/common/utils/formatting";
 import { CreateWalkInDealSheet } from "@/src/features/crm/deals/components/create-walk-in-deal-sheet";
 import { useCreateWalkInDeal } from "@/src/features/crm/deals/hooks/use-create-walk-in-deal";
@@ -385,8 +385,14 @@ function AccountSheet({
   );
 }
 
-function CrmMobileNav({ organizations }: { organizations: OrganizationDirectoryEntry[] }) {
-  const counts = useNavCounts();
+function CrmMobileNav({
+  organizations,
+  counts: initialCounts,
+}: {
+  organizations: OrganizationDirectoryEntry[];
+  counts: NavCounts;
+}) {
+  const counts = useNavCounts(initialCounts);
   const pathname = usePathname();
   const createDeal = useCreateWalkInDeal();
   const closeCreate = useRef(createDeal.close);
@@ -545,9 +551,11 @@ function hidesMobileNav(pathname: string) {
 
 export function CrmMobileShell({
   organizations,
+  counts,
   children,
 }: {
   organizations: OrganizationDirectoryEntry[];
+  counts: NavCounts;
   children: ReactNode;
 }) {
   const pathname = usePathname();
@@ -566,7 +574,7 @@ export function CrmMobileShell({
         >
           {children}
         </div>
-        {menuHidden || hideNav ? null : <CrmMobileNav organizations={organizations} />}
+        {menuHidden || hideNav ? null : <CrmMobileNav organizations={organizations} counts={counts} />}
       </CrmMobileContentInsetProvider>
     </CrmMobileNavHiddenProvider>
   );

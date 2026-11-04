@@ -1,5 +1,7 @@
 "use server";
 
+import { db } from "@/src/common/lib/supabase/supabase.service";
+import { throwIfError } from "@/src/common/utils/error-handling";
 import { revalidatePath } from "next/cache";
 import { toE164 } from "@/src/common/utils/phone";
 import { recordCrmLog } from "@/src/features/crm/common/db/log";
@@ -13,13 +15,54 @@ import { createDealCustomer, deleteDealCustomer } from "@/src/features/crm/commo
 import { createActivities } from "@/src/features/crm/conversations/db/activity";
 import { readConversationSummaryByCustomer } from "@/src/features/crm/conversations/db/conversation";
 import { systemEventBody } from "@/src/features/crm/conversations/utils/formatting";
-import { assignDefaultDealName, createDeal, deleteDeal } from "@/src/features/crm/deals/db/deal";
+import { deleteDeal, updateDeal } from "@/src/features/crm/deals/db/deal";
 import { createDealQuote, deleteDealQuote } from "@/src/features/crm/deals/db/deal-quote";
 import { copy } from "@/src/features/crm/deals/locales/en";
-import { walkInDealSchema } from "@/src/features/crm/deals/types";
+import { dealNameContextSchema, walkInDealSchema, dealWriteSchema, type Deal } from "@/src/features/crm/deals/types";
+import { toDeal, type DealRow } from "@/src/features/crm/deals/utils/mappers";
+import { defaultDealName } from "@/src/features/crm/deals/utils/naming";
 import { DEFAULT_QUOTE_SELECTIONS } from "@/src/features/cpq/utils/catalog";
 import { newInvoiceId } from "@/src/features/cpq/utils/id";
 import { createQuote, deleteQuote, writeQuoteStatus } from "@/src/features/crm/quotes/db/quote";
+
+function crm() {
+  return db("crm");
+}
+
+const dealColumns = "id, quote_id, source, status, previous_status, name, viewed_at, created_at";
+
+export async function createDeal(input: {
+  quoteId: string;
+  source: unknown;
+}): Promise<Deal> {
+  const deal = dealWriteSchema.parse(input);
+  const inserted = await crm()
+    .from("deals")
+    .insert({
+      quote_id: deal.quoteId,
+      source: deal.source,
+      status: "new_lead",
+    })
+    .select(dealColumns)
+    .single();
+
+  throwIfError(inserted.error);
+  const saved = inserted.data ? toDeal(inserted.data as unknown as DealRow) : undefined;
+  if (!saved) throw new Error("Deal was not saved");
+  const name = defaultDealName(saved.source, saved.createdAt ?? new Date().toISOString());
+  await updateDeal(saved.id, { name });
+  return { ...saved, name };
+}
+
+export async function assignDefaultDealName(dealId: string): Promise<string | undefined> {
+  const { data, error } = await crm().rpc("get_deal_name_context", { p_deal_id: dealId });
+  throwIfError(error);
+  if (!data) return undefined;
+  const context = dealNameContextSchema.parse(data);
+  const name = defaultDealName(context.source, context.createdAt, context.number);
+  await updateDeal(dealId, { name });
+  return name;
+}
 
 export async function createWalkInDeal(input: {
   fullName: string;

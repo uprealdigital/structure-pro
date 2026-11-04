@@ -9,18 +9,56 @@ import { contactInitials } from "@/src/features/crm/common/utils/formatting";
 import { CreateWalkInDealSheet } from "@/src/features/crm/deals/components/create-walk-in-deal-sheet";
 import { useCreateWalkInDeal } from "@/src/features/crm/deals/hooks/use-create-walk-in-deal";
 import { copy as dealCopy } from "@/src/features/crm/deals/locales/en";
+import { describeSelections } from "@/src/features/cpq/utils/pricing";
 import { QuoteCustomers } from "@/src/features/crm/quotes/components/quote-customers";
 import { QuoteStatusBadge } from "@/src/features/crm/quotes/components/quote-status-badge";
 import { useQuoteStream } from "@/src/features/crm/quotes/hooks/use-quote-stream";
 import { copy } from "@/src/features/crm/quotes/locales/en";
 import { loadQuoteListItem } from "@/src/features/crm/quotes/server/actions";
-import type { QuoteListItem } from "@/src/features/crm/quotes/types";
-import { formatQuoteDate, quotePageNumbers } from "@/src/features/crm/quotes/utils/formatting";
+import type { QuoteListCustomer, QuoteListItem } from "@/src/features/crm/quotes/types";
+import {
+  formatQuoteDate,
+  formatQuoteMonthly,
+  formatQuotePrice,
+  quoteDisplayName,
+  quotePageNumbers,
+  quoteZip,
+} from "@/src/features/crm/quotes/utils/formatting";
 
 const pageSize = 15;
 
+function listedCustomers(quote: QuoteListItem): QuoteListCustomer[] {
+  const seen = new Set<string>();
+  const customers: QuoteListCustomer[] = [];
+  for (const deal of [...quote.deals, ...quote.deal_quotes.map((link) => link.deal)]) {
+    for (const customer of deal.customers) {
+      if (seen.has(customer.id)) continue;
+      seen.add(customer.id);
+      customers.push(customer);
+    }
+  }
+  return customers;
+}
+
+function listedQuote(quote: QuoteListItem) {
+  const customers = listedCustomers(quote);
+  const revision = quote.quote_revision;
+  if (!revision) {
+    return { customers, label: `Quote #${quote.quote_number}`, zip: "", price: "—", monthly: "" };
+  }
+  const described = describeSelections(revision.config);
+  return {
+    customers,
+    label: quoteDisplayName(quote.quote_number, described.specs),
+    zip: quoteZip(described.specs),
+    price: formatQuotePrice(described.estimate.total),
+    monthly: formatQuoteMonthly(described.estimate.rto),
+  };
+}
+
 function QuoteListMobileRow({ quote, onOpen }: { quote: QuoteListItem; onOpen: () => void }) {
-  const customers = quote.customers;
+  const listed = listedQuote(quote);
+  const customers = listed.customers;
   const primary = customers[0];
   const extra = Math.max(0, customers.length - 1);
 
@@ -32,7 +70,7 @@ function QuoteListMobileRow({ quote, onOpen }: { quote: QuoteListItem; onOpen: (
     >
       <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3">
         <div className="min-w-0">
-          <div className="truncate text-xs font-medium text-gray-900">{quote.dealLabel}</div>
+          <div className="truncate text-xs font-medium text-gray-900">{listed.label}</div>
           <div className="mt-1 flex min-w-0 items-center gap-1.5">
             {customers.length > 0 ? (
               <span className="flex shrink-0 items-center -space-x-2">
@@ -42,13 +80,13 @@ function QuoteListMobileRow({ quote, onOpen }: { quote: QuoteListItem; onOpen: (
                     className="flex h-7 w-7 items-center justify-center rounded-full border-2 border-white bg-gray-100 text-xs font-semibold text-gray-800 ring-1 ring-gray-200"
                     style={{ zIndex: customers.length - index }}
                   >
-                    {contactInitials(customer.name)}
+                    {contactInitials(customer.full_name)}
                   </span>
                 ))}
               </span>
             ) : null}
             {primary ? (
-              <span className="truncate font-serif text-xs font-semibold text-gray-950">{primary.name}</span>
+              <span className="truncate font-serif text-xs font-semibold text-gray-950">{primary.full_name}</span>
             ) : (
               <span className="text-xs text-gray-400">—</span>
             )}
@@ -56,7 +94,7 @@ function QuoteListMobileRow({ quote, onOpen }: { quote: QuoteListItem; onOpen: (
           </div>
         </div>
         <div className="flex shrink-0 flex-col items-end gap-1">
-          <div className="font-mono text-xs font-semibold whitespace-nowrap text-gray-950">{quote.priceLabel}</div>
+          <div className="font-mono text-xs font-semibold whitespace-nowrap text-gray-950">{listed.price}</div>
           <QuoteStatusBadge status={quote.status} />
         </div>
       </div>
@@ -98,12 +136,13 @@ export function QuoteList({ quotes: initialQuotes, loadError }: { quotes: QuoteL
   });
   const needle = query.trim().toLowerCase();
   const visible = needle
-    ? quotes.filter((quote) =>
-        [quote.id, quote.invoiceId, quote.dealLabel, quote.zip, ...quote.customers.map((customer) => customer.name)]
+    ? quotes.filter((quote) => {
+        const listed = listedQuote(quote);
+        return [quote.id, quote.invoice_id, String(quote.quote_number), listed.label, listed.zip, ...listed.customers.map((customer) => customer.full_name)]
           .join(" ")
           .toLowerCase()
-          .includes(needle),
-      )
+          .includes(needle);
+      })
     : quotes;
   const pageCount = Math.max(1, Math.ceil(visible.length / pageSize));
   const page = Math.min(pageIndex, pageCount - 1);
@@ -184,7 +223,7 @@ export function QuoteList({ quotes: initialQuotes, loadError }: { quotes: QuoteL
                 <thead className="border-b border-gray-200 bg-transparent font-serif text-[11px] font-bold tracking-wide text-gray-900 select-none">
                   <tr>
                     <th className="py-3.5 pr-4 pl-6 font-semibold text-gray-900">{copy.dateCreated}</th>
-                    <th className="px-4 py-3.5 font-semibold text-gray-900">{copy.deal}</th>
+                    <th className="px-4 py-3.5 font-semibold text-gray-900">{copy.quote}</th>
                     <th className="px-4 py-3.5 font-semibold text-gray-900">{copy.customers}</th>
                     <th className="px-4 py-3.5 font-semibold text-gray-900">{copy.price}</th>
                     <th className="px-4 py-3.5 font-semibold whitespace-nowrap text-gray-900">{copy.status}</th>
@@ -201,7 +240,9 @@ export function QuoteList({ quotes: initialQuotes, loadError }: { quotes: QuoteL
                       </td>
                     </tr>
                   ) : (
-                    rows.map((quote, index) => (
+                    rows.map((quote, index) => {
+                      const listed = listedQuote(quote);
+                      return (
                       <tr
                         key={quote.id}
                         onClick={() => router.push(`/quote/${quote.id}?mode=internal`)}
@@ -211,22 +252,22 @@ export function QuoteList({ quotes: initialQuotes, loadError }: { quotes: QuoteL
                       >
                         <td className="py-3 pr-4 pl-6">
                           <div className="text-xs font-semibold text-gray-950 group-hover:text-black">
-                            {formatQuoteDate(quote.createdAt)}
+                            {formatQuoteDate(quote.created_at)}
                           </div>
                         </td>
                         <td className="px-4 py-3 text-xs">
-                          <div className="font-semibold text-gray-950 group-hover:text-black">{quote.dealLabel}</div>
+                          <div className="font-semibold text-gray-950 group-hover:text-black">{listed.label}</div>
                         </td>
                         <td className="px-4 py-3 text-xs">
-                          {quote.customers.length === 0 ? (
+                          {listed.customers.length === 0 ? (
                             <span className="text-gray-400">—</span>
                           ) : (
-                            <QuoteCustomers customers={quote.customers} />
+                            <QuoteCustomers customers={listed.customers} />
                           )}
                         </td>
                         <td className="px-4 py-3 text-xs">
-                          <div className="font-mono font-semibold text-gray-950">{quote.priceLabel}</div>
-                          <div className="mt-0.5 text-[10px] text-gray-500">{quote.monthlyLabel}</div>
+                          <div className="font-mono font-semibold text-gray-950">{listed.price}</div>
+                          <div className="mt-0.5 text-[10px] text-gray-500">{listed.monthly}</div>
                         </td>
                         <td className="px-4 py-3 text-xs whitespace-nowrap">
                           <QuoteStatusBadge status={quote.status} />
@@ -240,7 +281,8 @@ export function QuoteList({ quotes: initialQuotes, loadError }: { quotes: QuoteL
                           </div>
                         </td>
                       </tr>
-                    ))
+                      );
+                    })
                   )}
                 </tbody>
               </table>

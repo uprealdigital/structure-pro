@@ -1,7 +1,7 @@
 import { Bone, SkeletonStatus } from "@/src/features/crm/common/components/skeleton";
 import { copy } from "@/src/features/crm/quotes/locales/en";
 
-const columns = [copy.dateCreated, copy.deal, copy.customers, copy.price, copy.status];
+const columns = [copy.dateCreated, copy.quote, copy.customers, copy.price, copy.status];
 const rows = 8;
 
 export function QuotesSkeleton() {

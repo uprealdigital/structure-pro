@@ -17,7 +17,7 @@ import { usePathname } from "next/navigation";
 import { OrganizationSwitcher } from "@/src/features/crm/common/components/organization-switcher";
 import { useNavCounts } from "@/src/features/crm/common/hooks/use-nav-counts";
 import { copy } from "@/src/features/crm/common/locales/en";
-import type { OrganizationDirectoryEntry } from "@/src/features/crm/common/types";
+import type { NavCounts, OrganizationDirectoryEntry } from "@/src/features/crm/common/types";
 import { contactInitials } from "@/src/features/crm/common/utils/formatting";
 
 function NavItem({
@@ -78,8 +78,14 @@ function NavItem({
   );
 }
 
-export function CrmNav({ organizations }: { organizations: OrganizationDirectoryEntry[] }) {
-  const counts = useNavCounts();
+export function CrmNav({
+  organizations,
+  counts: initialCounts,
+}: {
+  organizations: OrganizationDirectoryEntry[];
+  counts: NavCounts;
+}) {
+  const counts = useNavCounts(initialCounts);
   const pathname = usePathname();
   const dealsActive = pathname === "/deals" || pathname.startsWith("/deals/");
   const conversationsActive =

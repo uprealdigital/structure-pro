@@ -1,140 +1,94 @@
 import "server-only";
 
 import { cache } from "react";
-import { getSupabase } from "@/src/common/lib/supabase/supabase.service";
+import { db, getSupabase } from "@/src/common/lib/supabase/supabase.service";
+import { throwIfError } from "@/src/common/utils/error-handling";
 import { describeSelections } from "@/src/features/cpq/utils/pricing";
 import { readCustomers } from "@/src/features/crm/common/db/customer";
-import { readDealCustomers, readDealCustomersForDeals } from "@/src/features/crm/common/db/deal-customer";
+import { readDealCustomersForDeals } from "@/src/features/crm/common/db/deal-customer";
 import { readDeals, readDealsByIds, readDealsByQuoteId } from "@/src/features/crm/deals/db/deal";
-import { readAllDealQuotes, readDealQuotes, readDealQuotesForQuote } from "@/src/features/crm/deals/db/deal-quote";
+import { readDealQuotes, readDealQuotesForQuote } from "@/src/features/crm/deals/db/deal-quote";
 import {
   readActiveRevisionId,
-  readListedQuote,
   readQuote,
   readQuoteStatus,
   readQuoteUpdatedAt,
-  readQuotes,
 } from "@/src/features/crm/quotes/db/quote";
 import { readQuoteRevision } from "@/src/features/crm/quotes/db/quote-revision";
 import {
   quoteChangeEventSchema,
+  quoteListItemSchema,
   type QuoteChangeEvent,
   type QuoteChangeKind,
-  type QuoteCustomer,
   type QuoteListItem,
   type QuotePortal,
   type QuotePortalCustomer,
   type QuotePortalRecipient,
 } from "@/src/features/crm/quotes/types";
 import { quoteDisplayName, quotePortalDealName } from "@/src/features/crm/quotes/utils/formatting";
-import { toQuoteChangeEvent, toQuoteListItem, toQuotePortal } from "@/src/features/crm/quotes/utils/mappers";
+import { toQuoteChangeEvent, toQuotePortal } from "@/src/features/crm/quotes/utils/mappers";
 
 const quoteIdPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
-export const getQuoteList = cache(async (): Promise<QuoteListItem[]> => {
-  const [quotes, deals, customers, links] = await Promise.all([
-    readQuotes(),
-    readDeals(),
-    readCustomers(),
-    readDealCustomers(),
-  ]);
-
-  const customerById = new Map(customers.map((customer) => [customer.id, customer]));
-  const customersByDeal = new Map<string, { customer: (typeof customers)[number]; isPrimary: boolean }[]>();
-  for (const link of links) {
-    const customer = customerById.get(link.customerId);
-    if (!customer) continue;
-    const related = customersByDeal.get(link.dealId) ?? [];
-    related.push({ customer, isPrimary: link.isPrimary });
-    customersByDeal.set(link.dealId, related);
-  }
-  const dealLinks = await readAllDealQuotes();
-  const dealById = new Map(deals.map((deal) => [deal.id, deal]));
-  const dealsByQuote = new Map<string, typeof deals>();
-  for (const deal of deals) {
-    if (!deal.quoteId) continue;
-    const related = dealsByQuote.get(deal.quoteId) ?? [];
-    related.push(deal);
-    dealsByQuote.set(deal.quoteId, related);
-  }
-  for (const link of dealLinks) {
-    const deal = dealById.get(link.dealId);
-    if (!deal) continue;
-    const related = dealsByQuote.get(link.quoteId) ?? [];
-    if (related.some((item) => item.id === deal.id)) continue;
-    related.push(deal);
-    dealsByQuote.set(link.quoteId, related);
-  }
-  const items: QuoteListItem[] = [];
-  for (const quote of quotes) {
-    const described = describeSelections(quote.selections);
-    const related = dealsByQuote.get(quote.id) ?? [];
-    const seen = new Set<string>();
-    const quoteCustomers: QuoteCustomer[] = [];
-    for (const deal of related) {
-      const people = (customersByDeal.get(deal.id) ?? []).sort(
-        (left, right) => Number(right.isPrimary) - Number(left.isPrimary),
-      );
-      for (const entry of people) {
-        if (seen.has(entry.customer.id)) continue;
-        seen.add(entry.customer.id);
-        quoteCustomers.push({ id: entry.customer.id, name: entry.customer.fullName });
-      }
-    }
-    const item = toQuoteListItem({
-      id: quote.id,
-      invoiceId: quote.invoiceId,
-      quoteNumber: quote.quoteNumber,
-      createdAt: quote.createdAt,
-      specs: described.specs,
-      total: described.estimate.total,
-      monthly: described.estimate.rto,
-      customers: quoteCustomers,
-      status: quote.status,
-    });
-    if (item) items.push(item);
-  }
-
-  return items;
-});
-
-export async function getQuoteCount(): Promise<number> {
-  return (await getQuoteList()).length;
+function crm() {
+  return db("crm");
 }
 
-export async function getQuoteListItem(id: string): Promise<QuoteListItem | undefined> {
-  const quote = await readListedQuote(id);
-  if (!quote) return undefined;
-  const [direct, links] = await Promise.all([readDealsByQuoteId(quote.id), readDealQuotesForQuote(quote.id)]);
-  const attached = new Set(direct.map((deal) => deal.id));
-  const extra = await readDealsByIds(links.map((link) => link.dealId).filter((dealId) => !attached.has(dealId)));
-  const related = [...direct, ...extra];
-  const [customerLinks, customers] = await Promise.all([
-    readDealCustomersForDeals(related.map((deal) => deal.id)),
-    readCustomers(),
-  ]);
-  const customerById = new Map(customers.map((customer) => [customer.id, customer]));
-  const described = describeSelections(quote.selections);
-  const seen = new Set<string>();
-  const quoteCustomers: QuoteCustomer[] = [];
-  const ordered = [...customerLinks].sort((left, right) => Number(right.isPrimary) - Number(left.isPrimary));
-  for (const link of ordered) {
-    const customer = customerById.get(link.customerId);
-    if (!customer || seen.has(customer.id)) continue;
-    seen.add(customer.id);
-    quoteCustomers.push({ id: customer.id, name: customer.fullName });
-  }
-  return toQuoteListItem({
-    id: quote.id,
-    invoiceId: quote.invoiceId,
-    quoteNumber: quote.quoteNumber,
-    createdAt: quote.createdAt,
-    specs: described.specs,
-    total: described.estimate.total,
-    monthly: described.estimate.rto,
-    customers: quoteCustomers,
-    status: quote.status,
-  });
+const quoteListSelect = `
+  id,
+  invoice_id,
+  quote_number,
+  status,
+  created_at,
+  quote_revision:quote_revisions!active_revision_id (
+    id,
+    revision_number,
+    status,
+    config
+  ),
+  deals!quote_id (
+    id,
+    name,
+    customers!deal_customers (
+      id,
+      full_name
+    )
+  ),
+  deal_quotes (
+    deal:deals!deal_id (
+      id,
+      name,
+      customers!deal_customers (
+        id,
+        full_name
+      )
+    )
+  )
+`;
+
+export async function getQuotes(): Promise<QuoteListItem[]> {
+  const { data, error } = await crm()
+    .from("quotes")
+    .select(quoteListSelect)
+    .order("created_at", { ascending: false })
+    .limit(50);
+
+  throwIfError(error);
+  return quoteListItemSchema.array().parse(data ?? []);
+}
+
+export async function getQuote(id: string): Promise<QuoteListItem | undefined> {
+  const quoteId = id.trim();
+  if (!quoteId) return undefined;
+  const { data, error } = await crm()
+    .from("quotes")
+    .select(quoteListSelect)
+    .eq("id", quoteId)
+    .maybeSingle();
+
+  throwIfError(error);
+  if (!data) return undefined;
+  return quoteListItemSchema.parse(data);
 }
 
 export const getQuotePortal = cache(async (id: string): Promise<QuotePortal | undefined> => {

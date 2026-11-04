@@ -123,6 +123,16 @@ export const organizationDirectorySchema = organizationSchema.extend({
 
 export type OrganizationDirectoryEntry = z.infer<typeof organizationDirectorySchema>;
 
+export const navCountsSchema = z.object({
+  conversationCount: z.number(),
+  unreadActivityCount: z.number(),
+  dealCount: z.number(),
+  customerCount: z.number(),
+  quoteCount: z.number(),
+});
+
+export type NavCounts = z.infer<typeof navCountsSchema>;
+
 export const customerPatchSchema = z.object({
   fullName: z.string().optional(),
   email: z.string().optional(),

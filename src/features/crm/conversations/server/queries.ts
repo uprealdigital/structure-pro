@@ -14,7 +14,6 @@ import type { DealCustomer } from "@/src/features/crm/common/types";
 import { getCustomer } from "@/src/features/crm/common/server/queries";
 import {
   conversationUnreadCount,
-  countUnreadActivities,
   readActivities,
   readActivitiesSince,
   readLatestActivity,
@@ -226,10 +225,6 @@ async function lightDealOptions(deals: Deal[]): Promise<ConversationDealOption[]
     });
     return option.success ? [option.data] : [];
   });
-}
-
-export async function getUnreadActivityCount(): Promise<number> {
-  return countUnreadActivities();
 }
 
 export const getConversationInbox = cache(async (): Promise<ConversationInboxItem[]> => {

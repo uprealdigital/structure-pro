@@ -1,7 +1,7 @@
-import { DealsBoard } from "@/src/features/crm/deals/components/deals-board";
-import { getDealBoard } from "@/src/features/crm/deals/server/queries";
-import type { DealBoardItem } from "@/src/features/crm/deals/types";
 import { copy } from "@/src/features/crm/common/locales/en";
+import { DealsBoard } from "@/src/features/crm/deals/components/deals-board";
+import { getDeals } from "@/src/features/crm/deals/server/queries";
+import type { DealListItem } from "@/src/features/crm/deals/types";
 
 export const dynamic = "force-dynamic";
 
@@ -10,11 +10,11 @@ export const metadata = {
 };
 
 export default async function DealsPage() {
-  let deals: DealBoardItem[] = [];
+  let deals: DealListItem[] = [];
   let loadError = false;
 
   try {
-    deals = await getDealBoard();
+    deals = await getDeals();
   } catch {
     loadError = true;
   }

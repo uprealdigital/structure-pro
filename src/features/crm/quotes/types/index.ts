@@ -24,16 +24,39 @@ export const quoteCustomerSchema = z.object({
 
 export type QuoteCustomer = z.infer<typeof quoteCustomerSchema>;
 
+export const quoteListCustomerSchema = z.object({
+  id: z.string(),
+  full_name: z.string(),
+});
+
+export type QuoteListCustomer = z.infer<typeof quoteListCustomerSchema>;
+
+export const quoteListDealSchema = z.object({
+  id: z.string(),
+  name: z.string().nullable(),
+  customers: z.array(quoteListCustomerSchema),
+});
+
+export type QuoteListDeal = z.infer<typeof quoteListDealSchema>;
+
+export const quoteListRevisionSchema = z.object({
+  id: z.string(),
+  revision_number: z.number(),
+  status: quoteStatusSchema,
+  config: quoteSelectionsSchema,
+});
+
+export type QuoteListRevision = z.infer<typeof quoteListRevisionSchema>;
+
 export const quoteListItemSchema = z.object({
   id: z.string(),
-  invoiceId: z.string(),
-  createdAt: z.string(),
-  dealLabel: z.string(),
-  zip: z.string(),
-  customers: z.array(quoteCustomerSchema),
-  priceLabel: z.string(),
-  monthlyLabel: z.string(),
+  invoice_id: z.string(),
+  quote_number: z.number(),
   status: quoteStatusSchema,
+  created_at: z.string(),
+  quote_revision: quoteListRevisionSchema.nullable(),
+  deals: z.array(quoteListDealSchema),
+  deal_quotes: z.array(z.object({ deal: quoteListDealSchema })),
 });
 
 export type QuoteListItem = z.infer<typeof quoteListItemSchema>;
