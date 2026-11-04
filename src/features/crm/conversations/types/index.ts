@@ -283,6 +283,8 @@ export const conversationDetailPersonSchema = z.object({
   conversations: z.union([conversationDetailLinkSchema, z.array(conversationDetailLinkSchema)]).nullable(),
 });
 
+export type ConversationDetailPerson = z.infer<typeof conversationDetailPersonSchema>;
+
 export const conversationDetailCallSchema = z.object({
   id: z.string(),
   direction: callDirectionSchema,
@@ -430,20 +432,6 @@ export const conversationParticipantSchema = z.object({
 });
 
 export type ConversationParticipant = z.infer<typeof conversationParticipantSchema>;
-
-export const conversationWorkspaceSchema = z.object({
-  id: z.string(),
-  contractSent: z.boolean(),
-  customer: customerSchema,
-  deal: dealSchema,
-  deals: z.array(conversationDealOptionSchema),
-  participants: z.array(conversationParticipantSchema),
-  createdAt: z.string(),
-  activities: z.array(activitySchema),
-  quote: conversationQuoteSchema.nullable(),
-});
-
-export type ConversationWorkspace = z.infer<typeof conversationWorkspaceSchema>;
 
 export const quoteSendIdSchema = z.string().uuid();
 

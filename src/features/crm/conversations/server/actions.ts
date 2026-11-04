@@ -51,7 +51,6 @@ import {
   getCustomerDeals,
   getCustomerInboxItem,
 } from "@/src/features/crm/conversations/server/queries";
-import { conversationWorkspace } from "@/src/features/crm/conversations/utils/workspace";
 import {
   activeDealRequestSchema,
   createConnectedDealSchema,
@@ -79,8 +78,8 @@ import {
   type ConversationListItem,
   type ConversationParticipant,
   type ConversationQuote,
+  type ConversationDetail,
   type ConversationSuggestion,
-  type ConversationWorkspace,
   type SuggestionStreamEvent,
 } from "@/src/features/crm/conversations/types";
 import { readCustomer, readCustomers, updateCustomer } from "@/src/features/crm/common/db/customer";
@@ -484,7 +483,7 @@ export async function sendConversationQuote(input: {
         revisionId: string;
         updatedAt: string;
         sharedQuoteAt: string | null;
-        dealStatus: ConversationWorkspace["deal"]["status"];
+        dealStatus: DealStatus;
       };
     }
   | { error: string }
@@ -599,7 +598,7 @@ export async function sendQuoteMessages(
         revisionId: string;
         updatedAt: string;
         sharedQuoteAt: string | null;
-        dealStatus: ConversationWorkspace["deal"]["status"];
+        dealStatus: DealStatus;
       };
     }
   | { cancelled: true }
@@ -678,7 +677,7 @@ export async function sendQuoteMessages(
       revisionId: string;
       updatedAt: string;
       sharedQuoteAt: string | null;
-      dealStatus: ConversationWorkspace["deal"]["status"];
+      dealStatus: DealStatus;
     } | undefined;
     for (const dealId of parsed.data.dealIds) {
       const sent = await sendConversationQuote({ quoteId, revisionId, dealId });
@@ -1134,21 +1133,15 @@ export async function loadConversationDeal(
   }
 }
 
-export async function loadConversationWorkspace(
+export async function loadConversation(
   id: string,
-  dealId?: string,
-): Promise<{ success: true; data: ConversationWorkspace | null } | { error: string }> {
+): Promise<{ success: true; data: ConversationDetail | null } | { error: string }> {
   const parsed = conversationIdSchema.safeParse(id);
   if (!parsed.success) return { error: "A conversation is required" };
-  const deal = typeof dealId === "string" ? dealIdSchema.safeParse(dealId) : undefined;
-  if (deal && !deal.success) return { error: "A deal is required" };
 
   try {
     const conversation = await getConversation(parsed.data);
-    const workspace = conversation
-      ? conversationWorkspace(conversation, deal?.success ? deal.data : undefined)
-      : undefined;
-    return { success: true, data: workspace ?? null };
+    return { success: true, data: conversation ?? null };
   } catch (error) {
     void recordCrmLog({ feature: "conversations", error });
     const message = error instanceof Error ? error.message : "Could not load conversation";

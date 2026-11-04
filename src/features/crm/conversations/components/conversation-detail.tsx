@@ -28,21 +28,26 @@ import type {
   Activity,
   ComposerChannel,
   ConversationDealOption,
+  ConversationDetail,
+  ConversationDetailPerson,
+  ConversationDetailQuote,
   ConversationParticipant,
   ConversationQuote,
   ConversationQuoteRevision,
   ConversationSuggestion,
-  ConversationWorkspace,
 } from "@/src/features/crm/conversations/types";
 import { emailActivityText } from "@/src/features/crm/conversations/utils/email-message";
 import { uploadComposerAttachment } from "@/src/features/crm/conversations/utils/upload-attachment";
-import { productTitle, quoteMenuName, revisionMenuLabel, systemEventText } from "@/src/features/crm/conversations/utils/formatting";
+import { formatDealMenuDate, productTitle, quoteMenuName, revisionMenuLabel, systemEventText } from "@/src/features/crm/conversations/utils/formatting";
 import { quoteDisplayName } from "@/src/features/crm/quotes/utils/formatting";
 import {
   conversationQuoteFromSelections,
   conversationQuoteWithActiveRevision,
   conversationQuoteWithSentRevision,
   conversationQuoteWithSharedPhotos,
+  toCall,
+  toConversationQuote,
+  toConversationQuoteRevision,
 } from "@/src/features/crm/conversations/utils/mappers";
 import { DEFAULT_QUOTE_SELECTIONS } from "@/src/features/cpq/utils/catalog";
 import { canMoveQuoteToNewDeal, quoteStatuses, type QuoteStatusActionId } from "@/src/features/crm/quotes/config/status";
@@ -65,7 +70,7 @@ import type { QuoteSelections } from "@/src/features/cpq/types";
 import { DealStatusBadge } from "@/src/features/crm/deals/components/deal-status-badge";
 import type { DealChangeEvent } from "@/src/features/crm/deals/types";
 import { canMarkDealLost } from "@/src/features/crm/deals/utils/status";
-import { dealNameMaxLength, type DealStatus } from "@/src/features/crm/deals/types";
+import { dealNameMaxLength, dealSchema, type Deal, type DealStatus } from "@/src/features/crm/deals/types";
 import { configChangeRows } from "@/src/features/crm/conversations/utils/config-changes-summary";
 import { selectionsWithConfigChanges } from "@/src/features/crm/conversations/utils/design-preview";
 import {
@@ -75,7 +80,8 @@ import {
   selectionTotals,
 } from "@/src/features/crm/conversations/utils/inbound-intent";
 import { dealSummarySnapshot } from "@/src/features/crm/conversations/utils/deal-summary";
-import { participantsForDeal } from "@/src/features/crm/conversations/utils/participants";
+import { orderedDealParticipants, participantsForDeal } from "@/src/features/crm/conversations/utils/participants";
+import type { Customer } from "@/src/features/crm/common/types";
 
 function ChannelIcon({ channel, className }: { channel: ComposerChannel; className?: string }) {
   const iconClass = className ?? "h-3.5 w-3.5 shrink-0";
@@ -140,8 +146,181 @@ function revisionStatusLabel(revision: ConversationQuoteRevision): string {
   return revisionMenuLabel(revision.revisionNumber);
 }
 
+function conversationIdOf(person: ConversationDetailPerson): string | undefined {
+  const link = person.conversations;
+  if (!link) return undefined;
+  return Array.isArray(link) ? link[0]?.id : link.id;
+}
+
+function quoteFromDetail(row: ConversationDetailQuote | null): ConversationQuote | undefined {
+  if (!row) return undefined;
+  const revisions = row.quote_revisions.flatMap((revision) => {
+    const mapped = toConversationQuoteRevision({
+      id: revision.id,
+      revisionNumber: revision.revision_number,
+      status: revision.status,
+      createdAt: revision.created_at,
+      updatedAt: revision.updated_at,
+      selections: revision.config,
+      configChanges: revision.config_changes,
+      communication: revision.communication,
+      renders: revision.renders,
+      sharedPhotosAt: revision.shared_photos_at,
+      sharedQuoteAt: revision.shared_quote_at,
+    });
+    return mapped ? [mapped] : [];
+  });
+  const active =
+    revisions.find((revision) => revision.id === row.active_revision_id) ?? revisions[revisions.length - 1];
+  if (!active) return undefined;
+  return toConversationQuote({
+    id: row.id,
+    invoiceId: row.invoice_id,
+    quoteNumber: row.quote_number,
+    totalLabel: active.totalLabel,
+    specs: active.specs,
+    lines: active.lines,
+    imageUrl: active.imageUrl,
+    selections: active.selections,
+    activeRevisionId: active.id,
+    status: row.status,
+    revisions,
+  });
+}
+
+function quotesOnDeal(deal: ConversationDetail["customer"]["deal_customers"][number]["deal"]): ConversationQuote[] {
+  const linked = deal.deal_quotes.flatMap((link) => {
+    const quote = quoteFromDetail(link.quote);
+    return quote ? [quote] : [];
+  });
+  const primary = quoteFromDetail(deal.quote);
+  if (primary && !linked.some((quote) => quote.id === primary.id)) linked.unshift(primary);
+  return linked;
+}
+
+function dealFromDetail(row: ConversationDetail["customer"]["deal_customers"][number]["deal"]): Deal | undefined {
+  const deal = dealSchema.safeParse({
+    id: row.id,
+    quoteId: row.quote_id ?? "",
+    source: row.source,
+    status: row.status,
+    previousStatus: row.previous_status,
+    name: row.name,
+    viewedAt: row.viewed_at,
+    createdAt: row.created_at,
+  });
+  return deal.success ? deal.data : undefined;
+}
+
+function dealOptionsFrom(conversation: ConversationDetail): ConversationDealOption[] {
+  const links = [...conversation.customer.deal_customers].sort((left, right) =>
+    right.deal.created_at.localeCompare(left.deal.created_at),
+  );
+  return links.flatMap((link) => {
+    const deal = dealFromDetail(link.deal);
+    if (!deal) return [];
+    const quotes = quotesOnDeal(link.deal);
+    const quote = quotes.find((item) => item.id === deal.quoteId) ?? quotes[0] ?? null;
+    const option = {
+      id: deal.id,
+      title: deal.name?.trim() || productTitle(quote?.specs ?? []) || quote?.invoiceId || "",
+      priceLabel: quote?.totalLabel ?? "",
+      stage: deal.status,
+      dateLabel: formatDealMenuDate(deal.createdAt ?? ""),
+      deal,
+      quote,
+      quotes,
+      conversationId: conversation.id,
+      activities: [],
+    };
+    return [option];
+  });
+}
+
+function openingDealId(conversation: ConversationDetail, dealId?: string): string {
+  const links = [...conversation.customer.deal_customers].sort((left, right) =>
+    right.deal.created_at.localeCompare(left.deal.created_at),
+  );
+  const requested = dealId ? links.find((link) => link.deal.id === dealId) : undefined;
+  const active = conversation.customer.active_deal_id
+    ? links.find((link) => link.deal.id === conversation.customer.active_deal_id)
+    : undefined;
+  const primary = links.find((link) => link.is_primary);
+  return (requested ?? active ?? primary ?? links[0])?.deal.id ?? "";
+}
+
+function activitiesFrom(conversation: ConversationDetail): Activity[] {
+  return [...conversation.activities]
+    .sort((left, right) => left.position - right.position)
+    .map((row) => {
+      const call = row.call
+        ? toCall({
+            id: row.call.id,
+            direction: row.call.direction,
+            duration_seconds: row.call.duration_seconds,
+            script_match: row.call.script_match,
+            recording_url: row.call.recording_url,
+            transcript: row.call.transcript,
+            external_id: row.call.external_id,
+            started_at: row.call.started_at,
+            ended_at: row.call.ended_at,
+          })
+        : undefined;
+      return {
+        position: row.position,
+        role: row.role,
+        text: row.body,
+        channel: row.channel,
+        generatedBy: row.generated_by,
+        read: row.read_at != null,
+        readAt: row.read_at,
+        createdAt: row.created_at,
+        ...(call ? { call } : {}),
+      };
+    });
+}
+
+function participantsFrom(conversation: ConversationDetail): ConversationParticipant[] {
+  return orderedDealParticipants(
+    conversation.customer.deal_customers.flatMap((link) =>
+      link.deal.deal_customers.flatMap((membership) => {
+        const person = membership.customer;
+        const linkedConversationId = conversationIdOf(person);
+        return [
+          {
+            dealId: link.deal.id,
+            isPrimary: membership.is_primary,
+            ...(linkedConversationId ? { conversationId: linkedConversationId } : {}),
+            customer: {
+              id: person.id,
+              fullName: person.full_name,
+              phone: person.phone,
+              email: person.email,
+              optedOut: person.opted_out,
+              ...(person.active_deal_id ? { activeDealId: person.active_deal_id } : {}),
+              createdAt: person.created_at,
+            },
+          },
+        ];
+      }),
+    ),
+  );
+}
+
+function customerFrom(conversation: ConversationDetail): Customer {
+  return {
+    id: conversation.customer.id,
+    fullName: conversation.customer.full_name,
+    phone: conversation.customer.phone,
+    email: conversation.customer.email,
+    optedOut: conversation.customer.opted_out,
+    ...(conversation.customer.active_deal_id ? { activeDealId: conversation.customer.active_deal_id } : {}),
+    createdAt: conversation.customer.created_at,
+  };
+}
+
 function quotesForDeal(
-  option: ConversationWorkspace["deals"][number],
+  option: ConversationDealOption,
   patches: Record<string, ConversationQuote>,
   added: ConversationQuote[],
   removed: Record<string, true>,
@@ -217,7 +396,8 @@ function quoteLabel(quote: ConversationQuote | undefined, index: number): string
 }
 
 export function ConversationDetail({
-  workspace,
+  conversation,
+  initialDealId,
   incoming = [],
   onBack,
   onMarkLost,
@@ -233,7 +413,8 @@ export function ConversationDetail({
   quoteChange = null,
   dealChange = null,
 }: {
-  workspace: ConversationWorkspace;
+  conversation: ConversationDetail;
+  initialDealId?: string;
   incoming?: Activity[];
   onBack: () => void;
   onMarkLost: (dealId: string) => Promise<{ success: true } | { error: string }>;
@@ -242,7 +423,7 @@ export function ConversationDetail({
     dealId: string,
   ) => Promise<{ success: true; data: { status: DealStatus } } | { error: string }>;
   onActivateDeal: (dealId: string, status: DealStatus) => void;
-  onFocusDeal: (dealId: string) => Promise<ConversationWorkspace | undefined>;
+  onFocusDeal: (dealId: string) => Promise<ConversationDetail | undefined>;
   onSystemActivity: (conversationId: string, activity: Activity) => void;
   onRemoveActivity: (conversationId: string, position: number) => void;
   onSelectCustomer: (participant: ConversationParticipant, dealId: string) => void;
@@ -251,9 +432,13 @@ export function ConversationDetail({
   quoteChange?: QuoteChangeEvent | null;
   dealChange?: DealChangeEvent | null;
 }) {
+  const customer = customerFrom(conversation);
+  const storedDeals = dealOptionsFrom(conversation);
+  const storedParticipants = participantsFrom(conversation);
+  const openingActivities = activitiesFrom(conversation);
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [detailsSettled, setDetailsSettled] = useState(false);
-  const [focusedDealId, setFocusedDealId] = useState(workspace.deal.id);
+  const [focusedDealId, setFocusedDealId] = useState(() => openingDealId(conversation, initialDealId));
   const [loadedDealOptions, setLoadedDealOptions] = useState<Record<string, ConversationDealOption>>({});
   const dealLoad = useRef(0);
   const [selectedRevisionId, setSelectedRevisionId] = useState<string | null>(null);
@@ -267,7 +452,10 @@ export function ConversationDetail({
   const [quotePatches, setQuotePatches] = useState<Record<string, ConversationQuote>>({});
   const [dealStatusPatches, setDealStatusPatches] = useState<Record<string, DealStatus>>({});
   const [dealNamePatches, setDealNamePatches] = useState<Record<string, string>>({});
-  const [seenDealIds, setSeenDealIds] = useState<string[]>(() => (workspace.deal.id ? [workspace.deal.id] : []));
+  const [seenDealIds, setSeenDealIds] = useState<string[]>(() => {
+    const id = openingDealId(conversation, initialDealId);
+    return id ? [id] : [];
+  });
   const markedViewed = useRef(new Set<string>());
   const requestedNewDeals = useRef(new Set<string>());
   const [notice, setNotice] = useState<{ id: number; message: string; pending: boolean; tone: ToastTone } | null>(null);
@@ -276,8 +464,8 @@ export function ConversationDetail({
   const publishActivityRef = useRef<(activity: Activity) => void>(() => {});
   const removeActivityRef = useRef(onRemoveActivity);
   removeActivityRef.current = onRemoveActivity;
-  const deals = workspace.deals.map((incoming) => {
-    const option = dealHasQuotes(incoming) ? incoming : loadedDealOptions[incoming.id] ?? incoming;
+  const deals = storedDeals.map((stored) => {
+    const option = dealHasQuotes(stored) ? stored : loadedDealOptions[stored.id] ?? stored;
     const status = dealStatusPatches[option.id];
     const renamed = dealNamePatches[option.id];
     const seen = seenDealIds.includes(option.id);
@@ -316,21 +504,22 @@ export function ConversationDetail({
   const listedQuotes = focusedOption ? quotesForDeal(focusedOption, {}, [], removedQuoteIds) : [];
   const viewingQuote =
     listedQuotes.find((quote) => quote.id === viewingQuoteIds[focusedOption?.id ?? ""]) ?? listedQuotes[0] ?? null;
-  const dealId = focusedOption?.id ?? workspace.deal.id;
+  const dealId = focusedOption?.id ?? focusedDealId;
   const people = useDealPeople({
     dealId,
-    participants: workspace.participants,
-    lockedCustomerId: workspace.customer.id,
+    participants: storedParticipants,
+    lockedCustomerId: customer.id,
   });
   const participants = participantsForDeal(people.members, dealId, {
     dealId,
     isPrimary: true,
-    conversationId: workspace.id,
-    customer: workspace.customer,
+    conversationId: conversation.id,
+    customer,
   });
-  const focused = focusedOption
-    ? { ...workspace, deal: focusedOption.deal, quote: viewingQuote }
-    : workspace;
+  const focused = {
+    deal: (focusedOption ?? storedDeals[0]).deal,
+    quote: viewingQuote,
+  };
   const [draft, setDraft] = useState("");
   const [emailSubject, setEmailSubject] = useState("");
   const [attachments, setAttachments] = useState<ComposerAttachment[]>([]);
@@ -424,8 +613,8 @@ export function ConversationDetail({
   const fileInput = useRef<HTMLInputElement>(null);
   const [channel, setChannel] = useState<ComposerChannel>("telegram");
   const [channelOpen, setChannelOpen] = useState(false);
-  const threadId = workspace.id;
-  const threadActivities = workspace.activities;
+  const threadId = conversation.id;
+  const threadActivities = openingActivities;
   const { activities, setActivities } = useConversationActivities(threadId, threadActivities, incoming);
   const inboundMessages = useMemo(
     () => customerInboundMessages(activities, focused.deal.createdAt),
@@ -444,7 +633,7 @@ export function ConversationDetail({
     summarySnapshot.request,
     summarySnapshot.fingerprint,
   );
-  const detectedSuggestions = useConversationSuggestions(focused.deal.id, workspace.id, inboundMessages);
+  const detectedSuggestions = useConversationSuggestions(focused.deal.id, conversation.id, inboundMessages);
   const applySuggestionRef = useRef(detectedSuggestions.apply);
   applySuggestionRef.current = detectedSuggestions.apply;
   const suggestionRenderCapture = useRef<QuoteRevisionRenderCapture | null>(null);
@@ -457,10 +646,10 @@ export function ConversationDetail({
     if (!id || markedViewed.current.has(id)) return;
     markedViewed.current.add(id);
     setSeenDealIds((current) => (current.includes(id) ? current : [...current, id]));
-    const stored = workspace.deals.find((deal) => deal.id === id)?.deal.viewedAt;
+    const stored = conversation.customer.deal_customers.find((link) => link.deal.id === id)?.deal.viewed_at;
     if (stored) return;
     void markDealViewed(id);
-  }, [focusedDealId, workspace.deals]);
+  }, [conversation.customer.deal_customers, focusedDealId]);
 
   useEffect(() => {
     for (const activity of activities) {
@@ -531,7 +720,7 @@ export function ConversationDetail({
   const appliedReadToken = useRef(0);
   const suppressUntilHidden = useVisibleActivityReads({
     rootRef: thread,
-    conversationId: workspace.id,
+    conversationId: conversation.id,
     activitiesRef,
     onRead: ({ positions, readAt, unreadCount }) => {
       setActivities((current) =>
@@ -539,7 +728,7 @@ export function ConversationDetail({
           positions.includes(activity.position) ? { ...activity, read: true, readAt } : activity,
         ),
       );
-      onActivitiesSeen(workspace.id, unreadCount);
+      onActivitiesSeen(conversation.id, unreadCount);
     },
   });
 
@@ -547,7 +736,7 @@ export function ConversationDetail({
     if (!readNotice || readNotice.token === appliedReadToken.current) return;
     appliedReadToken.current = readNotice.token;
     if (readNotice.kind === "activity") {
-      if (readNotice.conversationId !== workspace.id) return;
+      if (readNotice.conversationId !== conversation.id) return;
       if (readNotice.readAt == null) suppressUntilHidden(readNotice.position);
       setActivities((current) =>
         current.map((activity) =>
@@ -558,7 +747,7 @@ export function ConversationDetail({
       );
       return;
     }
-    if (!readNotice.conversationIds.includes(workspace.id)) return;
+    if (!readNotice.conversationIds.includes(conversation.id)) return;
     setActivities((current) => {
       if (readNotice.kind !== "conversations") return current;
       if (readNotice.read) {
@@ -573,7 +762,7 @@ export function ConversationDetail({
         activity.position === last ? { ...activity, read: false, readAt: null } : activity,
       );
     });
-  }, [readNotice, suppressUntilHidden, workspace.id]);
+  }, [readNotice, suppressUntilHidden, conversation.id]);
   const specs = focused.quote?.specs ?? [];
   const viewed = viewedRevision(focused.quote, selectedRevisionId);
   const [menuMissingRenders, setMenuMissingRenders] = useState<MissingRevisionRender[]>([]);
@@ -610,7 +799,7 @@ export function ConversationDetail({
   const channels: ComposerChannel[] = ["telegram", "sms", "facebook", "email"];
 
   useEffect(() => {
-    const conversationId = workspace.id;
+    const conversationId = conversation.id;
     return () => {
       const current = noticeRecord.current;
       if (!current || current.settled || current.cancelled || current.undoStarted) return;
@@ -626,7 +815,7 @@ export function ConversationDetail({
         publishActivityRef.current(activity);
       });
     };
-  }, [workspace.id]);
+  }, [conversation.id]);
 
   useEffect(() => {
     function closeMenu(event: MouseEvent) {
@@ -695,14 +884,14 @@ export function ConversationDetail({
     setActivities((current) =>
       current.some((item) => item.position === activity.position) ? current : [...current, activity],
     );
-    onSystemActivity(workspace.id, activity);
+    onSystemActivity(conversation.id, activity);
   }
   publishActivityRef.current = publishActivity;
 
   async function retractActivity(activity: Activity) {
     setActivities((current) => current.filter((item) => item.position !== activity.position));
-    onRemoveActivity(workspace.id, activity.position);
-    await deleteConversationActivity({ conversationId: workspace.id, position: activity.position });
+    onRemoveActivity(conversation.id, activity.position);
+    await deleteConversationActivity({ conversationId: conversation.id, position: activity.position });
   }
 
   async function recordNamedActivity(
@@ -710,7 +899,7 @@ export function ConversationDetail({
     name: string,
     previousName?: string,
   ): Promise<Activity | null> {
-    const result = await recordSystemActivity({ conversationId: workspace.id, kind, name, previousName });
+    const result = await recordSystemActivity({ conversationId: conversation.id, kind, name, previousName });
     if ("error" in result) return null;
     return result.data;
   }
@@ -912,7 +1101,8 @@ export function ConversationDetail({
     }
     const createdDealId = result.data.dealId;
     const loaded = await onFocusDeal(createdDealId);
-    const stage = loaded?.deals.find((deal) => deal.id === createdDealId)?.stage ?? "new_lead";
+    const stage =
+      loaded?.customer.deal_customers.find((link) => link.deal.id === createdDealId)?.deal.status ?? "new_lead";
     setFocusedDealId(createdDealId);
     setViewingQuoteIds((current) => ({ ...current, [createdDealId]: result.data.quoteId }));
     setSelectedRevisionId(null);
@@ -921,7 +1111,7 @@ export function ConversationDetail({
     void markDealViewed(createdDealId);
     onActivateDeal(createdDealId, stage);
     const recorded = await recordSystemActivity({
-      conversationId: workspace.id,
+      conversationId: conversation.id,
       kind: "created",
       name: result.data.name.trim() || copy.createDeal,
       dealId: createdDealId,
@@ -940,7 +1130,7 @@ export function ConversationDetail({
     const result = await createDealQuoteAction({
       dealId,
       selections,
-      conversationId: workspace.id,
+      conversationId: conversation.id,
     });
     setAddingQuote(false);
     if ("error" in result) {
@@ -1024,13 +1214,13 @@ export function ConversationDetail({
     setQuoteToast(null);
     const dealName = result.data.name.trim() || copy.createDeal;
     const createdLog = await recordSystemActivity({
-      conversationId: workspace.id,
+      conversationId: conversation.id,
       kind: "created",
       name: dealName,
       dealId: createdDealId,
     });
     const movedLog = await recordSystemActivity({
-      conversationId: workspace.id,
+      conversationId: conversation.id,
       kind: "movedQuote",
       name: dealName,
       previousName: quoteName,
@@ -1050,7 +1240,8 @@ export function ConversationDetail({
         for (const activity of logged) await retractActivity(activity);
         forgetLoadedDeals([dealId, createdDealId]);
         const restored = await onFocusDeal(dealId);
-        const restoredStage = restored?.deals.find((deal) => deal.id === dealId)?.stage ?? "new_lead";
+        const restoredStage =
+          restored?.customer.deal_customers.find((link) => link.deal.id === dealId)?.deal.status ?? "new_lead";
         setFocusedDealId(dealId);
         setViewingQuoteIds((current) => ({ ...current, [dealId]: quoteId }));
         setSelectedRevisionId(null);
@@ -1072,7 +1263,7 @@ export function ConversationDetail({
       dealId,
       quoteId: quote.id,
       revisionId: viewed?.id,
-      conversationId: workspace.id,
+      conversationId: conversation.id,
     });
     setQuoteAction(null);
     if ("error" in result) {
@@ -1296,7 +1487,7 @@ export function ConversationDetail({
     const quoteIndex = listedQuotes.findIndex((item) => item.id === quote.id);
     const quoteName = quoteLabel(next, quoteIndex);
     const saved = await recordSystemActivity({
-      conversationId: workspace.id,
+      conversationId: conversation.id,
       kind: "savedRevision",
       name: revisionMenuLabel(result.data.revisionNumber),
       previousName: quoteName,
@@ -1649,7 +1840,7 @@ export function ConversationDetail({
       },
       async () => {
         const saved = await recordSystemActivity({
-          conversationId: workspace.id,
+          conversationId: conversation.id,
           kind: "renamed",
           name: nextName,
           previousName,
@@ -1848,7 +2039,7 @@ export function ConversationDetail({
     showIntentQuote(quote.id, revision.id);
     const quoteIndex = listedQuotes.findIndex((item) => item.id === quote.id);
     const saved = await recordSystemActivity({
-      conversationId: workspace.id,
+      conversationId: conversation.id,
       kind: "savedRevision",
       name: revisionMenuLabel(result.data.revisionNumber),
       previousName: quoteLabel(next, quoteIndex),
@@ -1979,14 +2170,14 @@ export function ConversationDetail({
             <div className="flex items-center gap-2.5">
               <CustomerMenu
                 participants={participants}
-                customer={workspace.customer}
-                conversationId={workspace.id}
+                customer={customer}
+                conversationId={conversation.id}
                 onSelect={(participant) => onSelectCustomer(participant, focused.deal.id)}
               />
               <a
-                href={`tel:${workspace.customer.phone}`}
+                href={`tel:${customer.phone}`}
                 aria-label={copy.callNow}
-                title={`${copy.callNow} ${workspace.customer.fullName}`}
+                title={`${copy.callNow} ${customer.fullName}`}
                 className="ml-0.5 flex h-7 w-7 items-center justify-center rounded-full bg-transparent text-gray-700 transition-colors hover:bg-gray-50"
               >
                 <Phone className="h-3.5 w-3.5" strokeWidth={1.8} aria-hidden="true" />
@@ -2167,7 +2358,14 @@ export function ConversationDetail({
         >
           <div className={`min-h-0 ${detailsOpen && detailsSettled ? "overflow-visible" : "overflow-hidden"}`}>
             <div className="grid grid-cols-1 gap-6 bg-white px-6 py-4 lg:grid-cols-2">
-              <DealSummary workspace={focused} participants={participants} summary={generatedSummary} />
+              <DealSummary
+                source={focused.deal.source}
+                createdAt={conversation.created_at}
+                specs={focused.quote?.specs ?? []}
+                customerId={customer.id}
+                participants={participants}
+                summary={generatedSummary}
+              />
               <QuotePanel revision={viewed} />
             </div>
           </div>
@@ -2178,7 +2376,7 @@ export function ConversationDetail({
         <div ref={thread} className="min-h-0 flex-1 overflow-y-auto [overflow-anchor:none]" onScroll={onThreadScroll}>
           <ConversationThread
             activities={activities}
-            contactName={workspace.customer.fullName}
+            contactName={customer.fullName}
             outgoing={outgoing}
             onRetry={retryOutgoing}
             imageHeights={imageHeights.current}

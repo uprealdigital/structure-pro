@@ -6,7 +6,10 @@ import { useDealStream } from "@/src/features/crm/deals/hooks/use-deal-stream";
 import type { DealChangeEvent } from "@/src/features/crm/deals/types";
 import { useQuoteStream } from "@/src/features/crm/quotes/hooks/use-quote-stream";
 import type { QuoteChangeEvent } from "@/src/features/crm/quotes/types";
-import { ConversationDetail, type ThreadReadNotice } from "@/src/features/crm/conversations/components/conversation-detail";
+import {
+  ConversationDetail as ConversationThread,
+  type ThreadReadNotice,
+} from "@/src/features/crm/conversations/components/conversation-detail";
 import { ConversationDetailSkeleton } from "@/src/features/crm/conversations/components/conversation-skeleton";
 import { ConversationList } from "@/src/features/crm/conversations/components/conversation-list";
 import { useActivityStream } from "@/src/features/crm/conversations/hooks/use-activity-stream";
@@ -26,9 +29,9 @@ import type {
   Activity,
   ActivityEvent,
   ActivityReadEvent,
+  ConversationDetail,
   ConversationListItem,
   ConversationParticipant,
-  ConversationWorkspace,
 } from "@/src/features/crm/conversations/types";
 import { activityPreview, messageActivityAt } from "@/src/features/crm/conversations/utils/formatting";
 import {
@@ -49,32 +52,35 @@ function listTime(item: ConversationListItem, patch?: InboxPatch): string {
   return patch?.updatedAt ?? item.updated_at;
 }
 
-function newestActivityAt(conversations: ConversationListItem[], workspace?: ConversationWorkspace): string | undefined {
+function newestActivityAt(conversations: ConversationListItem[], conversation?: ConversationDetail): string | undefined {
   let latest = "";
   for (const item of conversations) {
     const updatedAt = conversationUpdatedAt(item) || item.updated_at;
     if (updatedAt > latest) latest = updatedAt;
   }
-  for (const activity of workspace?.activities ?? []) {
-    if (activity.createdAt && activity.createdAt > latest) latest = activity.createdAt;
+  for (const activity of conversation?.activities ?? []) {
+    if (activity.created_at > latest) latest = activity.created_at;
   }
   return latest || undefined;
 }
 
 export function ConversationWorkspaceView({
   conversations,
-  workspace,
+  conversation,
+  dealId,
   selectedId,
   loadError,
 }: {
   conversations: ConversationListItem[];
-  workspace?: ConversationWorkspace;
+  conversation?: ConversationDetail;
+  dealId?: string;
   selectedId?: string;
   loadError: boolean;
 }) {
   const selection = useConversationSelection({
     initialSelectedId: selectedId,
-    initialWorkspace: workspace,
+    initialConversation: conversation,
+    initialDealId: dealId,
   });
   const filters = useConversationFilters();
   const [statusByDeal, setStatusByDeal] = useState<Record<string, DealStatus>>({});
@@ -112,7 +118,7 @@ export function ConversationWorkspaceView({
     (event) => {
       applyRead(event);
     },
-    newestActivityAt(conversations, workspace),
+    newestActivityAt(conversations, conversation),
   );
 
   useQuoteStream((event) => {
@@ -297,9 +303,10 @@ export function ConversationWorkspaceView({
 
   async function activateDeal(dealId: string) {
     const conversationId = selection.selectedId;
-    const customerId = selection.workspace?.customer.id;
+    const customerId = selection.conversation?.customer.id;
     if (!conversationId || !customerId) return;
-    const currentDealId = activeDealByConversation[conversationId] ?? selection.workspace?.deal.id;
+    const currentDealId =
+      activeDealByConversation[conversationId] ?? selection.conversation?.customer.active_deal_id ?? undefined;
     if (currentDealId === dealId) return;
     setActiveDealByConversation((current) => ({ ...current, [conversationId]: dealId }));
     await setCustomerActiveDeal({ customerId, dealId });
@@ -378,11 +385,12 @@ export function ConversationWorkspaceView({
           <div className="flex flex-1 items-center justify-center px-6">
             <p className="text-sm text-gray-500">{copy.loadError}</p>
           </div>
-        ) : selection.workspace && selection.status !== "pending" ? (
-          <ConversationDetail
-            key={selection.workspace.id}
-            workspace={selection.workspace}
-            incoming={liveActivities[selection.workspace.id] ?? []}
+        ) : selection.conversation && selection.status !== "pending" ? (
+          <ConversationThread
+            key={selection.conversation.id}
+            conversation={selection.conversation}
+            initialDealId={selection.dealId}
+            incoming={liveActivities[selection.conversation.id] ?? []}
             onBack={selection.clearConversation}
             onMarkLost={onMarkLost}
             onRename={onRename}

@@ -1,9 +1,8 @@
 import { ConversationWorkspaceView } from "@/src/features/crm/conversations/components/conversation-workspace";
 import { copy as conversationCopy } from "@/src/features/crm/conversations/locales/en";
 import { getConversation, getConversations } from "@/src/features/crm/conversations/server/queries";
-import type { ConversationListItem, ConversationWorkspace } from "@/src/features/crm/conversations/types";
+import type { ConversationDetail, ConversationListItem } from "@/src/features/crm/conversations/types";
 import { conversationStatus } from "@/src/features/crm/conversations/utils/list";
-import { conversationWorkspace } from "@/src/features/crm/conversations/utils/workspace";
 import { copy } from "@/src/features/crm/common/locales/en";
 
 export const dynamic = "force-dynamic";
@@ -27,17 +26,14 @@ export default async function ConversationsPage({
   const requestedId = selectedParam(params.conversation);
   const requestedDealId = selectedParam(params.deal);
   let conversations: ConversationListItem[] = [];
-  let workspace: ConversationWorkspace | undefined;
+  let conversation: ConversationDetail | undefined;
   let selectedId = requestedId;
   let loadError = false;
 
   try {
     conversations = await getConversations();
     selectedId = requestedId ?? conversations.find((item) => conversationStatus(item) !== "deal_lost")?.id;
-    if (selectedId) {
-      const conversation = await getConversation(selectedId);
-      workspace = conversation ? conversationWorkspace(conversation, requestedDealId) : undefined;
-    }
+    if (selectedId) conversation = await getConversation(selectedId);
   } catch {
     loadError = true;
   }
@@ -45,7 +41,8 @@ export default async function ConversationsPage({
   return (
     <ConversationWorkspaceView
       conversations={conversations}
-      workspace={workspace}
+      conversation={conversation}
+      dealId={requestedDealId}
       selectedId={selectedId}
       loadError={loadError}
     />

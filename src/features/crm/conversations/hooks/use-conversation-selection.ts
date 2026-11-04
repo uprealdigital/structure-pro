@@ -1,15 +1,18 @@
 "use client";
 
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { loadConversationWorkspace } from "@/src/features/crm/conversations/server/actions";
-import type { ConversationWorkspace } from "@/src/features/crm/conversations/types";
+import { loadConversation } from "@/src/features/crm/conversations/server/actions";
+import type { ConversationDetail } from "@/src/features/crm/conversations/types";
 import type { DealStatus } from "@/src/features/crm/deals/types";
 
 type SelectionStatus = "ready" | "pending" | "missing" | "error";
 
-function conversationPath(id?: string): string {
+function conversationPath(id?: string, dealId?: string): string {
   const base = window.location.pathname === "/conversations" ? "/conversations" : "/";
-  return id ? `${base}?conversation=${encodeURIComponent(id)}` : base;
+  if (!id) return base;
+  const params = new URLSearchParams({ conversation: id });
+  if (dealId) params.set("deal", dealId);
+  return `${base}?${params.toString()}`;
 }
 
 function showMobileInbox(): boolean {
@@ -20,43 +23,47 @@ function showMobileInbox(): boolean {
 
 export function useConversationSelection({
   initialSelectedId,
-  initialWorkspace,
+  initialConversation,
+  initialDealId,
 }: {
   initialSelectedId?: string;
-  initialWorkspace?: ConversationWorkspace;
+  initialConversation?: ConversationDetail;
+  initialDealId?: string;
 }) {
   const [selectedId, setSelectedId] = useState(initialSelectedId);
-  const [workspace, setWorkspace] = useState(initialWorkspace);
+  const [conversation, setConversation] = useState(initialConversation);
+  const [dealId, setDealId] = useState(initialDealId);
   const [status, setStatus] = useState<SelectionStatus>(
-    initialSelectedId && !initialWorkspace ? "missing" : "ready",
+    initialSelectedId && !initialConversation ? "missing" : "ready",
   );
   const request = useRef(0);
-  const serverWorkspace = useRef(initialWorkspace);
-  serverWorkspace.current = initialWorkspace;
+  const serverConversation = useRef(initialConversation);
+  serverConversation.current = initialConversation;
 
   useLayoutEffect(() => {
     if (!showMobileInbox()) return;
     request.current += 1;
     setSelectedId(undefined);
-    setWorkspace(undefined);
+    setConversation(undefined);
     setStatus("ready");
-  }, [initialSelectedId, initialWorkspace?.id, initialWorkspace?.deal.id]);
+  }, [initialSelectedId, initialConversation?.id, initialDealId]);
 
   useEffect(() => {
     request.current += 1;
     if (showMobileInbox()) {
       setSelectedId(undefined);
-      setWorkspace(undefined);
+      setConversation(undefined);
       setStatus("ready");
       return;
     }
     setSelectedId(initialSelectedId);
-    setWorkspace(serverWorkspace.current);
-    setStatus(initialSelectedId && !serverWorkspace.current ? "missing" : "ready");
-  }, [initialSelectedId, initialWorkspace?.id, initialWorkspace?.deal.id]);
+    setConversation(serverConversation.current);
+    setDealId(initialDealId);
+    setStatus(initialSelectedId && !serverConversation.current ? "missing" : "ready");
+  }, [initialSelectedId, initialConversation?.id, initialDealId]);
 
-  function replaceUrl(id?: string) {
-    window.history.replaceState(window.history.state, "", conversationPath(id));
+  function replaceUrl(id?: string, nextDealId?: string) {
+    window.history.replaceState(window.history.state, "", conversationPath(id, nextDealId));
   }
 
   function highlightConversation(id: string) {
@@ -64,97 +71,95 @@ export function useConversationSelection({
     request.current += 1;
     setSelectedId(id);
     setStatus("ready");
-    replaceUrl(id);
+    replaceUrl(id, dealId);
   }
 
-  async function focusLoadedDeal(dealId: string): Promise<ConversationWorkspace | undefined> {
+  async function focusLoadedDeal(nextDealId: string): Promise<ConversationDetail | undefined> {
     const id = selectedId;
     if (!id) return undefined;
     const ticket = request.current + 1;
     request.current = ticket;
-    let result: Awaited<ReturnType<typeof loadConversationWorkspace>>;
+    let result: Awaited<ReturnType<typeof loadConversation>>;
     try {
-      result = await loadConversationWorkspace(id, dealId);
+      result = await loadConversation(id);
     } catch {
       return undefined;
     }
     if (ticket !== request.current) return undefined;
     if ("error" in result || !result.data) return undefined;
-    setWorkspace(result.data);
+    setConversation(result.data);
+    setDealId(nextDealId);
     setStatus("ready");
     return result.data;
   }
 
-  async function selectConversation(id: string, dealId?: string) {
+  async function selectConversation(id: string, nextDealId?: string) {
     if (id === selectedId && (status === "ready" || status === "pending")) return;
 
     const ticket = request.current + 1;
     request.current = ticket;
     setSelectedId(id);
+    setDealId(nextDealId);
     setStatus("pending");
-    replaceUrl(id);
+    replaceUrl(id, nextDealId);
 
-    let result: Awaited<ReturnType<typeof loadConversationWorkspace>>;
+    let result: Awaited<ReturnType<typeof loadConversation>>;
     try {
-      result = await loadConversationWorkspace(id, dealId);
+      result = await loadConversation(id);
     } catch {
       if (ticket !== request.current) return;
-      setWorkspace(undefined);
+      setConversation(undefined);
       setStatus("error");
       return;
     }
     if (ticket !== request.current) return;
     if ("error" in result) {
-      setWorkspace(undefined);
+      setConversation(undefined);
       setStatus("error");
       return;
     }
 
-    setWorkspace(result.data ?? undefined);
+    setConversation(result.data ?? undefined);
     setStatus(result.data ? "ready" : "missing");
   }
 
   function clearConversation() {
     request.current += 1;
     setSelectedId(undefined);
-    setWorkspace(undefined);
+    setConversation(undefined);
+    setDealId(undefined);
     setStatus("ready");
     replaceUrl();
   }
 
-  function patchDealStatus(dealId: string, nextStatus: DealStatus) {
-    setWorkspace((current) => {
+  function patchDealStatus(nextDealId: string, nextStatus: DealStatus) {
+    setConversation((current) => {
       if (!current) return current;
-      const deals = current.deals.map((option) =>
-        option.deal.id === dealId
-          ? {
-              ...option,
-              stage: nextStatus,
+      return {
+        ...current,
+        customer: {
+          ...current.customer,
+          deal_customers: current.customer.deal_customers.map((link) => {
+            if (link.deal.id !== nextDealId) return link;
+            return {
+              ...link,
               deal: {
-                ...option.deal,
-                previousStatus:
-                  option.deal.status === nextStatus ? option.deal.previousStatus : option.deal.status,
+                ...link.deal,
+                previous_status:
+                  link.deal.status === nextStatus ? link.deal.previous_status : link.deal.status,
                 status: nextStatus,
               },
-            }
-          : option,
-      );
-      const deal =
-        current.deal.id === dealId
-          ? {
-              ...current.deal,
-              previousStatus:
-                current.deal.status === nextStatus ? current.deal.previousStatus : current.deal.status,
-              status: nextStatus,
-            }
-          : current.deal;
-      return { ...current, deal, deals };
+            };
+          }),
+        },
+      };
     });
   }
 
   return {
     selectedId,
-    workspace,
+    conversation,
+    dealId,
     status,
     selectConversation,
     focusLoadedDeal,
