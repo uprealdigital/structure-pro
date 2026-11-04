@@ -2,6 +2,7 @@ import { assertInternal } from "@/src/common/utils/internal-call";
 import { createDealCustomer, readDealCustomer, readDealCustomersForDeal } from "@/src/features/crm/common/db/deal-customer";
 import { createCustomer, ensureCustomerThread, readCustomerByPhone } from "@/src/features/crm/common/db/customer";
 import { assignDefaultDealName } from "@/src/features/crm/deals/server/actions";
+import { getCustomers } from "@/src/features/crm/customers/server/queries";
 import { recordCrmLog } from "@/src/features/crm/common/db/log";
 
 export const runtime = "nodejs";
@@ -17,6 +18,19 @@ async function payloadOf(request: Request): Promise<Record<string, unknown> | nu
     return body as Record<string, unknown>;
   } catch {
     return null;
+  }
+}
+
+export async function GET(request: Request) {
+  const denied = assertInternal(request);
+  if (denied) return denied;
+  try {
+    const customers = await getCustomers();
+    return Response.json({ customers });
+  } catch (error) {
+    void recordCrmLog({ feature: "customers", error });
+    const message = error instanceof Error ? error.message : "Could not load customers";
+    return Response.json({ error: message }, { status: 500 });
   }
 }
 

@@ -14,6 +14,11 @@ import {
 
 const pageSize = 15;
 
+function customerName(fullName: string) {
+  const parts = fullName.trim().split(/\s+/).filter(Boolean);
+  return { first: parts[0] ?? "", last: parts.slice(1).join(" ") };
+}
+
 export function CustomerList({
   customers,
   loadError,
@@ -27,7 +32,7 @@ export function CustomerList({
   const needle = query.trim().toLowerCase();
   const visible = needle
     ? customers.filter((customer) =>
-        [customer.firstName, customer.lastName, customer.email, customer.phone]
+        [customer.full_name, customer.email, customer.phone]
           .join(" ")
           .toLowerCase()
           .includes(needle),
@@ -114,30 +119,32 @@ export function CustomerList({
                       </td>
                     </tr>
                   ) : (
-                    rows.map((customer) => (
+                    rows.map((customer) => {
+                      const name = customerName(customer.full_name);
+                      return (
                       <tr key={customer.id} className="group cursor-pointer transition-colors hover:bg-gray-50/80">
                         <td className="hidden py-2.5 pr-4 pl-6 text-xs whitespace-nowrap text-gray-500 lg:table-cell">
-                          {formatCustomerDate(customer.createdAt)}
+                          {formatCustomerDate(customer.created_at)}
                         </td>
                         <td className="max-w-0 py-3 pr-3 align-middle lg:hidden">
                           <div className="flex min-w-0 items-center gap-2.5">
                             <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-gray-200 bg-gray-100 text-[11px] font-medium text-gray-700">
-                              {contactInitials(`${customer.firstName} ${customer.lastName}`)}
+                              {contactInitials(customer.full_name)}
                             </span>
                             <span className="truncate text-xs font-semibold text-gray-950 group-hover:text-black">
-                              {customer.firstName} {customer.lastName}
+                              {customer.full_name}
                             </span>
                           </div>
                         </td>
                         <td className="hidden px-4 py-2.5 font-medium text-gray-900 lg:table-cell">
                           <div className="flex items-center space-x-3">
                             <span className="text-xs font-semibold text-gray-950 group-hover:text-black">
-                              {customer.firstName}
+                              {name.first}
                             </span>
                           </div>
                         </td>
                         <td className="hidden px-4 py-2.5 text-xs font-semibold text-gray-950 group-hover:text-black lg:table-cell">
-                          {customer.lastName}
+                          {name.last}
                         </td>
                         <td className="hidden px-4 py-2.5 font-mono text-xs text-gray-900 lg:table-cell">
                           {formatCustomerPhone(customer.phone)}
@@ -162,7 +169,8 @@ export function CustomerList({
                           </div>
                         </td>
                       </tr>
-                    ))
+                      );
+                    })
                   )}
                 </tbody>
               </table>

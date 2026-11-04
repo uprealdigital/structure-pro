@@ -1,5 +1,5 @@
 import { CustomerList } from "@/src/features/crm/customers/components/customer-list";
-import { getCustomerList } from "@/src/features/crm/customers/server/queries";
+import { getCustomers } from "@/src/features/crm/customers/server/queries";
 import type { CustomerListItem } from "@/src/features/crm/customers/types";
 import { copy } from "@/src/features/crm/common/locales/en";
 
@@ -14,7 +14,7 @@ export default async function CustomersPage() {
   let loadError = false;
 
   try {
-    customers = await getCustomerList();
+    customers = await getCustomers();
   } catch {
     loadError = true;
   }

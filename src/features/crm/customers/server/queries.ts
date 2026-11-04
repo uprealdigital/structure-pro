@@ -1,21 +1,29 @@
 import "server-only";
 
-import { cache } from "react";
 import { db } from "@/src/common/lib/supabase/supabase.service";
 import { throwIfError } from "@/src/common/utils/error-handling";
-import { readCustomers } from "@/src/features/crm/common/db/customer";
-import type { CustomerListItem } from "@/src/features/crm/customers/types";
-import { toCustomerListItem } from "@/src/features/crm/customers/utils/mappers";
+import { customerListItemSchema, type CustomerListItem } from "@/src/features/crm/customers/types";
 
-export const getCustomerList = cache(async (): Promise<CustomerListItem[]> => {
-  const customers = await readCustomers();
-  return customers
-    .map(toCustomerListItem)
-    .filter((customer): customer is CustomerListItem => customer != null);
-});
-
-export async function getCustomerCount(): Promise<number> {
-  const { count, error } = await db("crm").from("customers").select("id", { count: "exact", head: true });
-  throwIfError(error);
-  return count ?? 0;
+function crm() {
+  return db("crm");
 }
+
+export async function getCustomers(): Promise<CustomerListItem[]> {
+  const { data, error } = await crm()
+    .from("customers")
+    .select(
+      `
+      id,
+      full_name,
+      phone,
+      email,
+      created_at
+    `,
+    )
+    .order("created_at", { ascending: false })
+    .limit(50);
+
+  throwIfError(error);
+  return customerListItemSchema.array().parse(data ?? []);
+}
+
