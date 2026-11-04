@@ -1,7 +1,7 @@
 import { Bone, SkeletonStatus } from "@/src/features/crm/common/components/skeleton";
 import { copy } from "@/src/features/crm/quotes/locales/en";
 
-const columns = [copy.dateCreated, copy.deal, copy.customers, copy.price, copy.status];
+const columns = [copy.dateCreated, copy.deal, copy.customers, copy.status];
 const rows = 8;
 
 export function QuotesSkeleton() {
@@ -27,7 +27,6 @@ export function QuotesSkeleton() {
                   </div>
                 </div>
                 <div className="flex flex-col items-end gap-1">
-                  <Bone className="h-3 w-14" />
                   <Bone className="h-5 w-14 rounded-full" />
                 </div>
               </div>
@@ -60,10 +59,6 @@ export function QuotesSkeleton() {
                       <Bone className="h-7 w-7 shrink-0 rounded-full" />
                       <Bone className="h-3 w-28" />
                     </div>
-                  </td>
-                  <td className="px-4 py-3.5">
-                    <Bone className="h-3 w-16" />
-                    <Bone className="mt-1.5 h-2.5 w-12" />
                   </td>
                   <td className="px-4 py-3.5">
                     <Bone className="h-5 w-16 rounded" />

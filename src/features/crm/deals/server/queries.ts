@@ -1,21 +1,18 @@
 import "server-only";
 
-import { cache } from "react";
 import { getSupabase } from "@/src/common/lib/supabase/supabase.service";
-import { getQuoteForPage } from "@/src/features/cpq/server/queries";
 import { readCustomers } from "@/src/features/crm/common/db/customer";
 import { readDealCustomers } from "@/src/features/crm/common/db/deal-customer";
-import { readConversations } from "@/src/features/crm/conversations/db/conversation";
-import { canonicalConversationByCustomer } from "@/src/features/crm/conversations/utils/conversations";
 import { readDeal, readDeals } from "@/src/features/crm/deals/db/deal";
 import {
   dealChangeEventSchema,
-  type DealBoardItem,
+  dealListWireSchema,
   type DealChangeEvent,
   type DealChangeKind,
+  type DealListWire,
 } from "@/src/features/crm/deals/types";
-import { dealDetailLine, dealProductName } from "@/src/features/crm/deals/utils/formatting";
-import { toDealBoardItem, toDealChangeEvent } from "@/src/features/crm/deals/utils/mappers";
+import { toDealChangeEvent } from "@/src/features/crm/deals/utils/mappers";
+import { readNestedQuotes } from "@/src/features/crm/quotes/server/queries";
 
 const dealIdPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -28,47 +25,36 @@ export async function getDealCount(): Promise<number> {
   return deals.length;
 }
 
-export const getDealBoard = cache(async (): Promise<DealBoardItem[]> => {
-  const [deals, conversations, customers, links] = await Promise.all([
-    readDeals(),
-    readConversations(),
-    readCustomers(),
-    readDealCustomers(),
-  ]);
+export async function getDealList(): Promise<DealListWire[]> {
+  const [deals, customers, links] = await Promise.all([readDeals(), readCustomers(), readDealCustomers()]);
   const customerById = new Map(customers.map((customer) => [customer.id, customer]));
-  const conversationByCustomer = canonicalConversationByCustomer(conversations);
-  const customersByDeal = new Map<string, { customer: (typeof customers)[number]; isPrimary: boolean }[]>();
+  const customersByDeal = new Map<string, { id: string; fullName: string; isPrimary: boolean }[]>();
   for (const link of links) {
     const customer = customerById.get(link.customerId);
     if (!customer) continue;
     const related = customersByDeal.get(link.dealId) ?? [];
-    related.push({ customer, isPrimary: link.isPrimary });
+    related.push({ id: customer.id, fullName: customer.fullName, isPrimary: link.isPrimary });
     customersByDeal.set(link.dealId, related);
   }
-
-  const items: DealBoardItem[] = [];
+  const quotes = await readNestedQuotes(deals.map((deal) => deal.quoteId));
+  const items: DealListWire[] = [];
   for (const deal of deals) {
     const related = (customersByDeal.get(deal.id) ?? []).sort(
       (left, right) => Number(right.isPrimary) - Number(left.isPrimary),
     );
     if (related.length === 0) continue;
-    const conversation = conversationByCustomer.get(related[0]?.customer.id ?? "");
-    const quote = deal.quoteId ? await getQuoteForPage(deal.quoteId) : undefined;
-    const specs = quote?.summary.specs ?? [];
-    const item = toDealBoardItem({
-      deal,
-      contactName: related.map((entry) => entry.customer.fullName).join(", "),
-      customers: related.map((entry) => ({ id: entry.customer.id, name: entry.customer.fullName })),
-      productName: deal.name?.trim() || dealProductName(specs),
-      detail: dealDetailLine(specs),
-      valueLabel: quote?.summary.totalLabel ?? "",
-      conversationId: conversation?.id,
+    const parsed = dealListWireSchema.safeParse({
+      id: deal.id,
+      name: deal.name,
+      source: deal.source,
+      status: deal.status,
+      customers: related.map((entry) => ({ id: entry.id, full_name: entry.fullName })),
+      quote: deal.quoteId ? (quotes.get(deal.quoteId) ?? null) : null,
     });
-    if (item) items.push(item);
+    if (parsed.success) items.push(parsed.data);
   }
-
   return items;
-});
+}
 
 export function openDealStream(dealId: string | undefined, signal: AbortSignal): ReadableStream<Uint8Array> {
   const scoped = dealId?.trim();

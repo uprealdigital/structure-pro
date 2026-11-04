@@ -103,6 +103,18 @@ export async function readConversationById(id: string): Promise<Conversation | u
   return toConversation(row, await readActivities(row.id));
 }
 
+export async function readConversationSummaryById(id: string): Promise<ConversationSummary | undefined> {
+  if (!id) return undefined;
+  const { data, error } = await crm()
+    .from("conversations")
+    .select(`${conversationColumns}, created_at, updated_at`)
+    .eq("id", id)
+    .maybeSingle();
+  throwIfError(error);
+  if (!data) return undefined;
+  return toConversationSummary(data as ConversationSummaryRow);
+}
+
 export async function readConversationSummaryByCustomer(
   customerId: string,
 ): Promise<ConversationSummary | undefined> {

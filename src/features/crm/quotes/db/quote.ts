@@ -187,6 +187,64 @@ export async function readQuotes(): Promise<Array<ListedQuote & { status: QuoteS
   });
 }
 
+export type QuoteIdentity = {
+  id: string;
+  quoteNumber: number;
+  status: QuoteStatus;
+  activeRevisionId: string | null;
+  createdAt: string;
+};
+
+function quoteIdentity(row: {
+  id?: unknown;
+  quote_number?: unknown;
+  status?: unknown;
+  active_revision_id?: unknown;
+  created_at?: unknown;
+}): QuoteIdentity | undefined {
+  if (typeof row.id !== "string") return undefined;
+  const quoteNumber = quoteNumberValue(row.quote_number);
+  if (!quoteNumber) return undefined;
+  return {
+    id: row.id,
+    quoteNumber,
+    status: storedQuoteStatus(row.status),
+    activeRevisionId: typeof row.active_revision_id === "string" ? row.active_revision_id : null,
+    createdAt: typeof row.created_at === "string" ? row.created_at : "",
+  };
+}
+
+async function quoteIdentities(
+  apply: (columns: string) => PromiseLike<{ data: unknown; error: { message: string } | null }>,
+): Promise<QuoteIdentity[]> {
+  const columns = "id, quote_number, status, active_revision_id, created_at";
+  const { data, error } = await apply(columns);
+  throwIfError(error);
+  return quoteRows(data).flatMap((row) => {
+    const quote = quoteIdentity(row);
+    return quote ? [quote] : [];
+  });
+}
+
+export async function readQuoteIdentities(): Promise<QuoteIdentity[]> {
+  return quoteIdentities((columns) =>
+    crm().from("quotes").select(columns).order("created_at", { ascending: false }),
+  );
+}
+
+export async function readQuoteIdentitiesByIds(ids: string[]): Promise<QuoteIdentity[]> {
+  const unique = [...new Set(ids.filter((id) => id.length > 0))];
+  if (unique.length === 0) return [];
+  const rows: QuoteIdentity[] = [];
+  for (let index = 0; index < unique.length; index += 100) {
+    const chunk = unique.slice(index, index + 100);
+    rows.push(
+      ...(await quoteIdentities((columns) => crm().from("quotes").select(columns).in("id", chunk))),
+    );
+  }
+  return rows;
+}
+
 export async function readActiveRevisionId(quoteId: string): Promise<string | undefined> {
   const { data, error } = await crm()
     .from("quotes")

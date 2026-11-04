@@ -11,15 +11,15 @@ import { useCreateWalkInDeal } from "@/src/features/crm/deals/hooks/use-create-w
 import { copy as dealCopy } from "@/src/features/crm/deals/locales/en";
 import { QuoteCustomers } from "@/src/features/crm/quotes/components/quote-customers";
 import { QuoteStatusBadge } from "@/src/features/crm/quotes/components/quote-status-badge";
+import { QuotesSkeleton } from "@/src/features/crm/quotes/components/quotes-skeleton";
 import { useQuoteStream } from "@/src/features/crm/quotes/hooks/use-quote-stream";
 import { copy } from "@/src/features/crm/quotes/locales/en";
-import { loadQuoteListItem } from "@/src/features/crm/quotes/server/actions";
-import type { QuoteListItem } from "@/src/features/crm/quotes/types";
+import { quoteListResponseSchema, type QuoteListWire } from "@/src/features/crm/quotes/types";
 import { formatQuoteDate, quotePageNumbers } from "@/src/features/crm/quotes/utils/formatting";
 
 const pageSize = 15;
 
-function QuoteListMobileRow({ quote, onOpen }: { quote: QuoteListItem; onOpen: () => void }) {
+function QuoteListMobileRow({ quote, onOpen }: { quote: QuoteListWire; onOpen: () => void }) {
   const customers = quote.customers;
   const primary = customers[0];
   const extra = Math.max(0, customers.length - 1);
@@ -32,7 +32,7 @@ function QuoteListMobileRow({ quote, onOpen }: { quote: QuoteListItem; onOpen: (
     >
       <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3">
         <div className="min-w-0">
-          <div className="truncate text-xs font-medium text-gray-900">{quote.dealLabel}</div>
+          <div className="truncate text-xs font-medium text-gray-900">{quote.quote_number}</div>
           <div className="mt-1 flex min-w-0 items-center gap-1.5">
             {customers.length > 0 ? (
               <span className="flex shrink-0 items-center -space-x-2">
@@ -42,64 +42,72 @@ function QuoteListMobileRow({ quote, onOpen }: { quote: QuoteListItem; onOpen: (
                     className="flex h-7 w-7 items-center justify-center rounded-full border-2 border-white bg-gray-100 text-xs font-semibold text-gray-800 ring-1 ring-gray-200"
                     style={{ zIndex: customers.length - index }}
                   >
-                    {contactInitials(customer.name)}
+                    {contactInitials(customer.full_name)}
                   </span>
                 ))}
               </span>
             ) : null}
             {primary ? (
-              <span className="truncate font-serif text-xs font-semibold text-gray-950">{primary.name}</span>
+              <span className="truncate font-serif text-xs font-semibold text-gray-950">{primary.full_name}</span>
             ) : (
               <span className="text-xs text-gray-400">—</span>
             )}
             {extra > 0 ? <span className="shrink-0 font-serif text-xs font-semibold text-gray-500">+{extra}</span> : null}
           </div>
         </div>
-        <div className="flex shrink-0 flex-col items-end gap-1">
-          <div className="font-mono text-xs font-semibold whitespace-nowrap text-gray-950">{quote.priceLabel}</div>
-          <QuoteStatusBadge status={quote.status} />
-        </div>
+        <QuoteStatusBadge status={quote.status} />
       </div>
     </button>
   );
 }
 
-export function QuoteList({ quotes: initialQuotes, loadError }: { quotes: QuoteListItem[]; loadError: boolean }) {
+export function QuoteList() {
   const router = useRouter();
   const desktop = useCrmDesktop();
   const createDeal = useCreateWalkInDeal();
-  const [quotes, setQuotes] = useState(initialQuotes);
+  const [quotes, setQuotes] = useState<QuoteListWire[]>([]);
+  const [loadError, setLoadError] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState("");
   const [pageIndex, setPageIndex] = useState(0);
   useEffect(() => {
-    setQuotes(initialQuotes);
-  }, [initialQuotes]);
+    let cancelled = false;
+    void fetch("/api/crm/quotes")
+      .then(async (response) => {
+        if (!response.ok) throw new Error("load");
+        return response.json();
+      })
+      .then((payload) => {
+        if (cancelled) return;
+        const parsed = quoteListResponseSchema.safeParse(payload);
+        if (!parsed.success) throw new Error("load");
+        setQuotes(parsed.data.quotes);
+        setLoadError(false);
+      })
+      .catch(() => {
+        if (!cancelled) setLoadError(true);
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
   useQuoteStream((event) => {
     if (event.kind === "delete") {
       setQuotes((current) => current.filter((item) => item.id !== event.id));
       return;
     }
-    if (event.status) {
-      setQuotes((current) =>
-        current.map((item) => (item.id === event.id ? { ...item, status: event.status ?? item.status } : item)),
-      );
-    }
-    void loadQuoteListItem({ quoteId: event.id }).then((result) => {
-      if ("error" in result || !result.data) return;
-      const item = result.data;
-      setQuotes((current) => {
-        const index = current.findIndex((quote) => quote.id === item.id);
-        if (index === -1) return [item, ...current];
-        const next = current.slice();
-        next[index] = item;
-        return next;
-      });
-    });
+    if (!event.status) return;
+    setQuotes((current) =>
+      current.map((item) => (item.id === event.id ? { ...item, status: event.status ?? item.status } : item)),
+    );
   });
   const needle = query.trim().toLowerCase();
   const visible = needle
     ? quotes.filter((quote) =>
-        [quote.id, quote.invoiceId, quote.dealLabel, quote.zip, ...quote.customers.map((customer) => customer.name)]
+        [String(quote.quote_number), quote.status, ...quote.customers.map((customer) => customer.full_name)]
           .join(" ")
           .toLowerCase()
           .includes(needle),
@@ -111,6 +119,8 @@ export function QuoteList({ quotes: initialQuotes, loadError }: { quotes: QuoteL
   const start = visible.length === 0 ? 0 : page * pageSize + 1;
   const end = Math.min(visible.length, (page + 1) * pageSize);
   const pages = quotePageNumbers(page + 1, pageCount);
+
+  if (loading) return <QuotesSkeleton />;
 
   return (
     <main className="flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-[#f9f9fb] lg:overflow-y-auto">
@@ -186,7 +196,6 @@ export function QuoteList({ quotes: initialQuotes, loadError }: { quotes: QuoteL
                     <th className="py-3.5 pr-4 pl-6 font-semibold text-gray-900">{copy.dateCreated}</th>
                     <th className="px-4 py-3.5 font-semibold text-gray-900">{copy.deal}</th>
                     <th className="px-4 py-3.5 font-semibold text-gray-900">{copy.customers}</th>
-                    <th className="px-4 py-3.5 font-semibold text-gray-900">{copy.price}</th>
                     <th className="px-4 py-3.5 font-semibold whitespace-nowrap text-gray-900">{copy.status}</th>
                     <th className="py-3.5 pr-6 pl-4 text-center font-semibold text-gray-900">
                       <span className="sr-only">{copy.actions}</span>
@@ -196,7 +205,7 @@ export function QuoteList({ quotes: initialQuotes, loadError }: { quotes: QuoteL
                 <tbody className="bg-transparent font-sans">
                   {rows.length === 0 ? (
                     <tr>
-                      <td colSpan={6} className="px-6 py-8 text-sm text-gray-500">
+                      <td colSpan={5} className="px-6 py-8 text-sm text-gray-500">
                         {copy.emptyQuoteSearch}
                       </td>
                     </tr>
@@ -211,11 +220,11 @@ export function QuoteList({ quotes: initialQuotes, loadError }: { quotes: QuoteL
                       >
                         <td className="py-3 pr-4 pl-6">
                           <div className="text-xs font-semibold text-gray-950 group-hover:text-black">
-                            {formatQuoteDate(quote.createdAt)}
+                            {formatQuoteDate(quote.created_at)}
                           </div>
                         </td>
                         <td className="px-4 py-3 text-xs">
-                          <div className="font-semibold text-gray-950 group-hover:text-black">{quote.dealLabel}</div>
+                          <div className="font-semibold text-gray-950 group-hover:text-black">{quote.quote_number}</div>
                         </td>
                         <td className="px-4 py-3 text-xs">
                           {quote.customers.length === 0 ? (
@@ -223,10 +232,6 @@ export function QuoteList({ quotes: initialQuotes, loadError }: { quotes: QuoteL
                           ) : (
                             <QuoteCustomers customers={quote.customers} />
                           )}
-                        </td>
-                        <td className="px-4 py-3 text-xs">
-                          <div className="font-mono font-semibold text-gray-950">{quote.priceLabel}</div>
-                          <div className="mt-0.5 text-[10px] text-gray-500">{quote.monthlyLabel}</div>
                         </td>
                         <td className="px-4 py-3 text-xs whitespace-nowrap">
                           <QuoteStatusBadge status={quote.status} />

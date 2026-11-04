@@ -1,7 +1,8 @@
 import { assertInternal } from "@/src/common/utils/internal-call";
-import { createConversation } from "@/src/features/crm/conversations/db/conversation";
-import { activityInsertSchema, type ActivityInsert } from "@/src/features/crm/conversations/types";
 import { recordCrmLog } from "@/src/features/crm/common/db/log";
+import { createConversation } from "@/src/features/crm/conversations/db/conversation";
+import { getConversationIndex } from "@/src/features/crm/conversations/server/queries";
+import { activityInsertSchema, type ActivityInsert } from "@/src/features/crm/conversations/types";
 
 export const runtime = "nodejs";
 
@@ -16,6 +17,27 @@ async function payloadOf(request: Request): Promise<Record<string, unknown> | nu
     return body as Record<string, unknown>;
   } catch {
     return null;
+  }
+}
+
+function queryValue(value: string | null): string | undefined {
+  const trimmed = value?.trim();
+  return trimmed ? trimmed : undefined;
+}
+
+export async function GET(request: Request) {
+  const url = new URL(request.url);
+  try {
+    const index = await getConversationIndex({
+      autoSelect: url.searchParams.get("autoSelect") === "first",
+      conversationId: queryValue(url.searchParams.get("conversation")),
+      dealId: queryValue(url.searchParams.get("deal")),
+    });
+    return Response.json(index);
+  } catch (error) {
+    void recordCrmLog({ feature: "conversations", error });
+    const message = error instanceof Error ? error.message : "Could not load conversations";
+    return Response.json({ error: message }, { status: 500 });
   }
 }
 

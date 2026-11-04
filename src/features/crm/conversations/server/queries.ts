@@ -5,45 +5,52 @@ import { getSupabase } from "@/src/common/lib/supabase/supabase.service";
 import { toE164 } from "@/src/common/utils/phone";
 import { getQuoteForPage } from "@/src/features/cpq/server/queries";
 import { readCustomer, readCustomerByPhone, readCustomers } from "@/src/features/crm/common/db/customer";
-import {
-  readDealCustomers,
-  readDealCustomersForCustomer,
-  readDealCustomersForDeals,
-} from "@/src/features/crm/common/db/deal-customer";
-import type { DealCustomer } from "@/src/features/crm/common/types";
+import { readDealCustomers, readDealCustomersForCustomer } from "@/src/features/crm/common/db/deal-customer";
+import type { Customer, DealCustomer } from "@/src/features/crm/common/types";
 import { getCustomer } from "@/src/features/crm/common/server/queries";
 import {
   conversationUnreadCount,
   countUnreadActivities,
   readActivities,
+  readActivitiesForConversations,
   readActivitiesSince,
   readLatestActivity,
   readLatestConversationIdForChannel,
   readLatestMessageAt,
+  type ActivityIndexRow,
 } from "@/src/features/crm/conversations/db/activity";
 import {
   readConversation,
   readConversationById,
   readConversationSummariesForCustomer,
   readConversationSummaryByCustomer,
+  readConversationSummaryById,
   readConversations,
 } from "@/src/features/crm/conversations/db/conversation";
 import {
   activityReadEventSchema,
+  activityWireSchema,
   conversationDealOptionSchema,
+  conversationDealWireSchema,
+  conversationDetailWireSchema,
+  conversationIndexResponseSchema,
+  conversationListItemWireSchema,
   conversationSummarySchema,
-  conversationWorkspaceSchema,
   type ActivityEvent,
   type ActivityReadEvent,
+  type ActivityWire,
   type Conversation,
   type ConversationDealOption,
+  type ConversationDealWire,
+  type ConversationDetailWire,
+  type ConversationIndexResponse,
   type ConversationInboxItem,
+  type ConversationListItemWire,
   type ConversationQuote,
   type ConversationWorkspace,
 } from "@/src/features/crm/conversations/types";
 import { activityPreview, formatDealMenuDate, lastMessageAt, productTitle, unreadActivityCount } from "@/src/features/crm/conversations/utils/formatting";
 import { canonicalConversationByCustomer } from "@/src/features/crm/conversations/utils/conversations";
-import { orderedDealParticipants } from "@/src/features/crm/conversations/utils/participants";
 import {
   toActivityEvent,
   toConversationDealListItem,
@@ -54,9 +61,10 @@ import {
 import { readDeal, readDeals, readDealsByIds } from "@/src/features/crm/deals/db/deal";
 import { readDealQuotes } from "@/src/features/crm/deals/db/deal-quote";
 import type { Deal } from "@/src/features/crm/deals/types";
-import { priceSummary } from "@/src/features/cpq/utils/pricing";
 import { readActiveRevisionId, readQuoteStatus, readQuotesByIds } from "@/src/features/crm/quotes/db/quote";
 import { readQuoteRevisions } from "@/src/features/crm/quotes/db/quote-revision";
+import { readNestedQuotes } from "@/src/features/crm/quotes/server/queries";
+import { workspaceFromWire } from "@/src/features/crm/conversations/utils/wire";
 import type { ConversationQuoteRevision } from "@/src/features/crm/conversations/types";
 
 export async function getConversation(key: string) {
@@ -202,30 +210,6 @@ async function dealOption(
     activities: [],
   });
   return option.success ? option.data : undefined;
-}
-
-async function lightDealOptions(deals: Deal[]): Promise<ConversationDealOption[]> {
-  if (deals.length === 0) return [];
-  const idLists = await Promise.all(deals.map((deal) => quoteIdsForDeal(deal.id, deal.quoteId)));
-  const quoteIds = [...new Set(idLists.flat())];
-  const quotes = quoteIds.length > 0 ? await readQuotesByIds(quoteIds) : [];
-  const quoteById = new Map(quotes.map((quote) => [quote.id, quote]));
-  return deals.flatMap((deal, index) => {
-    const ids = idLists[index] ?? [];
-    const record = quoteById.get(deal.quoteId) ?? ids.map((id) => quoteById.get(id)).find((quote) => quote != null);
-    const summary = record ? priceSummary(record.selections) : undefined;
-    const option = conversationDealOptionSchema.safeParse({
-      id: deal.id,
-      title: deal.name?.trim() || productTitle(summary?.specs ?? []) || record?.invoiceId || "",
-      priceLabel: summary?.totalLabel ?? "",
-      stage: deal.status,
-      dateLabel: formatDealMenuDate(deal.createdAt ?? ""),
-      deal,
-      quote: null,
-      quotes: [],
-    });
-    return option.success ? [option.data] : [];
-  });
 }
 
 export async function getUnreadActivityCount(): Promise<number> {
@@ -479,72 +463,9 @@ export async function getConversationWorkspace(
   id: string,
   dealId?: string,
 ): Promise<ConversationWorkspace | undefined> {
-  const conversation = await readConversationById(id);
+  const conversation = await getConversationDetail(id, dealId);
   if (!conversation) return undefined;
-
-  const customer = await readCustomer(conversation.customerId);
-  if (!customer) return undefined;
-  const links = await readDealCustomersForCustomer(customer.id);
-  const deals = (await readDealsByIds(links.map((link) => link.dealId))).sort(byNewest);
-  const primaryIds = new Set(links.filter((link) => link.isPrimary).map((link) => link.dealId));
-  const focusedDeal =
-    (dealId ? deals.find((deal) => deal.id === dealId) : undefined) ??
-    (customer.activeDealId ? deals.find((deal) => deal.id === customer.activeDealId) : undefined) ??
-    deals.find((deal) => primaryIds.has(deal.id)) ??
-    deals[0];
-  const [focusedOption, lightOptions] = await Promise.all([
-    focusedDeal ? dealOption(focusedDeal, conversation) : undefined,
-    lightDealOptions(deals.filter((deal) => deal.id !== focusedDeal?.id)),
-  ]);
-  const lightById = new Map(lightOptions.map((option) => [option.id, option]));
-  const options = deals.flatMap((deal) => {
-    if (deal.id === focusedDeal?.id) return focusedOption ? [focusedOption] : [];
-    const light = lightById.get(deal.id);
-    return light ? [light] : [];
-  });
-  if (options.length === 0) return undefined;
-
-  const participantLinks = await readDealCustomersForDeals(options.map((option) => option.id));
-  const [people, summaries] = await Promise.all([readCustomers(), readConversations()]);
-  const customerById = new Map(people.map((person) => [person.id, person]));
-  const conversationByCustomer = canonicalConversationByCustomer(summaries);
-  const participants = orderedDealParticipants(
-    participantLinks.flatMap((link) => {
-      const person = customerById.get(link.customerId);
-      if (!person) return [];
-      const conversationId = conversationByCustomer.get(person.id)?.id;
-      return [
-        {
-          dealId: link.dealId,
-          isPrimary: link.isPrimary,
-          ...(conversationId ? { conversationId } : {}),
-          customer: person,
-        },
-      ];
-    }),
-  );
-
-  const saved = customer.activeDealId
-    ? options.find((option) => option.id === customer.activeDealId)
-    : undefined;
-  const focused =
-    (dealId ? options.find((option) => option.id === dealId) : undefined) ??
-    saved ??
-    options.find((option) => primaryIds.has(option.id)) ??
-    options[0];
-
-  const workspace = conversationWorkspaceSchema.safeParse({
-    id: conversation.id,
-    contractSent: conversation.contractSent,
-    createdAt: conversation.createdAt ?? "",
-    customer,
-    deal: focused.deal,
-    deals: options,
-    participants,
-    activities: conversation.activities,
-    quote: focused.quote,
-  });
-  return workspace.success ? workspace.data : undefined;
+  return workspaceFromWire(conversation);
 }
 
 export async function getCustomerDeals(customerId: string) {
@@ -609,4 +530,222 @@ export async function getAgentSession(key: string) {
       contractSent: conversation.contractSent,
     },
   };
+}
+
+function activityWire(row: ActivityIndexRow): ActivityWire | undefined {
+  const parsed = activityWireSchema.safeParse({
+    position: row.position,
+    channel: row.channel,
+    role: row.role,
+    body: row.body,
+    created_at: row.createdAt,
+  });
+  return parsed.success ? parsed.data : undefined;
+}
+
+function latestActivity(rows: ActivityIndexRow[]): ActivityWire | null {
+  let latest: ActivityWire | undefined;
+  for (const row of rows) {
+    const activity = activityWire(row);
+    if (!activity) continue;
+    if (!latest || activity.position >= latest.position) latest = activity;
+  }
+  return latest ?? null;
+}
+
+function unreadCount(rows: ActivityIndexRow[]): number {
+  return rows.filter((row) => row.readAt == null).length;
+}
+
+function focusedDeal(
+  deals: Deal[],
+  links: DealCustomer[],
+  customer: Customer,
+  dealId?: string,
+): Deal | undefined {
+  const linked = linkedDeals(links, deals, customer.id).sort(byNewest);
+  const primaryIds = new Set(links.filter((link) => link.isPrimary).map((link) => link.dealId));
+  return (
+    (dealId ? linked.find((deal) => deal.id === dealId) : undefined) ??
+    (customer.activeDealId ? linked.find((deal) => deal.id === customer.activeDealId) : undefined) ??
+    linked.find((deal) => primaryIds.has(deal.id)) ??
+    linked[0]
+  );
+}
+
+function customerWire(customer: Customer): ConversationListItemWire["customer"] {
+  return {
+    id: customer.id,
+    full_name: customer.fullName,
+    phone: customer.phone,
+    email: customer.email,
+  };
+}
+
+function dealWire(
+  deal: Deal,
+  quotes: Map<string, ConversationDealWire["quote"]>,
+): ConversationDealWire | undefined {
+  const parsed = conversationDealWireSchema.safeParse({
+    id: deal.id,
+    name: deal.name,
+    source: deal.source,
+    status: deal.status,
+    quote: deal.quoteId ? (quotes.get(deal.quoteId) ?? null) : null,
+  });
+  return parsed.success ? parsed.data : undefined;
+}
+
+function listItem(input: {
+  id: string;
+  updatedAt: string;
+  customer: Customer;
+  deal: Deal;
+  quotes: Map<string, ConversationDealWire["quote"]>;
+  activities: ActivityIndexRow[];
+}): ConversationListItemWire | undefined {
+  const deal = dealWire(input.deal, input.quotes);
+  if (!deal) return undefined;
+  const parsed = conversationListItemWireSchema.safeParse({
+    id: input.id,
+    updated_at: input.updatedAt,
+    unread_count: unreadCount(input.activities),
+    customer: customerWire(input.customer),
+    deal,
+    activity: latestActivity(input.activities),
+  });
+  return parsed.success ? parsed.data : undefined;
+}
+
+async function conversationRows(): Promise<{
+  items: ConversationListItemWire[];
+  activities: Map<string, ActivityIndexRow[]>;
+}> {
+  const [summaries, customers, links, deals] = await Promise.all([
+    readConversations(),
+    readCustomers(),
+    readDealCustomers(),
+    readDeals(),
+  ]);
+  const customerById = new Map(customers.map((customer) => [customer.id, customer]));
+  const chosen = [...canonicalConversationByCustomer(summaries).values()].sort((left, right) =>
+    right.updatedAt.localeCompare(left.updatedAt),
+  );
+  const activities = await readActivitiesForConversations(chosen.map((summary) => summary.id));
+  const byConversation = new Map<string, ActivityIndexRow[]>();
+  for (const activity of activities) {
+    const rows = byConversation.get(activity.conversationId) ?? [];
+    rows.push(activity);
+    byConversation.set(activity.conversationId, rows);
+  }
+  const quotes = await readNestedQuotes(deals.map((deal) => deal.quoteId));
+  const items: ConversationListItemWire[] = [];
+  for (const summary of chosen) {
+    const customer = customerById.get(summary.customerId);
+    if (!customer) continue;
+    const deal = focusedDeal(deals, links, customer);
+    if (!deal) continue;
+    const item = listItem({
+      id: summary.id,
+      updatedAt: summary.updatedAt,
+      customer,
+      deal,
+      quotes,
+      activities: byConversation.get(summary.id) ?? [],
+    });
+    if (item) items.push(item);
+  }
+  return { items, activities: byConversation };
+}
+
+function detailFrom(input: {
+  id: string;
+  updatedAt: string;
+  customer: Customer;
+  deal: Deal;
+  quotes: Map<string, ConversationDealWire["quote"]>;
+  activities: ActivityIndexRow[];
+}): ConversationDetailWire | undefined {
+  const deal = dealWire(input.deal, input.quotes);
+  if (!deal) return undefined;
+  const activities = input.activities
+    .flatMap((row) => {
+      const activity = activityWire(row);
+      return activity ? [activity] : [];
+    })
+    .sort((left, right) => left.position - right.position);
+  const parsed = conversationDetailWireSchema.safeParse({
+    id: input.id,
+    updated_at: input.updatedAt,
+    customer: customerWire(input.customer),
+    deal,
+    activities,
+  });
+  return parsed.success ? parsed.data : undefined;
+}
+
+export async function getConversationDetail(
+  key: string,
+  dealId?: string,
+): Promise<ConversationDetailWire | undefined> {
+  const direct = await readConversationSummaryById(key);
+  const summary =
+    direct ??
+    (await (async () => {
+      const found = await readConversation(key);
+      return found ? readConversationSummaryById(found.id) : undefined;
+    })());
+  if (!summary) return undefined;
+  const customer = await readCustomer(summary.customerId);
+  if (!customer) return undefined;
+  const [links, activities] = await Promise.all([
+    readDealCustomersForCustomer(customer.id),
+    readActivitiesForConversations([summary.id]),
+  ]);
+  const deals = await readDealsByIds(links.map((link) => link.dealId));
+  const deal = focusedDeal(deals, links, customer, dealId);
+  if (!deal) return undefined;
+  const quotes = await readNestedQuotes([deal.quoteId]);
+  return detailFrom({
+    id: summary.id,
+    updatedAt: summary.updatedAt,
+    customer,
+    deal,
+    quotes,
+    activities,
+  });
+}
+
+export async function getConversationIndex(input: {
+  autoSelect: boolean;
+  conversationId?: string;
+  dealId?: string;
+}): Promise<ConversationIndexResponse> {
+  const { items, activities } = await conversationRows();
+  if (!input.autoSelect) return conversationIndexResponseSchema.parse({ conversations: items });
+  const requested = input.conversationId
+    ? items.find((item) => item.id === input.conversationId)
+    : undefined;
+  const open = requested ?? items.find((item) => item.deal.status !== "deal_lost");
+  if (!open) return conversationIndexResponseSchema.parse({ conversations: items });
+  const summary = await readConversationSummaryById(open.id);
+  const customer = summary ? await readCustomer(summary.customerId) : undefined;
+  if (!summary || !customer) return conversationIndexResponseSchema.parse({ conversations: items });
+  const links = await readDealCustomersForCustomer(customer.id);
+  const deals = await readDealsByIds(links.map((link) => link.dealId));
+  const deal = focusedDeal(deals, links, customer, input.dealId);
+  if (!deal) return conversationIndexResponseSchema.parse({ conversations: items });
+  const quotes = await readNestedQuotes([deal.quoteId]);
+  const conversation = detailFrom({
+    id: open.id,
+    updatedAt: summary.updatedAt,
+    customer,
+    deal,
+    quotes,
+    activities: activities.get(open.id) ?? [],
+  });
+  return conversationIndexResponseSchema.parse({
+    conversations: items,
+    ...(conversation ? { conversation } : {}),
+  });
 }

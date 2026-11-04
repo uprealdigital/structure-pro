@@ -4,6 +4,7 @@ import { quoteSelectionsSchema } from "@/src/features/cpq/types";
 import {
   configChangesSchema,
   quoteCommunicationSchema,
+  quoteNestedWireSchema,
   quoteStatusSchema,
   quoteRevisionRendersSchema,
 } from "@/src/features/crm/quotes/types";
@@ -218,6 +219,63 @@ export const conversationInboxItemSchema = z.object({
 });
 
 export type ConversationInboxItem = z.infer<typeof conversationInboxItemSchema>;
+
+export const activityWireSchema = z.object({
+  position: z.number().int().nonnegative(),
+  channel: activityChannelSchema,
+  role: z.enum(["user", "model"]),
+  body: z.string(),
+  created_at: z.string(),
+});
+
+export type ActivityWire = z.infer<typeof activityWireSchema>;
+
+export const conversationCustomerWireSchema = z.object({
+  id: z.string(),
+  full_name: z.string(),
+  phone: z.string(),
+  email: z.string(),
+});
+
+export type ConversationCustomerWire = z.infer<typeof conversationCustomerWireSchema>;
+
+export const conversationDealWireSchema = z.object({
+  id: z.string(),
+  name: z.string().nullable(),
+  source: dealSourceSchema,
+  status: dealStatusSchema,
+  quote: quoteNestedWireSchema.nullable(),
+});
+
+export type ConversationDealWire = z.infer<typeof conversationDealWireSchema>;
+
+export const conversationListItemWireSchema = z.object({
+  id: z.string(),
+  updated_at: z.string(),
+  unread_count: z.number().int().nonnegative(),
+  customer: conversationCustomerWireSchema,
+  deal: conversationDealWireSchema,
+  activity: activityWireSchema.nullable(),
+});
+
+export type ConversationListItemWire = z.infer<typeof conversationListItemWireSchema>;
+
+export const conversationDetailWireSchema = z.object({
+  id: z.string(),
+  updated_at: z.string(),
+  customer: conversationCustomerWireSchema,
+  deal: conversationDealWireSchema,
+  activities: z.array(activityWireSchema),
+});
+
+export type ConversationDetailWire = z.infer<typeof conversationDetailWireSchema>;
+
+export const conversationIndexResponseSchema = z.object({
+  conversations: z.array(conversationListItemWireSchema),
+  conversation: conversationDetailWireSchema.optional(),
+});
+
+export type ConversationIndexResponse = z.infer<typeof conversationIndexResponseSchema>;
 
 export const conversationQuoteRevisionSchema = z.object({
   id: z.string(),

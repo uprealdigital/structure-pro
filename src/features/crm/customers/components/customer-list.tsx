@@ -1,36 +1,42 @@
 "use client";
 
 import { ChevronRight, Filter, Plus, Search } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useCrmDesktop } from "@/src/features/crm/common/hooks/use-crm-desktop";
 import { contactInitials } from "@/src/features/crm/common/utils/formatting";
+import { CustomersSkeleton } from "@/src/features/crm/customers/components/customers-skeleton";
 import { copy } from "@/src/features/crm/customers/locales/en";
-import type { CustomerListItem } from "@/src/features/crm/customers/types";
+import {
+  customerDetailWireSchema,
+  customerListResponseSchema,
+  type CustomerDetailWire,
+  type CustomerListWire,
+} from "@/src/features/crm/customers/types";
 import {
   customerPageNumbers,
   formatCustomerDate,
   formatCustomerPhone,
+  splitCustomerName,
 } from "@/src/features/crm/customers/utils/formatting";
+import { dealStatusOption } from "@/src/features/crm/deals/utils/status";
 
 const pageSize = 15;
 
-export function CustomerList({
-  customers,
-  loadError,
-}: {
-  customers: CustomerListItem[];
-  loadError: boolean;
-}) {
+export function CustomerList() {
   const desktop = useCrmDesktop();
+  const [customers, setCustomers] = useState<CustomerListWire[]>([]);
+  const [loadError, setLoadError] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState("");
   const [pageIndex, setPageIndex] = useState(0);
+  const [detail, setDetail] = useState<CustomerDetailWire>();
+  const [detailError, setDetailError] = useState(false);
+  const [detailId, setDetailId] = useState<string>();
+  const detailRequest = useRef(0);
   const needle = query.trim().toLowerCase();
   const visible = needle
     ? customers.filter((customer) =>
-        [customer.firstName, customer.lastName, customer.email, customer.phone]
-          .join(" ")
-          .toLowerCase()
-          .includes(needle),
+        [customer.full_name, customer.email, customer.phone].join(" ").toLowerCase().includes(needle),
       )
     : customers;
   const pageCount = Math.max(1, Math.ceil(visible.length / pageSize));
@@ -39,6 +45,55 @@ export function CustomerList({
   const start = visible.length === 0 ? 0 : page * pageSize + 1;
   const end = Math.min(visible.length, (page + 1) * pageSize);
   const pages = customerPageNumbers(page + 1, pageCount);
+
+  useEffect(() => {
+    let cancelled = false;
+    void fetch("/api/crm/customers")
+      .then(async (response) => {
+        if (!response.ok) throw new Error("load");
+        return response.json();
+      })
+      .then((payload) => {
+        if (cancelled) return;
+        const parsed = customerListResponseSchema.safeParse(payload);
+        if (!parsed.success) throw new Error("load");
+        setCustomers(parsed.data.customers);
+        setLoadError(false);
+      })
+      .catch(() => {
+        if (!cancelled) setLoadError(true);
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  function openCustomer(id: string) {
+    const ticket = detailRequest.current + 1;
+    detailRequest.current = ticket;
+    setDetailId(id);
+    setDetail(undefined);
+    setDetailError(false);
+    void fetch(`/api/crm/customers/${encodeURIComponent(id)}`)
+      .then(async (response) => {
+        if (!response.ok) throw new Error("load");
+        return response.json();
+      })
+      .then((payload) => {
+        if (ticket !== detailRequest.current) return;
+        const parsed = customerDetailWireSchema.safeParse(payload);
+        if (!parsed.success) throw new Error("load");
+        setDetail(parsed.data);
+      })
+      .catch(() => {
+        if (ticket === detailRequest.current) setDetailError(true);
+      });
+  }
+
+  if (loading) return <CustomersSkeleton />;
 
   return (
     <main className="flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-y-auto bg-[#f9f9fb]">
@@ -114,30 +169,36 @@ export function CustomerList({
                       </td>
                     </tr>
                   ) : (
-                    rows.map((customer) => (
-                      <tr key={customer.id} className="group cursor-pointer transition-colors hover:bg-gray-50/80">
+                    rows.map((customer) => {
+                      const name = splitCustomerName(customer.full_name);
+                      return (
+                      <tr
+                        key={customer.id}
+                        onClick={() => openCustomer(customer.id)}
+                        className="group cursor-pointer transition-colors hover:bg-gray-50/80"
+                      >
                         <td className="hidden py-2.5 pr-4 pl-6 text-xs whitespace-nowrap text-gray-500 lg:table-cell">
-                          {formatCustomerDate(customer.createdAt)}
+                          {formatCustomerDate(customer.created_at)}
                         </td>
                         <td className="max-w-0 py-3 pr-3 align-middle lg:hidden">
                           <div className="flex min-w-0 items-center gap-2.5">
                             <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-gray-200 bg-gray-100 text-[11px] font-medium text-gray-700">
-                              {contactInitials(`${customer.firstName} ${customer.lastName}`)}
+                              {contactInitials(customer.full_name)}
                             </span>
                             <span className="truncate text-xs font-semibold text-gray-950 group-hover:text-black">
-                              {customer.firstName} {customer.lastName}
+                              {customer.full_name}
                             </span>
                           </div>
                         </td>
                         <td className="hidden px-4 py-2.5 font-medium text-gray-900 lg:table-cell">
                           <div className="flex items-center space-x-3">
                             <span className="text-xs font-semibold text-gray-950 group-hover:text-black">
-                              {customer.firstName}
+                              {name.firstName}
                             </span>
                           </div>
                         </td>
                         <td className="hidden px-4 py-2.5 text-xs font-semibold text-gray-950 group-hover:text-black lg:table-cell">
-                          {customer.lastName}
+                          {name.lastName}
                         </td>
                         <td className="hidden px-4 py-2.5 font-mono text-xs text-gray-900 lg:table-cell">
                           {formatCustomerPhone(customer.phone)}
@@ -162,7 +223,8 @@ export function CustomerList({
                           </div>
                         </td>
                       </tr>
-                    ))
+                      );
+                    })
                   )}
                 </tbody>
               </table>
@@ -224,6 +286,64 @@ export function CustomerList({
           </div>
         </div>
       )}
+      {detailId ? (
+        <aside className="fixed inset-y-0 right-0 z-30 flex w-full max-w-md flex-col overflow-y-auto border-l border-gray-200 bg-white shadow-xl">
+          <div className="flex items-center justify-between border-b border-gray-200 px-6 py-4">
+            <h2 className="font-serif text-lg font-semibold text-gray-950">
+              {detail?.full_name ?? customers.find((customer) => customer.id === detailId)?.full_name}
+            </h2>
+            <button
+              type="button"
+              onClick={() => {
+                setDetailId(undefined);
+                setDetail(undefined);
+              }}
+              className="cursor-pointer text-xs font-medium text-gray-500 hover:text-gray-900"
+            >
+              {copy.close}
+            </button>
+          </div>
+          {detailError ? (
+            <p className="px-6 py-8 text-sm text-gray-500">{copy.customersLoadError}</p>
+          ) : !detail ? (
+            <p className="px-6 py-8 text-sm text-gray-500">{copy.customers}</p>
+          ) : (
+            <div className="space-y-6 px-6 py-5 text-sm text-gray-700">
+              <div>
+                <div className="font-mono text-xs text-gray-900">{formatCustomerPhone(detail.phone)}</div>
+                <div className="mt-1 text-xs text-gray-600">{detail.email}</div>
+                {detail.conversation ? (
+                  <div className="mt-2 text-[11px] text-gray-500">
+                    {copy.conversation} {formatCustomerDate(detail.conversation.updated_at)}
+                  </div>
+                ) : null}
+              </div>
+              <div>
+                <h3 className="font-serif text-xs font-semibold tracking-wide text-gray-900">{copy.deals}</h3>
+                {detail.deals.length === 0 ? (
+                  <p className="mt-2 text-xs text-gray-500">{copy.noDeals}</p>
+                ) : (
+                  <ul className="mt-3 space-y-3">
+                    {detail.deals.map((deal) => (
+                      <li key={deal.id} className="rounded-md border border-gray-200 px-3 py-2">
+                        <div className="text-xs font-semibold text-gray-950">{deal.name}</div>
+                        <div className="mt-1 text-[11px] text-gray-500">
+                          {dealStatusOption(deal.status)?.label ?? deal.status}
+                        </div>
+                        {deal.quote ? (
+                          <div className="mt-1 text-[11px] text-gray-600">
+                            {copy.quote} {deal.quote.quote_number}
+                          </div>
+                        ) : null}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            </div>
+          )}
+        </aside>
+      ) : null}
     </main>
   );
 }

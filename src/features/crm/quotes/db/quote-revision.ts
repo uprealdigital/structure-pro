@@ -7,9 +7,11 @@ import {
   quoteRevisionPhotosShareSchema,
   quoteRevisionRendersSchema,
   quoteRevisionWriteSchema,
+  quoteStatusSchema,
   type QuoteCommunication,
   type QuoteRevision,
   type QuoteRevisionRenders,
+  type QuoteStatus,
 } from "@/src/features/crm/quotes/types";
 import { changedConfig } from "@/src/features/crm/quotes/utils/config-changes";
 import { toQuoteRevision, type QuoteRevisionRow } from "@/src/features/crm/quotes/utils/mappers";
@@ -21,6 +23,53 @@ function crm() {
 
 const revisionColumns =
   "id, quote_id, revision_number, status, config, config_changes, communication, renders, shared_photos_at, shared_quote_at, created_at, updated_at";
+const revisionIdentityColumns = "id, quote_id, revision_number, status";
+
+export type QuoteRevisionIdentity = {
+  id: string;
+  quoteId: string;
+  revisionNumber: number;
+  status: QuoteStatus;
+};
+
+function revisionIdentity(row: {
+  id?: unknown;
+  quote_id?: unknown;
+  revision_number?: unknown;
+  status?: unknown;
+}): QuoteRevisionIdentity | undefined {
+  const revisionNumber =
+    typeof row.revision_number === "number" ? row.revision_number : Number(row.revision_number);
+  const status = quoteStatusSchema.safeParse(row.status);
+  if (typeof row.id !== "string" || typeof row.quote_id !== "string") return undefined;
+  if (!Number.isInteger(revisionNumber) || revisionNumber <= 0 || !status.success) return undefined;
+  return {
+    id: row.id,
+    quoteId: row.quote_id,
+    revisionNumber,
+    status: status.data,
+  };
+}
+
+export async function readQuoteRevisionIdentitiesByIds(ids: string[]): Promise<QuoteRevisionIdentity[]> {
+  const unique = [...new Set(ids.filter((id) => id.length > 0))];
+  if (unique.length === 0) return [];
+  const rows: QuoteRevisionIdentity[] = [];
+  for (let index = 0; index < unique.length; index += 100) {
+    const chunk = unique.slice(index, index + 100);
+    const { data, error } = await crm()
+      .from("quote_revisions")
+      .select(revisionIdentityColumns)
+      .in("id", chunk);
+    throwIfError(error);
+    for (const row of data ?? []) {
+      const revision = revisionIdentity(row);
+      if (revision) rows.push(revision);
+    }
+  }
+  return rows;
+}
+
 const renderBucket = "quote-revision-renders";
 const maxRenderBytes = 8 * 1024 * 1024;
 

@@ -1,0 +1,40 @@
+---
+description: Screens use the nested projection JSON response pattern, one GET per view
+alwaysApply: true
+---
+
+# Nested projection JSON response
+
+Use the nested projection JSON response pattern for every screen.
+
+A screen makes one GET and renders that JSON. The browser does not call another route for the same view, and it does not join tables.
+
+The response is one nested document. A related record is an object inside its parent. Every key inside an object is a column name from that table, in snake_case. Return only the columns that screen shows. Zod in the feature `types/index.ts` checks each object against those columns.
+
+Do not invent keys. There is no `title`, `amount`, `price`, `stage`, `snippet`, or `name` unless that column exists. `deals.status` is the stage. `customers.full_name` is the name. A quote has `quote_number`, not a name or a price. A count is allowed only when the screen shows a count and no column stores it, as `unread_count` does.
+
+The route stays thin: parse the query, call `server/queries.ts`, return JSON. The query batches its reads and builds the document. Do not load one related row per parent.
+
+Opening another record fetches that record once. Do not load the list again. A list that also opens the first record uses one response, `GET /api/crm/conversations?autoSelect=first` returning `{ conversations, conversation }`.
+
+```json
+{
+  "deals": [
+    {
+      "id": "deal_302",
+      "name": "Deal 1",
+      "source": "quote",
+      "status": "active_quote",
+      "customers": [{ "id": "cust_904", "full_name": "Harper Quinn" }],
+      "quote": {
+        "id": "q_88",
+        "quote_number": 12,
+        "status": "sent",
+        "quote_revision": { "id": "rev_3", "revision_number": 3, "status": "sent" }
+      }
+    }
+  ]
+}
+```
+
+Writes and event streams stay on their own routes. The public quote page keeps its existing document.

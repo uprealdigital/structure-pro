@@ -2,6 +2,7 @@ import type { RouteContext } from "@/src/common/types";
 import { assertInternal } from "@/src/common/utils/internal-call";
 import { updateCustomer } from "@/src/features/crm/common/db/customer";
 import { getCustomer } from "@/src/features/crm/common/server/queries";
+import { getCustomerDetail } from "@/src/features/crm/customers/server/queries";
 import { recordCrmLog } from "@/src/features/crm/common/db/log";
 
 export const runtime = "nodejs";
@@ -16,12 +17,10 @@ async function payloadOf(request: Request): Promise<Record<string, unknown> | nu
   }
 }
 
-export async function GET(request: Request, context: RouteContext) {
-  const denied = assertInternal(request);
-  if (denied) return denied;
+export async function GET(_request: Request, context: RouteContext) {
   const { id } = await context.params;
   try {
-    const customer = await getCustomer(id);
+    const customer = await getCustomerDetail(id);
     if (!customer) return Response.json({ error: "Customer not found" }, { status: 404 });
     return Response.json(customer);
   } catch (error) {

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { quoteNestedWireSchema } from "@/src/features/crm/quotes/types";
 
 export const dealSourceSchema = z.enum(["quote", "yard_preview", "walk_in"]);
 export type DealSource = z.infer<typeof dealSourceSchema>;
@@ -82,6 +83,28 @@ export const dealBoardItemSchema = z.object({
 });
 
 export type DealBoardItem = z.infer<typeof dealBoardItemSchema>;
+
+export const dealCustomerWireSchema = z.object({
+  id: z.string(),
+  full_name: z.string(),
+});
+
+export type DealCustomerWire = z.infer<typeof dealCustomerWireSchema>;
+
+export const dealListWireSchema = z.object({
+  id: z.string(),
+  name: z.string().nullable(),
+  source: dealSourceSchema,
+  status: dealStatusSchema,
+  customers: z.array(dealCustomerWireSchema),
+  quote: quoteNestedWireSchema.nullable(),
+});
+
+export type DealListWire = z.infer<typeof dealListWireSchema>;
+
+export const dealListResponseSchema = z.object({
+  deals: z.array(dealListWireSchema),
+});
 
 export const dealChangeKindSchema = z.enum(["insert", "update", "delete"]);
 export type DealChangeKind = z.infer<typeof dealChangeKindSchema>;
