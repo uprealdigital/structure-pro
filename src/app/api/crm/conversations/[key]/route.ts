@@ -1,7 +1,6 @@
 import type { RouteContext } from "@/src/common/types";
 import { assertInternal } from "@/src/common/utils/internal-call";
-import { deleteConversation, updateConversation } from "@/src/features/crm/conversations/db/conversation";
-import { getConversation } from "@/src/features/crm/conversations/server/queries";
+import { deleteConversation, readConversation, updateConversation } from "@/src/features/crm/conversations/db/conversation";
 import { recordCrmLog } from "@/src/features/crm/common/db/log";
 
 export const runtime = "nodejs";
@@ -23,7 +22,7 @@ export async function GET(request: Request, context: RouteContext) {
   if (!key) return Response.json({ error: "key is required" }, { status: 400 });
 
   try {
-    const conversation = await getConversation(key);
+    const conversation = await readConversation(key);
     if (!conversation) return Response.json({ error: "Conversation not found" }, { status: 404 });
     return Response.json(conversation);
   } catch (error) {

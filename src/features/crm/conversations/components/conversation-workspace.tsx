@@ -26,12 +26,17 @@ import type {
   Activity,
   ActivityEvent,
   ActivityReadEvent,
-  ConversationInboxItem,
+  ConversationListItem,
   ConversationParticipant,
   ConversationWorkspace,
 } from "@/src/features/crm/conversations/types";
-import { mostRelevantDeal } from "@/src/features/crm/conversations/utils/deals";
 import { activityPreview, messageActivityAt } from "@/src/features/crm/conversations/utils/formatting";
+import {
+  conversationPreview,
+  conversationStatus,
+  conversationUnreadCount,
+  conversationUpdatedAt,
+} from "@/src/features/crm/conversations/utils/list";
 import type { DealStatus } from "@/src/features/crm/deals/types";
 
 type InboxPatch = {
@@ -40,10 +45,15 @@ type InboxPatch = {
   updatedAt?: string;
 };
 
-function newestActivityAt(inbox: ConversationInboxItem[], workspace?: ConversationWorkspace): string | undefined {
+function listTime(item: ConversationListItem, patch?: InboxPatch): string {
+  return patch?.updatedAt ?? item.updated_at;
+}
+
+function newestActivityAt(conversations: ConversationListItem[], workspace?: ConversationWorkspace): string | undefined {
   let latest = "";
-  for (const item of inbox) {
-    if (item.updatedAt > latest) latest = item.updatedAt;
+  for (const item of conversations) {
+    const updatedAt = conversationUpdatedAt(item) || item.updated_at;
+    if (updatedAt > latest) latest = updatedAt;
   }
   for (const activity of workspace?.activities ?? []) {
     if (activity.createdAt && activity.createdAt > latest) latest = activity.createdAt;
@@ -51,34 +61,13 @@ function newestActivityAt(inbox: ConversationInboxItem[], workspace?: Conversati
   return latest || undefined;
 }
 
-function shownInbox(
-  items: ConversationInboxItem[],
-  statusByDeal: Record<string, DealStatus>,
-  activeDealByConversation: Record<string, string>,
-): ConversationInboxItem[] {
-  return items.map((item) => {
-    const dealStatuses = item.dealStatuses.map((deal) => {
-      const nextStatus = statusByDeal[deal.id];
-      if (!nextStatus || nextStatus === deal.status) return deal;
-      return { ...deal, status: nextStatus };
-    });
-    const dealId = activeDealByConversation[item.id] ?? item.dealId;
-    return {
-      ...item,
-      dealId,
-      dealStatus: mostRelevantDeal(dealStatuses)?.status ?? item.dealStatus,
-      dealStatuses,
-    };
-  });
-}
-
 export function ConversationWorkspaceView({
-  inbox,
+  conversations,
   workspace,
   selectedId,
   loadError,
 }: {
-  inbox: ConversationInboxItem[];
+  conversations: ConversationListItem[];
   workspace?: ConversationWorkspace;
   selectedId?: string;
   loadError: boolean;
@@ -90,8 +79,8 @@ export function ConversationWorkspaceView({
   const filters = useConversationFilters();
   const [statusByDeal, setStatusByDeal] = useState<Record<string, DealStatus>>({});
   const [activeDealByConversation, setActiveDealByConversation] = useState<Record<string, string>>({});
-  const [opened, setOpened] = useState<ConversationInboxItem[]>([]);
-  const [arrived, setArrived] = useState<ConversationInboxItem[]>([]);
+  const [opened, setOpened] = useState<ConversationListItem[]>([]);
+  const [arrived, setArrived] = useState<ConversationListItem[]>([]);
   const [patches, setPatches] = useState<Record<string, InboxPatch>>({});
   const [unreadCountById, setUnreadCountById] = useState<Record<string, number>>({});
   const serverUnreadCount = useRef(new Map<string, number>());
@@ -103,17 +92,17 @@ export function ConversationWorkspaceView({
   const knownIds = useRef(new Set<string>());
   const requestedIds = useRef(new Set<string>());
   const droppedActivities = useRef(new Set<string>());
-  for (const item of inbox) {
+  for (const item of conversations) {
     knownIds.current.add(item.id);
-    serverUnreadCount.current.set(item.id, item.unreadCount);
+    serverUnreadCount.current.set(item.id, conversationUnreadCount(item));
   }
   for (const item of opened) {
     knownIds.current.add(item.id);
-    serverUnreadCount.current.set(item.id, item.unreadCount);
+    serverUnreadCount.current.set(item.id, conversationUnreadCount(item));
   }
   for (const item of arrived) {
     knownIds.current.add(item.id);
-    serverUnreadCount.current.set(item.id, item.unreadCount);
+    serverUnreadCount.current.set(item.id, conversationUnreadCount(item));
   }
 
   useActivityStream(
@@ -123,7 +112,7 @@ export function ConversationWorkspaceView({
     (event) => {
       applyRead(event);
     },
-    newestActivityAt(inbox, workspace),
+    newestActivityAt(conversations, workspace),
   );
 
   useQuoteStream((event) => {
@@ -214,30 +203,25 @@ export function ConversationWorkspaceView({
   }
 
   const mergedInbox = useMemo(() => {
-    const byId = new Map(inbox.map((item) => [item.id, item]));
+    const byId = new Map(conversations.map((item) => [item.id, item]));
     for (const item of opened) {
       if (!byId.has(item.id)) byId.set(item.id, item);
     }
     for (const item of arrived) {
       if (!byId.has(item.id)) byId.set(item.id, item);
     }
-    for (const [id, patch] of Object.entries(patches)) {
-      const existing = byId.get(id);
-      if (!existing) continue;
-      byId.set(id, {
-        ...existing,
-        preview: patch.preview,
-        updatedAt: patch.updatedAt ?? existing.updatedAt,
-      });
-    }
-    return [...byId.values()].sort((left, right) => right.updatedAt.localeCompare(left.updatedAt));
-  }, [inbox, opened, arrived, patches]);
-  const displayed = shownInbox(mergedInbox, statusByDeal, activeDealByConversation);
-  const visible = filters.visibleItems(displayed).map((item) => {
-    const count = unreadCountById[item.id];
-    if (count === undefined) return item;
-    return { ...item, unreadCount: count, unread: count > 0 };
-  });
+    return [...byId.values()].sort((left, right) =>
+      listTime(right, patches[right.id]).localeCompare(listTime(left, patches[left.id])),
+    );
+  }, [conversations, opened, arrived, patches]);
+  const displayed = mergedInbox;
+  function statusOf(item: ConversationListItem, statuses: Record<string, DealStatus> = statusByDeal) {
+    return conversationStatus(item, statuses);
+  }
+  function previewOf(item: ConversationListItem) {
+    return patches[item.id]?.preview ?? conversationPreview(item);
+  }
+  const visible = filters.visibleItems(displayed, statusOf, previewOf);
   const showDetail = Boolean(selection.selectedId);
   useHideCrmMobileNav(showDetail);
   const showLoadError = loadError || (showDetail && selection.status === "error");
@@ -293,15 +277,17 @@ export function ConversationWorkspaceView({
 
   function applyDealStatus(dealId: string, nextStatus: DealStatus) {
     const currentId = selection.selectedId;
-    const before = filters.visibleItems(displayed);
+    const before = filters.visibleItems(displayed, statusOf, previewOf);
     const index = before.findIndex((item) => item.id === currentId);
     const nextPatches = { ...statusByDeal, [dealId]: nextStatus };
     setStatusByDeal((current) => ({ ...current, [dealId]: nextStatus }));
     selection.patchDealStatus(dealId, nextStatus);
 
-    const stillVisible = filters.visibleItems(shownInbox(mergedInbox, nextPatches, activeDealByConversation)).some(
-      (item) => item.id === currentId,
-    );
+    const stillVisible = filters.visibleItems(
+      mergedInbox,
+      (item) => conversationStatus(item, nextPatches),
+      previewOf,
+    ).some((item) => item.id === currentId);
     if (!stillVisible && currentId && index >= 0) {
       const next = before[index + 1] ?? before[index - 1];
       if (next && next.id !== currentId) selectConversation(next.id);
@@ -365,6 +351,9 @@ export function ConversationWorkspaceView({
     <div className="flex min-h-0 min-w-0 flex-1 self-stretch overflow-hidden">
       <ConversationList
         items={visible}
+        patches={patches}
+        unreadCountById={unreadCountById}
+        statusByDeal={statusByDeal}
         inboxEmpty={displayed.length === 0}
         query={filters.query}
         onQueryChange={filters.setQuery}

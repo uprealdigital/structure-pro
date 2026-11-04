@@ -1,12 +1,10 @@
 import type { QuoteSelections } from "@/src/features/cpq/types";
 import { priceSummary } from "@/src/features/cpq/utils/pricing";
-import type { Customer } from "@/src/features/crm/common/types";
 import {
   activityEventSchema,
   activitySchema,
   callSchema,
   conversationDealListItemSchema,
-  conversationInboxItemSchema,
   conversationQuoteRevisionSchema,
   conversationQuoteSchema,
   conversationSchema,
@@ -16,13 +14,11 @@ import {
   type Call,
   type Conversation,
   type ConversationDealListItem,
-  type ConversationInboxItem,
   type ConversationQuote,
   type ConversationQuoteRevision,
   type ConversationSummary,
 } from "@/src/features/crm/conversations/types";
 import { configChangesSummary } from "@/src/features/crm/conversations/utils/config-changes-summary";
-import { mostRelevantDeal } from "@/src/features/crm/conversations/utils/deals";
 import {
   formatDealMenuDate,
   productTitle,
@@ -139,35 +135,6 @@ export function toConversationSummary(row: ConversationSummaryRow): Conversation
     updatedAt: row.updated_at,
   });
   return summary.success ? summary.data : undefined;
-}
-
-export function toConversationInboxItem(input: {
-  summary: ConversationSummary;
-  customer: Customer;
-  deal: Deal;
-  deals: Deal[];
-  preview: string;
-  updatedAt: string;
-  unread: boolean;
-  unreadCount: number;
-}): ConversationInboxItem | undefined {
-  const linked = input.deals.length > 0 ? input.deals : [input.deal];
-  const item = conversationInboxItemSchema.safeParse({
-    id: input.summary.id,
-    updatedAt: input.updatedAt,
-    preview: input.preview,
-    contactName: input.customer.fullName,
-    contactPhone: input.customer.phone,
-    contactEmail: input.customer.email,
-    dealId: input.deal.id,
-    dealStatus: mostRelevantDeal(linked)?.status ?? input.deal.status,
-    dealStatuses: linked.map((deal) => ({ id: deal.id, status: deal.status })),
-    dealSource: input.deal.source,
-    contractSent: input.summary.contractSent,
-    unread: input.unread,
-    unreadCount: input.unreadCount,
-  });
-  return item.success ? item.data : undefined;
 }
 
 export function toConversationDealListItem(input: {

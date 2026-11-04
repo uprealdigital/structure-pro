@@ -2,7 +2,8 @@ import { demoChatId } from "@/src/common/lib/telegram/telegram.service";
 import { inboundActivitySchema, type InboundActivityChannel } from "@/src/features/ai/types";
 import { recordCrmLog } from "@/src/features/crm/common/db/log";
 import { appendActivity } from "@/src/features/crm/conversations/server/actions";
-import { getConversation, getConversationIdByPhone } from "@/src/features/crm/conversations/server/queries";
+import { readConversation } from "@/src/features/crm/conversations/db/conversation";
+import { getConversationIdByPhone } from "@/src/features/crm/conversations/server/queries";
 
 // Temporary demo routing. Inbound Telegram is recorded on this customer only.
 const demoInboundPhone = "646-284-0831";
@@ -36,7 +37,7 @@ async function conversationIdForChannel(
   channelKey: string,
 ): Promise<string | undefined> {
   if (channel !== "telegram") {
-    const existing = await getConversation(channelKey);
+    const existing = await readConversation(channelKey);
     return existing?.id;
   }
 

@@ -1,66 +1,50 @@
 import "server-only";
 
-import { cache } from "react";
-import { getSupabase } from "@/src/common/lib/supabase/supabase.service";
+import { throwIfError } from "@/src/common/utils/error-handling";
+import { db, getSupabase } from "@/src/common/lib/supabase/supabase.service";
 import { toE164 } from "@/src/common/utils/phone";
 import { getQuoteForPage } from "@/src/features/cpq/server/queries";
-import { readCustomer, readCustomerByPhone, readCustomers } from "@/src/features/crm/common/db/customer";
-import {
-  readDealCustomers,
-  readDealCustomersForCustomer,
-  readDealCustomersForDeals,
-} from "@/src/features/crm/common/db/deal-customer";
+import { readCustomerByPhone } from "@/src/features/crm/common/db/customer";
+import { readDealCustomersForCustomer } from "@/src/features/crm/common/db/deal-customer";
 import type { DealCustomer } from "@/src/features/crm/common/types";
 import { getCustomer } from "@/src/features/crm/common/server/queries";
 import {
   conversationUnreadCount,
-  readActivities,
   readActivitiesSince,
-  readLatestActivity,
   readLatestConversationIdForChannel,
-  readLatestMessageAt,
 } from "@/src/features/crm/conversations/db/activity";
 import {
   readConversation,
-  readConversationById,
   readConversationSummariesForCustomer,
   readConversationSummaryByCustomer,
-  readConversations,
 } from "@/src/features/crm/conversations/db/conversation";
 import {
   activityReadEventSchema,
   conversationDealOptionSchema,
-  conversationSummarySchema,
-  conversationWorkspaceSchema,
+  conversationDetailSchema,
+  conversationListItemSchema,
   type ActivityEvent,
   type ActivityReadEvent,
   type Conversation,
   type ConversationDealOption,
-  type ConversationInboxItem,
+  type ConversationDetail,
+  type ConversationListItem,
   type ConversationQuote,
-  type ConversationWorkspace,
 } from "@/src/features/crm/conversations/types";
-import { activityPreview, formatDealMenuDate, lastMessageAt, productTitle, unreadActivityCount } from "@/src/features/crm/conversations/utils/formatting";
+import { formatDealMenuDate, productTitle } from "@/src/features/crm/conversations/utils/formatting";
 import { canonicalConversationByCustomer } from "@/src/features/crm/conversations/utils/conversations";
-import { orderedDealParticipants } from "@/src/features/crm/conversations/utils/participants";
 import {
   toActivityEvent,
   toConversationDealListItem,
-  toConversationInboxItem,
   toConversationQuote,
   toConversationQuoteRevision,
 } from "@/src/features/crm/conversations/utils/mappers";
-import { readDeal, readDeals, readDealsByIds } from "@/src/features/crm/deals/db/deal";
+import { readDeal, readDealsByIds } from "@/src/features/crm/deals/db/deal";
 import { readDealQuotes } from "@/src/features/crm/deals/db/deal-quote";
 import type { Deal } from "@/src/features/crm/deals/types";
-import { priceSummary } from "@/src/features/cpq/utils/pricing";
 import { readActiveRevisionId, readQuoteStatus, readQuotesByIds } from "@/src/features/crm/quotes/db/quote";
 import { readQuoteRevisions } from "@/src/features/crm/quotes/db/quote-revision";
 import type { ConversationQuoteRevision } from "@/src/features/crm/conversations/types";
-
-export async function getConversation(key: string) {
-  return readConversation(key);
-}
 
 export async function getLatestChannelConversationId(channel: "sms" | "telegram") {
   return readLatestConversationIdForChannel(channel);
@@ -82,11 +66,6 @@ export async function getConversationIdByPhone(phone: string): Promise<string | 
 
 function byNewest(left: Deal, right: Deal): number {
   return (right.createdAt ?? "").localeCompare(left.createdAt ?? "");
-}
-
-function linkedDeals(links: DealCustomer[], deals: Deal[], customerId: string): Deal[] {
-  const ids = new Set(links.filter((link) => link.customerId === customerId).map((link) => link.dealId));
-  return deals.filter((deal) => ids.has(deal.id));
 }
 
 function latestPrimaryDeal(links: DealCustomer[], deals: Deal[], customerId: string): Deal | undefined {
@@ -203,142 +182,193 @@ async function dealOption(
   return option.success ? option.data : undefined;
 }
 
-async function lightDealOptions(deals: Deal[]): Promise<ConversationDealOption[]> {
-  if (deals.length === 0) return [];
-  const idLists = await Promise.all(deals.map((deal) => quoteIdsForDeal(deal.id, deal.quoteId)));
-  const quoteIds = [...new Set(idLists.flat())];
-  const quotes = quoteIds.length > 0 ? await readQuotesByIds(quoteIds) : [];
-  const quoteById = new Map(quotes.map((quote) => [quote.id, quote]));
-  return deals.flatMap((deal, index) => {
-    const ids = idLists[index] ?? [];
-    const record = quoteById.get(deal.quoteId) ?? ids.map((id) => quoteById.get(id)).find((quote) => quote != null);
-    const summary = record ? priceSummary(record.selections) : undefined;
-    const option = conversationDealOptionSchema.safeParse({
-      id: deal.id,
-      title: deal.name?.trim() || productTitle(summary?.specs ?? []) || record?.invoiceId || "",
-      priceLabel: summary?.totalLabel ?? "",
-      stage: deal.status,
-      dateLabel: formatDealMenuDate(deal.createdAt ?? ""),
-      deal,
-      quote: null,
-      quotes: [],
-    });
-    return option.success ? [option.data] : [];
-  });
+function crm() {
+  return db("crm");
 }
 
-export const getConversationInbox = cache(async (): Promise<ConversationInboxItem[]> => {
-  const [summaries, customers, links, deals] = await Promise.all([
-    readConversations(),
-    readCustomers(),
-    readDealCustomers(),
-    readDeals(),
-  ]);
-  const customerById = new Map(customers.map((customer) => [customer.id, customer]));
-  const chosen = [...canonicalConversationByCustomer(summaries).values()].sort((left, right) =>
-    right.updatedAt.localeCompare(left.updatedAt),
-  );
-  const items: Array<ConversationInboxItem | undefined> = [];
-  for (let index = 0; index < chosen.length; index += 6) {
-    const chunk = await Promise.all(
-      chosen.slice(index, index + 6).map(async (summary) => {
-      const customer = customerById.get(summary.customerId);
-      if (!customer) return undefined;
-      const linked = linkedDeals(links, deals, customer.id).sort(byNewest);
-      const active = customer.activeDealId
-        ? linked.find((item) => item.id === customer.activeDealId)
-        : undefined;
-      const deal = active ?? latestPrimaryDeal(links, deals, customer.id) ?? linked[0];
-      if (!deal) return undefined;
-      const [latest, updatedAt, unreadCount] = await Promise.all([
-        readLatestActivity(summary.id),
-        readLatestMessageAt(summary.id),
-        conversationUnreadCount(summary.id),
-      ]);
-      return toConversationInboxItem({
-        summary,
-        customer,
-        deal,
-        deals: linked,
-        preview: activityPreview(latest),
-        updatedAt,
-        unread: unreadCount > 0,
-        unreadCount,
-      });
-      }),
-    );
-    items.push(...chunk);
-  }
+const conversationListSelect = `
+  id,
+  contract_sent,
+  updated_at,
+  customer:customers!customer_id!inner (
+    id,
+    full_name,
+    phone,
+    email,
+    active_deal_id,
+    deal_customers!inner (
+      is_primary,
+      deal:deals!deal_id (
+        id,
+        name,
+        source,
+        status,
+        created_at
+      )
+    )
+  ),
+  activities (
+    position,
+    role,
+    body,
+    channel,
+    generated_by,
+    read_at,
+    created_at,
+    call:calls!call_id (
+      id,
+      direction,
+      duration_seconds
+    )
+  )
+`;
 
-  return items.filter((item): item is ConversationInboxItem => item != null);
-});
+const conversationQuoteSelect = `
+  id,
+  invoice_id,
+  quote_number,
+  status,
+  active_revision_id,
+  quote_revisions!quote_id (
+    id,
+    revision_number,
+    status,
+    config,
+    config_changes,
+    communication,
+    renders,
+    shared_photos_at,
+    shared_quote_at,
+    created_at,
+    updated_at
+  )
+`;
+
+const conversationSelect = `
+  id,
+  contract_sent,
+  created_at,
+  customer:customers!customer_id!inner (
+    id,
+    full_name,
+    phone,
+    email,
+    opted_out,
+    active_deal_id,
+    created_at,
+    deal_customers!inner (
+      is_primary,
+      deal:deals!deal_id (
+        id,
+        quote_id,
+        source,
+        status,
+        previous_status,
+        name,
+        viewed_at,
+        created_at,
+        quote:quotes!quote_id (
+          ${conversationQuoteSelect}
+        ),
+        deal_quotes (
+          quote:quotes!quote_id (
+            ${conversationQuoteSelect}
+          )
+        ),
+        deal_customers (
+          is_primary,
+          customer:customers!customer_id (
+            id,
+            full_name,
+            phone,
+            email,
+            opted_out,
+            active_deal_id,
+            created_at,
+            conversations (
+              id
+            )
+          )
+        )
+      )
+    )
+  ),
+  activities (
+    position,
+    role,
+    body,
+    channel,
+    generated_by,
+    read_at,
+    created_at,
+    call:calls!call_id (
+      id,
+      direction,
+      duration_seconds,
+      script_match,
+      recording_url,
+      transcript,
+      external_id,
+      started_at,
+      ended_at
+    )
+  )
+`;
+
+export async function getConversations(): Promise<ConversationListItem[]> {
+  const { data, error } = await crm()
+    .from("conversations")
+    .select(conversationListSelect)
+    .order("updated_at", { ascending: false })
+    .limit(50);
+
+  throwIfError(error);
+  return conversationListItemSchema.array().parse(data ?? []);
+}
+
+export async function getConversation(id: string): Promise<ConversationDetail | undefined> {
+  const conversationId = id.trim();
+  if (!conversationId) return undefined;
+  const { data, error } = await crm()
+    .from("conversations")
+    .select(conversationSelect)
+    .eq("id", conversationId)
+    .maybeSingle();
+
+  throwIfError(error);
+  if (!data) return undefined;
+  return conversationDetailSchema.parse(data);
+}
+
+async function readConversationListItem(
+  column: "id" | "customer_id",
+  value: string,
+): Promise<ConversationListItem | undefined> {
+  const { data, error } = await crm()
+    .from("conversations")
+    .select(conversationListSelect)
+    .eq(column, value)
+    .maybeSingle();
+
+  throwIfError(error);
+  if (!data) return undefined;
+  return conversationListItemSchema.parse(data);
+}
 
 export async function getCustomerInboxItem(
   customerId: string,
   dealId: string,
-): Promise<ConversationInboxItem | undefined> {
-  const [customer, summary, links, deals] = await Promise.all([
-    readCustomer(customerId),
-    readConversationSummaryByCustomer(customerId),
-    readDealCustomers(),
-    readDeals(),
-  ]);
-  if (!customer || !summary) return undefined;
-  const linked = linkedDeals(links, deals, customer.id).sort(byNewest);
-  const deal = linked.find((item) => item.id === dealId) ?? linked[0];
-  if (!deal) return undefined;
-  const activities = await readActivities(summary.id);
-  return toConversationInboxItem({
-    summary,
-    customer,
-    deal,
-    deals: linked,
-    preview: activityPreview(activities.at(-1)),
-    updatedAt: lastMessageAt(activities),
-    unread: unreadActivityCount(activities) > 0,
-    unreadCount: unreadActivityCount(activities),
-  });
+): Promise<ConversationListItem | undefined> {
+  const item = await readConversationListItem("customer_id", customerId);
+  if (!item) return undefined;
+  if (!item.customer.deal_customers.some((link) => link.deal.id === dealId)) return undefined;
+  return item;
 }
 
 export async function getConversationInboxItem(
   conversationId: string,
-): Promise<ConversationInboxItem | undefined> {
-  const conversation = await readConversationById(conversationId);
-  if (!conversation) return undefined;
-  const [customer, links, deals] = await Promise.all([
-    readCustomer(conversation.customerId),
-    readDealCustomers(),
-    readDeals(),
-  ]);
-  if (!customer) return undefined;
-  const linked = linkedDeals(links, deals, customer.id).sort(byNewest);
-  const active = customer.activeDealId
-    ? linked.find((item) => item.id === customer.activeDealId)
-    : undefined;
-  const deal = active ?? latestPrimaryDeal(links, deals, customer.id) ?? linked[0];
-  if (!deal) return undefined;
-  const updatedAt = lastMessageAt(conversation.activities) || conversation.createdAt || new Date(0).toISOString();
-  const summary = conversationSummarySchema.safeParse({
-    id: conversation.id,
-    lookupKey: conversation.lookupKey,
-    channelKey: conversation.channelKey,
-    chatId: conversation.chatId,
-    customerId: conversation.customerId,
-    contractSent: conversation.contractSent,
-    createdAt: conversation.createdAt,
-    updatedAt,
-  });
-  if (!summary.success) return undefined;
-  return toConversationInboxItem({
-    summary: summary.data,
-    customer,
-    deal,
-    deals: linked,
-    preview: activityPreview(conversation.activities.at(-1)),
-    updatedAt,
-    unread: unreadActivityCount(conversation.activities) > 0,
-    unreadCount: unreadActivityCount(conversation.activities),
-  });
+): Promise<ConversationListItem | undefined> {
+  return readConversationListItem("id", conversationId);
 }
 
 export function openActivityStream(since: string | undefined, signal: AbortSignal): ReadableStream<Uint8Array> {
@@ -470,78 +500,6 @@ export function openActivityStream(since: string | undefined, signal: AbortSigna
   });
 }
 
-export async function getConversationWorkspace(
-  id: string,
-  dealId?: string,
-): Promise<ConversationWorkspace | undefined> {
-  const conversation = await readConversationById(id);
-  if (!conversation) return undefined;
-
-  const customer = await readCustomer(conversation.customerId);
-  if (!customer) return undefined;
-  const links = await readDealCustomersForCustomer(customer.id);
-  const deals = (await readDealsByIds(links.map((link) => link.dealId))).sort(byNewest);
-  const primaryIds = new Set(links.filter((link) => link.isPrimary).map((link) => link.dealId));
-  const focusedDeal =
-    (dealId ? deals.find((deal) => deal.id === dealId) : undefined) ??
-    (customer.activeDealId ? deals.find((deal) => deal.id === customer.activeDealId) : undefined) ??
-    deals.find((deal) => primaryIds.has(deal.id)) ??
-    deals[0];
-  const [focusedOption, lightOptions] = await Promise.all([
-    focusedDeal ? dealOption(focusedDeal, conversation) : undefined,
-    lightDealOptions(deals.filter((deal) => deal.id !== focusedDeal?.id)),
-  ]);
-  const lightById = new Map(lightOptions.map((option) => [option.id, option]));
-  const options = deals.flatMap((deal) => {
-    if (deal.id === focusedDeal?.id) return focusedOption ? [focusedOption] : [];
-    const light = lightById.get(deal.id);
-    return light ? [light] : [];
-  });
-  if (options.length === 0) return undefined;
-
-  const participantLinks = await readDealCustomersForDeals(options.map((option) => option.id));
-  const [people, summaries] = await Promise.all([readCustomers(), readConversations()]);
-  const customerById = new Map(people.map((person) => [person.id, person]));
-  const conversationByCustomer = canonicalConversationByCustomer(summaries);
-  const participants = orderedDealParticipants(
-    participantLinks.flatMap((link) => {
-      const person = customerById.get(link.customerId);
-      if (!person) return [];
-      const conversationId = conversationByCustomer.get(person.id)?.id;
-      return [
-        {
-          dealId: link.dealId,
-          isPrimary: link.isPrimary,
-          ...(conversationId ? { conversationId } : {}),
-          customer: person,
-        },
-      ];
-    }),
-  );
-
-  const saved = customer.activeDealId
-    ? options.find((option) => option.id === customer.activeDealId)
-    : undefined;
-  const focused =
-    (dealId ? options.find((option) => option.id === dealId) : undefined) ??
-    saved ??
-    options.find((option) => primaryIds.has(option.id)) ??
-    options[0];
-
-  const workspace = conversationWorkspaceSchema.safeParse({
-    id: conversation.id,
-    contractSent: conversation.contractSent,
-    createdAt: conversation.createdAt ?? "",
-    customer,
-    deal: focused.deal,
-    deals: options,
-    participants,
-    activities: conversation.activities,
-    quote: focused.quote,
-  });
-  return workspace.success ? workspace.data : undefined;
-}
-
 export async function getCustomerDeals(customerId: string) {
   const links = await readDealCustomersForCustomer(customerId);
   const [deals, summaries] = await Promise.all([
@@ -564,7 +522,7 @@ export async function getCustomerDeals(customerId: string) {
 }
 
 export async function getAgentSession(key: string) {
-  const conversation = await getConversation(key);
+  const conversation = await readConversation(key);
   if (!conversation) return undefined;
 
   const customer = await getCustomer(conversation.customerId);

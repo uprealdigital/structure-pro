@@ -37,6 +37,7 @@ import { deleteAttachmentFile, readAttachmentFile, storeAttachmentFile } from "@
 import {
   createConversation,
   deleteConversation,
+  readConversation,
   readConversationById,
   readConversationSummaryByCustomer,
   updateConversation,
@@ -47,10 +48,10 @@ import {
   getConversationDealOption,
   getConversationInboxItem,
   getConversationQuote,
-  getConversationWorkspace,
   getCustomerDeals,
   getCustomerInboxItem,
 } from "@/src/features/crm/conversations/server/queries";
+import { conversationWorkspace } from "@/src/features/crm/conversations/utils/workspace";
 import {
   activeDealRequestSchema,
   createConnectedDealSchema,
@@ -75,7 +76,7 @@ import {
   type ComposerChannel,
   type ConversationDealListItem,
   type ConversationDealOption,
-  type ConversationInboxItem,
+  type ConversationListItem,
   type ConversationParticipant,
   type ConversationQuote,
   type ConversationSuggestion,
@@ -123,7 +124,7 @@ export async function openConversation(input: {
 export async function ensureCustomerConversation(input: {
   customerId: string;
   dealId: string;
-}): Promise<{ success: true; data: { item: ConversationInboxItem } } | { error: string }> {
+}): Promise<{ success: true; data: { item: ConversationListItem } } | { error: string }> {
   const parsed = activeDealRequestSchema.safeParse(input);
   if (!parsed.success) return { error: "Customer was not found" };
 
@@ -1103,7 +1104,7 @@ export async function markConversationsRead(input: {
 
 export async function loadConversationInboxItem(
   id: string,
-): Promise<{ success: true; data: ConversationInboxItem | null } | { error: string }> {
+): Promise<{ success: true; data: ConversationListItem | null } | { error: string }> {
   const parsed = conversationIdSchema.safeParse(id);
   if (!parsed.success) return { error: "A conversation is required" };
 
@@ -1143,7 +1144,10 @@ export async function loadConversationWorkspace(
   if (deal && !deal.success) return { error: "A deal is required" };
 
   try {
-    const workspace = await getConversationWorkspace(parsed.data, deal?.success ? deal.data : undefined);
+    const conversation = await getConversation(parsed.data);
+    const workspace = conversation
+      ? conversationWorkspace(conversation, deal?.success ? deal.data : undefined)
+      : undefined;
     return { success: true, data: workspace ?? null };
   } catch (error) {
     void recordCrmLog({ feature: "conversations", error });
@@ -1527,7 +1531,7 @@ export async function loadConversationQuote(
 }
 
 export async function optOutCustomer(key: string): Promise<void> {
-  const conversation = await getConversation(key);
+  const conversation = await readConversation(key);
   if (!conversation) return;
   await updateCustomer(conversation.customerId, { optedOut: true });
 }

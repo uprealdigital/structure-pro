@@ -196,28 +196,158 @@ export const conversationSummarySchema = z.object({
 
 export type ConversationSummary = z.infer<typeof conversationSummarySchema>;
 
-export const conversationInboxItemSchema = z.object({
+export const conversationListCallSchema = z.object({
   id: z.string(),
-  updatedAt: z.string(),
-  preview: z.string(),
-  contactName: z.string(),
-  contactPhone: z.string(),
-  contactEmail: z.string(),
-  dealId: z.string(),
-  dealStatus: dealStatusSchema,
-  dealStatuses: z.array(
-    z.object({
-      id: z.string(),
-      status: dealStatusSchema,
-    }),
-  ),
-  dealSource: dealSourceSchema,
-  contractSent: z.boolean(),
-  unread: z.boolean(),
-  unreadCount: z.number().int().nonnegative(),
+  direction: callDirectionSchema,
+  duration_seconds: z.number().int().nonnegative().nullable(),
 });
 
-export type ConversationInboxItem = z.infer<typeof conversationInboxItemSchema>;
+export const conversationListActivitySchema = z.object({
+  position: z.number().int().nonnegative(),
+  role: z.enum(["user", "model"]),
+  body: z.string(),
+  channel: activityChannelSchema,
+  generated_by: generatedBySchema,
+  read_at: z.string().nullable(),
+  created_at: z.string(),
+  call: conversationListCallSchema.nullable(),
+});
+
+export const conversationListDealSchema = z.object({
+  id: z.string(),
+  name: z.string().nullable(),
+  source: dealSourceSchema,
+  status: dealStatusSchema,
+  created_at: z.string(),
+});
+
+export const conversationListCustomerSchema = z.object({
+  id: z.string(),
+  full_name: z.string(),
+  phone: z.string(),
+  email: z.string(),
+  active_deal_id: z.string().nullable(),
+  deal_customers: z.array(
+    z.object({
+      is_primary: z.boolean(),
+      deal: conversationListDealSchema,
+    }),
+  ),
+});
+
+export const conversationListItemSchema = z.object({
+  id: z.string(),
+  contract_sent: z.boolean(),
+  updated_at: z.string(),
+  customer: conversationListCustomerSchema,
+  activities: z.array(conversationListActivitySchema),
+});
+
+export type ConversationListItem = z.infer<typeof conversationListItemSchema>;
+
+export const conversationDetailRevisionSchema = z.object({
+  id: z.string(),
+  revision_number: z.number().int().positive(),
+  status: quoteStatusSchema,
+  config: quoteSelectionsSchema,
+  config_changes: configChangesSchema,
+  communication: quoteCommunicationSchema.nullable(),
+  renders: quoteRevisionRendersSchema.nullable(),
+  shared_photos_at: z.string().nullable(),
+  shared_quote_at: z.string().nullable(),
+  created_at: z.string(),
+  updated_at: z.string(),
+});
+
+export const conversationDetailQuoteSchema = z.object({
+  id: z.string(),
+  invoice_id: z.string(),
+  quote_number: z.number().int().positive(),
+  status: quoteStatusSchema,
+  active_revision_id: z.string().nullable(),
+  quote_revisions: z.array(conversationDetailRevisionSchema),
+});
+
+export type ConversationDetailQuote = z.infer<typeof conversationDetailQuoteSchema>;
+
+const conversationDetailLinkSchema = z.object({ id: z.string() });
+
+export const conversationDetailPersonSchema = z.object({
+  id: z.string(),
+  full_name: z.string(),
+  phone: z.string(),
+  email: z.string(),
+  opted_out: z.boolean(),
+  active_deal_id: z.string().nullable(),
+  created_at: z.string(),
+  conversations: z.union([conversationDetailLinkSchema, z.array(conversationDetailLinkSchema)]).nullable(),
+});
+
+export const conversationDetailCallSchema = z.object({
+  id: z.string(),
+  direction: callDirectionSchema,
+  duration_seconds: z.number().int().nonnegative().nullable(),
+  script_match: z.number().int().nullable(),
+  recording_url: z.string().nullable(),
+  transcript: z.string().nullable(),
+  external_id: z.string().nullable(),
+  started_at: z.string().nullable(),
+  ended_at: z.string().nullable(),
+});
+
+export const conversationDetailActivitySchema = z.object({
+  position: z.number().int().nonnegative(),
+  role: z.enum(["user", "model"]),
+  body: z.string(),
+  channel: activityChannelSchema,
+  generated_by: generatedBySchema,
+  read_at: z.string().nullable(),
+  created_at: z.string(),
+  call: conversationDetailCallSchema.nullable(),
+});
+
+export const conversationDetailDealSchema = z.object({
+  id: z.string(),
+  quote_id: z.string().nullable(),
+  source: dealSourceSchema,
+  status: dealStatusSchema,
+  previous_status: dealStatusSchema.nullable(),
+  name: z.string().nullable(),
+  viewed_at: z.string().nullable(),
+  created_at: z.string(),
+  quote: conversationDetailQuoteSchema.nullable(),
+  deal_quotes: z.array(z.object({ quote: conversationDetailQuoteSchema })),
+  deal_customers: z.array(
+    z.object({
+      is_primary: z.boolean(),
+      customer: conversationDetailPersonSchema,
+    }),
+  ),
+});
+
+export const conversationDetailSchema = z.object({
+  id: z.string(),
+  contract_sent: z.boolean(),
+  created_at: z.string(),
+  customer: z.object({
+    id: z.string(),
+    full_name: z.string(),
+    phone: z.string(),
+    email: z.string(),
+    opted_out: z.boolean(),
+    active_deal_id: z.string().nullable(),
+    created_at: z.string(),
+    deal_customers: z.array(
+      z.object({
+        is_primary: z.boolean(),
+        deal: conversationDetailDealSchema,
+      }),
+    ),
+  }),
+  activities: z.array(conversationDetailActivitySchema),
+});
+
+export type ConversationDetail = z.infer<typeof conversationDetailSchema>;
 
 export const conversationQuoteRevisionSchema = z.object({
   id: z.string(),

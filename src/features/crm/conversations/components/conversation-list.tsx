@@ -4,12 +4,40 @@ import { Check, ChevronUp, Filter, Mail, MailOpen, RotateCcw, Search, X } from "
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { copy } from "@/src/features/crm/conversations/locales/en";
-import type { ConversationInboxItem } from "@/src/features/crm/conversations/types";
+import type { ConversationListItem } from "@/src/features/crm/conversations/types";
 import { formatConversationListTime } from "@/src/features/crm/conversations/utils/formatting";
+import {
+  conversationPreview,
+  conversationStatus,
+  conversationUnreadCount,
+  conversationUpdatedAt,
+} from "@/src/features/crm/conversations/utils/list";
 import { contactInitials } from "@/src/features/crm/common/utils/formatting";
 import { DealStatusBadge } from "@/src/features/crm/deals/components/deal-status-badge";
 import { dealStatusOptions } from "@/src/features/crm/deals/utils/status";
 import type { DealStatus } from "@/src/features/crm/deals/types";
+
+type ConversationListPatch = {
+  preview: string;
+  updatedAt?: string;
+};
+
+function conversationRow(
+  item: ConversationListItem,
+  patch: ConversationListPatch | undefined,
+  unreadCount: number | undefined,
+  statusByDeal: Record<string, DealStatus>,
+) {
+  const count = unreadCount ?? conversationUnreadCount(item);
+  return {
+    name: item.customer.full_name,
+    unreadCount: count,
+    unread: count > 0,
+    updatedAt: patch?.updatedAt ?? conversationUpdatedAt(item),
+    preview: patch?.preview ?? conversationPreview(item),
+    status: conversationStatus(item, statusByDeal),
+  };
+}
 
 const selectedStatusClass: Record<DealStatus, string> = {
   new_lead: "border-gray-300 bg-gray-100 text-gray-800 shadow-xs",
@@ -172,8 +200,14 @@ export function ConversationList({
   selectedId,
   onSelect,
   onMarkRead,
+  patches,
+  unreadCountById,
+  statusByDeal,
 }: {
-  items: ConversationInboxItem[];
+  items: ConversationListItem[];
+  patches: Record<string, ConversationListPatch>;
+  unreadCountById: Record<string, number>;
+  statusByDeal: Record<string, DealStatus>;
   inboxEmpty: boolean;
   query: string;
   onQueryChange: (value: string) => void;
@@ -201,6 +235,9 @@ export function ConversationList({
   const shiftRangeIds = useRef<string[]>([]);
   const searching = query.trim().length > 0;
   const contextItem = contextMenu ? items.find((item) => item.id === contextMenu.id) : undefined;
+  const contextRow = contextItem
+    ? conversationRow(contextItem, patches[contextItem.id], unreadCountById[contextItem.id], statusByDeal)
+    : undefined;
   const itemIds = items.map((item) => item.id).join("\n");
   const selecting = checkedIds.length > 0;
 
@@ -457,7 +494,8 @@ export function ConversationList({
           {items.map((item) => {
             const open = item.id === selectedId;
             const checked = checkedIds.includes(item.id);
-            const unread = item.unread;
+            const row = conversationRow(item, patches[item.id], unreadCountById[item.id], statusByDeal);
+            const unread = row.unread;
             return (
               <li key={item.id} className={open ? "outline outline-1 -outline-offset-1 outline-black" : undefined}>
                 <div
@@ -513,14 +551,14 @@ export function ConversationList({
                         unread ? "bg-[#121314] text-white" : "bg-gray-200 text-gray-800"
                       }`}
                     >
-                      {contactInitials(item.contactName)}
+                      {contactInitials(row.name)}
                     </span>
                     <span
                       className={`${selecting ? "flex" : "hidden group-hover:flex group-focus-visible:flex"} absolute inset-0 items-center justify-center`}
                     >
                       <SelectionCheck
                         checked={checked}
-                        label={copy.selectConversationItem(item.contactName)}
+                        label={copy.selectConversationItem(row.name)}
                         onChange={(shiftKey) => toggleChecked(item.id, shiftKey)}
                       />
                     </span>
@@ -533,14 +571,14 @@ export function ConversationList({
                             unread ? "font-semibold text-gray-950" : "font-normal text-gray-800"
                           }`}
                         >
-                          {item.contactName}
+                          {row.name}
                         </span>
-                        {item.unreadCount > 0 ? (
+                        {row.unreadCount > 0 ? (
                           <span
                             className="inline-flex h-4 min-w-4 shrink-0 items-center justify-center rounded-full bg-gray-200 px-1 text-[10px] font-semibold leading-none text-black"
-                            aria-label={copy.unreadCount(item.unreadCount)}
+                            aria-label={copy.unreadCount(row.unreadCount)}
                           >
-                            {item.unreadCount}
+                            {row.unreadCount}
                           </span>
                         ) : null}
                       </span>
@@ -561,14 +599,14 @@ export function ConversationList({
                             <Mail className="h-3.5 w-3.5" strokeWidth={1.6} aria-hidden="true" />
                           )}
                         </button>
-                        {item.updatedAt ? (
+                        {row.updatedAt ? (
                           <time
-                            dateTime={item.updatedAt}
+                            dateTime={row.updatedAt}
                             className={`text-[10px] leading-none whitespace-nowrap ${
                               unread ? "font-semibold text-gray-900" : "font-medium text-gray-400"
                             }`}
                           >
-                            {formatConversationListTime(item.updatedAt)}
+                            {formatConversationListTime(row.updatedAt)}
                           </time>
                         ) : null}
                       </span>
@@ -579,10 +617,10 @@ export function ConversationList({
                           unread ? "text-gray-900" : "text-gray-500"
                         }`}
                       >
-                        {item.preview || copy.noMessages}
+                        {row.preview || copy.noMessages}
                       </span>
                       <span className="flex shrink-0 justify-end">
-                        <DealStatusBadge status={item.dealStatus} />
+                        {row.status ? <DealStatusBadge status={row.status} /> : null}
                       </span>
                     </span>
                   </span>
@@ -591,7 +629,7 @@ export function ConversationList({
             );
           })}
           </ul>
-          {contextMenu && contextItem
+          {contextMenu && contextItem && contextRow
             ? createPortal(
                 <div
                   ref={contextMenuNode}
@@ -604,16 +642,16 @@ export function ConversationList({
                     role="menuitem"
                     className="flex w-full cursor-pointer items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-xs font-medium whitespace-nowrap text-gray-800 hover:bg-gray-100"
                     onClick={() => {
-                      onMarkRead([contextItem.id], contextItem.unread);
+                      onMarkRead([contextItem.id], contextRow.unread);
                       setContextMenu(null);
                     }}
                   >
-                    {contextItem.unread ? (
+                    {contextRow.unread ? (
                       <MailOpen className="h-3.5 w-3.5 shrink-0 text-gray-600" strokeWidth={1.8} aria-hidden="true" />
                     ) : (
                       <Mail className="h-3.5 w-3.5 shrink-0 text-gray-600" strokeWidth={1.8} aria-hidden="true" />
                     )}
-                    {contextItem.unread ? copy.markAsRead : copy.markAsUnread}
+                    {contextRow.unread ? copy.markAsRead : copy.markAsUnread}
                   </button>
                 </div>,
                 document.body,

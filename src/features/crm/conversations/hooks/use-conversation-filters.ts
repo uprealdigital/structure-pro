@@ -6,7 +6,7 @@ import {
   defaultIncludedDealStatuses,
 } from "@/src/features/crm/deals/utils/status";
 import type { DealStatus } from "@/src/features/crm/deals/types";
-import type { ConversationInboxItem } from "@/src/features/crm/conversations/types";
+import type { ConversationListItem } from "@/src/features/crm/conversations/types";
 
 const orderedStatuses = dealStatusOptions.map((option) => option.id);
 
@@ -41,12 +41,18 @@ export function useConversationFilters() {
     setIncluded([]);
   }
 
-  function visibleItems(items: ConversationInboxItem[]): ConversationInboxItem[] {
+  function visibleItems(
+    items: ConversationListItem[],
+    statusOf: (item: ConversationListItem) => DealStatus | undefined,
+    textOf: (item: ConversationListItem) => string,
+  ): ConversationListItem[] {
     const needle = query.trim().toLowerCase();
     return items.filter((item) => {
-      if (!included.includes(item.dealStatus)) return false;
+      const status = statusOf(item);
+      if (!status || !included.includes(status)) return false;
       if (!needle) return true;
-      return [item.contactName, item.contactPhone, item.contactEmail, item.preview]
+      const customer = item.customer;
+      return [customer.full_name, customer.phone, customer.email, textOf(item)]
         .join(" ")
         .toLowerCase()
         .includes(needle);
