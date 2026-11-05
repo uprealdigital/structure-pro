@@ -42,6 +42,7 @@ export const copy = {
   createDealError: "Could not create a new deal. Try again.",
   lostDeals: "Lost deals",
   switchActiveDeal: "Switch deal",
+  switchQuote: "Switch quote",
   renameDeal: "Rename deal",
   confirmRename: "Save deal name",
   cancelRename: "Cancel rename",

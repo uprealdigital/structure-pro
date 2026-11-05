@@ -1044,6 +1044,58 @@ export function ConversationDetail({
       .catch(() => undefined);
   }
 
+  function selectQuoteRevision(quoteId: string, revisionId: string) {
+    const dealId = focusedOption?.id;
+    const quote = listedQuotes.find((item) => item.id === quoteId);
+    if (!dealId || !quote) return;
+    if (viewingQuote?.id !== quoteId) {
+      setViewingQuoteIds((current) => ({ ...current, [dealId]: quoteId }));
+      setEditing(false);
+    }
+    if (quote.activeRevisionId === revisionId) {
+      setSelectedRevisionId(revisionId);
+      setRevisionError("");
+      return;
+    }
+    const previousId = quote.activeRevisionId;
+    const previousPatch = quotePatches[quote.id];
+    const next = conversationQuoteWithActiveRevision(quote, revisionId);
+    const revision = next?.revisions.find((item) => item.id === revisionId);
+    if (!next || !revision) return;
+    setRevisionError("");
+    setQuotePatches((current) => ({ ...current, [next.id]: next }));
+    setSelectedRevisionId(revisionId);
+    const quoteIndex = listedQuotes.findIndex((item) => item.id === quote.id);
+    const revisionName = revisionMenuLabel(revision.revisionNumber);
+    const quoteName = quoteLabel(next, quoteIndex);
+    const restore = () => {
+      setQuotePatches((current) => {
+        if (current[quote.id]?.activeRevisionId !== revisionId) return current;
+        const restored = { ...current };
+        if (previousPatch) restored[quote.id] = previousPatch;
+        else delete restored[quote.id];
+        return restored;
+      });
+      setSelectedRevisionId((current) => (current === revisionId ? previousId : current));
+    };
+    showNotice(
+      quoteName ? copy.revisionSwitchedToast(quoteName, revisionName) : copy.activeQuoteSwitchedToast(revisionName),
+      async () => {
+        restore();
+        return true;
+      },
+      async () => {
+        const result = await activateQuoteRevision({ quoteId: quote.id, revisionId });
+        if ("error" in result) {
+          restore();
+          setRevisionError(copy.activateRevisionError);
+          return null;
+        }
+        return recordNamedActivity("quote", revisionName, quoteName || undefined);
+      },
+    );
+  }
+
   function selectRevision(revisionId: string) {
     const quote = focused.quote;
     if (!quote) return;
@@ -2233,6 +2285,16 @@ export function ConversationDetail({
               onMarkLost={() => void markLost()}
               onReopen={() => void reopen()}
               mobileActionsSlot={mobileActionsSlot}
+              quoteSwitch={
+                focused.quote
+                  ? {
+                      quotes: listedQuotes,
+                      viewingQuoteId: viewingQuote?.id ?? focused.quote.id,
+                      viewingRevisionId: viewed?.id ?? focused.quote.activeRevisionId,
+                      onSelectRevision: selectQuoteRevision,
+                    }
+                  : undefined
+              }
               onViewDetails={() => setMobileSummaryDealId(focused.deal.id)}
               details={
                 <div className="grid grid-cols-1 gap-6 bg-white px-3 py-4">

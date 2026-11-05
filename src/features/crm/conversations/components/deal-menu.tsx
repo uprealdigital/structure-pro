@@ -5,14 +5,17 @@ import { useEffect, useId, useLayoutEffect, useRef, useState, type ReactNode } f
 import { createPortal } from "react-dom";
 import type { Customer } from "@/src/features/crm/common/types";
 import { copy } from "@/src/features/crm/conversations/locales/en";
-import type { ConversationDealListItem, ConversationDealOption } from "@/src/features/crm/conversations/types";
+import type { ConversationDealListItem, ConversationDealOption, ConversationQuote } from "@/src/features/crm/conversations/types";
 import { orderedDealMenu } from "@/src/features/crm/conversations/utils/deals";
+import { formatRevisionDate, quoteMenuName, revisionMenuLabel } from "@/src/features/crm/conversations/utils/formatting";
 import { peopleMatchingName } from "@/src/features/crm/conversations/utils/people";
 import { DealStatusBadge } from "@/src/features/crm/deals/components/deal-status-badge";
 import { dealHeadingName } from "@/src/features/crm/deals/utils/naming";
 import { canMarkDealLost } from "@/src/features/crm/deals/utils/status";
 import { dealNameMaxLength, type DealStatus } from "@/src/features/crm/deals/types";
 import type { QuoteStatusAction } from "@/src/features/crm/quotes/config/status";
+import { QuoteStatusBadge } from "@/src/features/crm/quotes/components/quote-status-badge";
+import { quoteDisplayName } from "@/src/features/crm/quotes/utils/formatting";
 
 function SwitchCustomersIcon({ className = "h-3.5 w-3.5 shrink-0 text-gray-500" }: { className?: string }) {
   return (
@@ -36,6 +39,21 @@ function SwitchCustomersIcon({ className = "h-3.5 w-3.5 shrink-0 text-gray-500" 
       </g>
     </svg>
   );
+}
+
+type QuoteSwitch = {
+  quotes: ConversationQuote[];
+  viewingQuoteId: string;
+  viewingRevisionId: string;
+  onSelectRevision: (quoteId: string, revisionId: string) => void;
+};
+
+function quoteSwitchName(quote: ConversationQuote, index: number): string {
+  return quote.quoteNumber ? quoteDisplayName(quote.quoteNumber, quote.specs) : quoteMenuName(index);
+}
+
+function switchableQuotes(quotes: ConversationQuote[], viewingQuoteId: string): ConversationQuote[] {
+  return quotes.filter((quote) => quote.status !== "voided" || quote.id === viewingQuoteId);
 }
 
 type QuoteActionHandlers = {
@@ -415,6 +433,101 @@ function DealSwitchList({
   );
 }
 
+function QuoteSwitchList({
+  quotes,
+  viewingQuoteId,
+  onChoose,
+}: {
+  quotes: ConversationQuote[];
+  viewingQuoteId: string;
+  onChoose: (quoteId: string) => void;
+}) {
+  return (
+    <ul role="menu" aria-label={copy.switchQuote} className="space-y-1 overflow-y-auto p-2">
+      {quotes.map((quote, index) => {
+        const current = quote.id === viewingQuoteId;
+        return (
+          <li key={quote.id}>
+            <button
+              type="button"
+              role="menuitem"
+              aria-current={current ? "true" : undefined}
+              onClick={() => onChoose(quote.id)}
+              className={`flex w-full items-center gap-1.5 rounded-lg p-2.5 text-left transition-colors ${
+                current ? "border border-gray-200/60 bg-gray-50" : "hover:bg-gray-50"
+              }`}
+            >
+              <span className="flex w-3.5 shrink-0 items-center justify-center">
+                {current ? <Eye className="h-3.5 w-3.5 text-black" strokeWidth={2} aria-hidden="true" /> : null}
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="flex items-center justify-between gap-2">
+                  <span className={`truncate text-xs ${current ? "font-bold text-gray-950" : "font-medium text-gray-800"}`}>
+                    {quoteSwitchName(quote, index)}
+                  </span>
+                  <QuoteStatusBadge status={quote.status} />
+                </span>
+                <span className="mt-1.5 block text-[11px] font-semibold text-gray-900">{quote.totalLabel}</span>
+              </span>
+              <ChevronRight className="h-4 w-4 shrink-0 text-gray-400" aria-hidden="true" />
+            </button>
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
+function RevisionSwitchList({
+  quote,
+  currentRevisionId,
+  onChoose,
+}: {
+  quote: ConversationQuote | undefined;
+  currentRevisionId: string;
+  onChoose: (revisionId: string) => void;
+}) {
+  if (!quote) return null;
+  const revisions = [...quote.revisions].sort((left, right) => right.revisionNumber - left.revisionNumber);
+  return (
+    <ul role="menu" aria-label={copy.revisionsMenu} className="space-y-1 overflow-y-auto p-2">
+      {revisions.map((revision) => {
+        const current = revision.id === currentRevisionId;
+        const dated = revision.createdAt || revision.updatedAt;
+        return (
+          <li key={revision.id}>
+            <button
+              type="button"
+              role="menuitem"
+              aria-current={current ? "true" : undefined}
+              onClick={() => onChoose(revision.id)}
+              className={`w-full rounded-lg p-2.5 text-left transition-colors ${
+                current ? "border border-gray-200/60 bg-gray-50" : "hover:bg-gray-50"
+              }`}
+            >
+              <span className="flex items-center justify-between gap-3">
+                <span className="flex min-w-0 items-center gap-1.5">
+                  <span className="flex w-3.5 shrink-0 items-center justify-center">
+                    {current ? <Eye className="h-3.5 w-3.5 text-black" strokeWidth={2} aria-hidden="true" /> : null}
+                  </span>
+                  <span className={`truncate text-xs ${current ? "font-bold text-gray-950" : "font-medium text-gray-800"}`}>
+                    {revisionMenuLabel(revision.revisionNumber)}
+                  </span>
+                </span>
+                <span className="shrink-0 text-xs font-semibold text-gray-900">{revision.totalLabel}</span>
+              </span>
+              <span className="mt-1.5 flex items-center justify-between gap-3 pl-5 text-[11px] text-gray-500">
+                <span className="truncate">{revision.summary}</span>
+                <span className="shrink-0">{formatRevisionDate(dated)}</span>
+              </span>
+            </button>
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
 export function DealHeading({
   title,
   deals,
@@ -438,6 +551,7 @@ export function DealHeading({
   onReopen,
   mobileActionsSlot,
   quoteActions,
+  quoteSwitch,
   details,
   onViewDetails,
 }: {
@@ -463,16 +577,21 @@ export function DealHeading({
   onReopen: () => void;
   mobileActionsSlot: HTMLElement | null;
   quoteActions?: QuoteActionHandlers;
+  quoteSwitch?: QuoteSwitch;
   details: ReactNode;
   onViewDetails: () => void;
 }) {
   const [actionsOpen, setActionsOpen] = useState(false);
   const [sheetOpen, setSheetOpen] = useState(false);
-  const [sheetStep, setSheetStep] = useState<"actions" | "deals" | "people" | "details">("actions");
-  const [subStep, setSubStep] = useState<"deals" | "people" | "details">("deals");
+  const [sheetStep, setSheetStep] = useState<"actions" | "deals" | "people" | "details" | "quotes" | "revisions">("actions");
+  const [subStep, setSubStep] = useState<"deals" | "people" | "details" | "quotes" | "revisions">("deals");
+  const [revisionQuoteId, setRevisionQuoteId] = useState<string | null>(null);
+  const [revisionBackToQuotes, setRevisionBackToQuotes] = useState(false);
+  const [holdCut, setHoldCut] = useState(false);
   const [sheetHeight, setSheetHeight] = useState<number | null>(null);
   const actionsPane = useRef<HTMLDivElement>(null);
   const subPane = useRef<HTMLDivElement>(null);
+  const revisionPane = useRef<HTMLDivElement>(null);
   const sheetTitleId = useId();
   const [switchOpen, setSwitchOpen] = useState(false);
   const [peopleOpen, setPeopleOpen] = useState(false);
@@ -510,6 +629,9 @@ export function DealHeading({
           setSheetOpen(false);
           setSheetStep("actions");
           setSheetHeight(null);
+        } else if (sheetStep === "revisions" && revisionBackToQuotes) {
+          setSubStep("quotes");
+          setSheetStep("quotes");
         } else setSheetStep("actions");
         return;
       }
@@ -524,7 +646,7 @@ export function DealHeading({
       document.removeEventListener("mousedown", close);
       document.removeEventListener("keydown", onKey);
     };
-  }, [mobileActionsSlot, sheetOpen, sheetStep]);
+  }, [mobileActionsSlot, revisionBackToQuotes, sheetOpen, sheetStep]);
 
   useEffect(() => {
     setRenaming(false);
@@ -579,14 +701,46 @@ export function DealHeading({
     setSheetHeight(null);
   }
 
-  function openSheetStep(step: "deals" | "people" | "details") {
+  function openSheetStep(step: "deals" | "people" | "details" | "quotes" | "revisions") {
     setSubStep(step);
     setSheetStep(step);
   }
 
+  function goBack() {
+    if (sheetStep === "revisions" && revisionBackToQuotes) {
+      setSubStep("quotes");
+      setSheetStep("quotes");
+      return;
+    }
+    setSheetStep("actions");
+  }
+
+  function openSwitchQuote() {
+    if (!quoteSwitch) return;
+    const quotes = switchableQuotes(quoteSwitch.quotes, quoteSwitch.viewingQuoteId);
+    if (quotes.length > 1) {
+      setRevisionBackToQuotes(true);
+      openSheetStep("quotes");
+      return;
+    }
+    const quote = quotes[0] ?? quoteSwitch.quotes[0];
+    if (!quote) return;
+    setRevisionQuoteId(quote.id);
+    setRevisionBackToQuotes(false);
+    setSheetStep("revisions");
+  }
+
+  const cutSheet = sheetStep === "deals" || sheetStep === "quotes" || sheetStep === "revisions" || holdCut;
+
+  useEffect(() => {
+    const cut = sheetStep === "deals" || sheetStep === "quotes" || sheetStep === "revisions";
+    setHoldCut((current) => (current === cut ? current : cut));
+  }, [sheetStep]);
+
   useLayoutEffect(() => {
     if (!sheetOpen) return;
-    const pane = sheetStep === "actions" ? actionsPane.current : subPane.current;
+    const pane =
+      sheetStep === "actions" ? actionsPane.current : sheetStep === "revisions" ? revisionPane.current : subPane.current;
     if (!pane) return;
     const measure = () => {
       const next = pane.offsetHeight;
@@ -910,7 +1064,7 @@ export function DealHeading({
               >
                 <div
                   className={`relative overflow-hidden ${
-                    subStep === "details" || sheetHeight == null
+                    subStep === "details" || sheetHeight == null || cutSheet
                       ? ""
                       : "transition-[height] duration-300 ease-out motion-reduce:transition-none"
                   }`}
@@ -919,7 +1073,7 @@ export function DealHeading({
                   <div
                     ref={actionsPane}
                     className={`max-h-[100dvh] overflow-y-auto pb-[45px] ${
-                      subStep === "details" ? "" : "transition-transform duration-300 ease-out motion-reduce:transition-none"
+                      subStep === "details" || cutSheet ? "" : "transition-transform duration-300 ease-out motion-reduce:transition-none"
                     } ${sheetStep === "actions" ? "translate-x-0" : "-translate-x-full"}`}
                   >
                     <div className="border-b border-gray-200 px-3 py-3">
@@ -1002,6 +1156,14 @@ export function DealHeading({
                       {quoteActions ? (
                         <section className="flex flex-col gap-1 border-t border-gray-200 pt-3">
                           <h3 className="px-2 text-[11px] font-semibold text-gray-500">{copy.quotesMenu}</h3>
+                          {quoteSwitch ? (
+                            <SheetRow
+                              icon={<ArrowLeftRight className="h-[18px] w-[18px] shrink-0 text-gray-500" aria-hidden="true" />}
+                              label={copy.switchQuote}
+                              chevron
+                              onClick={openSwitchQuote}
+                            />
+                          ) : null}
                           <SheetRow
                             icon={<ExternalLink className="h-[18px] w-[18px] shrink-0 text-gray-500" aria-hidden="true" />}
                             label={copy.openQuote}
@@ -1060,8 +1222,12 @@ export function DealHeading({
                   <div
                     ref={subPane}
                     className={`absolute inset-x-0 top-0 flex max-h-[100dvh] min-h-0 flex-col pb-[45px] ${
-                      subStep === "details" ? "" : "transition-transform duration-300 ease-out motion-reduce:transition-none"
-                    } ${sheetStep === "actions" ? "translate-x-full" : "translate-x-0"}`}
+                      subStep === "details" || cutSheet ? "" : "transition-transform duration-300 ease-out motion-reduce:transition-none"
+                    } ${
+                      sheetStep === "actions" || (sheetStep === "revisions" && !revisionBackToQuotes)
+                        ? "translate-x-full"
+                        : "translate-x-0"
+                    }`}
                   >
                     <div className="flex shrink-0 items-center gap-2 border-b border-gray-200 px-3 py-3">
                       {subStep === "details" ? (
@@ -1083,13 +1249,26 @@ export function DealHeading({
                           <button
                             type="button"
                             aria-label={copy.goBack}
-                            onClick={() => setSheetStep("actions")}
+                            onClick={goBack}
                             className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-gray-900 transition-colors hover:bg-gray-100"
                           >
                             <ChevronLeft className="h-5 w-5" strokeWidth={2} aria-hidden="true" />
                           </button>
-                          <h2 id={sheetStep === "actions" ? undefined : sheetTitleId} className="min-w-0 flex-1 truncate font-serif text-base font-semibold text-gray-900">
-                            {subStep === "deals" ? copy.switchActiveDeal : copy.addPersonToDeal}
+                          <h2
+                            id={
+                              sheetStep === "deals" || sheetStep === "people" || sheetStep === "quotes"
+                                ? sheetTitleId
+                                : undefined
+                            }
+                            className="min-w-0 flex-1 truncate font-serif text-base font-semibold text-gray-900"
+                          >
+                            {subStep === "deals"
+                              ? copy.switchActiveDeal
+                              : subStep === "quotes"
+                                ? copy.switchQuote
+                                : subStep === "revisions"
+                                  ? copy.revisionsMenu
+                                  : copy.addPersonToDeal}
                           </h2>
                         </>
                       )}
@@ -1116,11 +1295,66 @@ export function DealHeading({
                           expanded
                           onToggle={onToggleCustomer}
                         />
+                      ) : subStep === "quotes" && quoteSwitch ? (
+                        <QuoteSwitchList
+                          quotes={switchableQuotes(quoteSwitch.quotes, quoteSwitch.viewingQuoteId)}
+                          viewingQuoteId={quoteSwitch.viewingQuoteId}
+                          onChoose={(quoteId) => {
+                            setRevisionQuoteId(quoteId);
+                            setRevisionBackToQuotes(true);
+                            setSheetStep("revisions");
+                          }}
+                        />
                       ) : (
                         details
                       )}
                     </div>
                   </div>
+                  {quoteSwitch ? (
+                    <div
+                      ref={revisionPane}
+                      className={`absolute inset-x-0 top-0 flex max-h-[100dvh] min-h-0 flex-col bg-white pb-[45px] ${
+                        cutSheet ? "" : "transition-transform duration-300 ease-out motion-reduce:transition-none"
+                      } ${sheetStep === "revisions" ? "translate-x-0" : "translate-x-full"}`}
+                    >
+                      <div className="flex shrink-0 items-center gap-2 border-b border-gray-200 px-3 py-3">
+                        <button
+                          type="button"
+                          aria-label={copy.goBack}
+                          onClick={goBack}
+                          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-gray-900 transition-colors hover:bg-gray-100"
+                        >
+                          <ChevronLeft className="h-5 w-5" strokeWidth={2} aria-hidden="true" />
+                        </button>
+                        <h2
+                          id={sheetStep === "revisions" ? sheetTitleId : undefined}
+                          className="min-w-0 flex-1 truncate font-serif text-base font-semibold text-gray-900"
+                        >
+                          {copy.revisionsMenu}
+                        </h2>
+                      </div>
+                      <div className="min-h-0 flex-1 overflow-y-auto">
+                        <RevisionSwitchList
+                          quote={
+                            quoteSwitch.quotes.find((quote) => quote.id === revisionQuoteId) ??
+                            quoteSwitch.quotes.find((quote) => quote.id === quoteSwitch.viewingQuoteId) ??
+                            quoteSwitch.quotes[0]
+                          }
+                          currentRevisionId={
+                            (revisionQuoteId ?? quoteSwitch.viewingQuoteId) === quoteSwitch.viewingQuoteId
+                              ? quoteSwitch.viewingRevisionId
+                              : (quoteSwitch.quotes.find((quote) => quote.id === revisionQuoteId)?.activeRevisionId ??
+                                quoteSwitch.viewingRevisionId)
+                          }
+                          onChoose={(revisionId) => {
+                            const quoteId = revisionQuoteId ?? quoteSwitch.viewingQuoteId;
+                            closeSheet();
+                            quoteSwitch.onSelectRevision(quoteId, revisionId);
+                          }}
+                        />
+                      </div>
+                    </div>
+                  ) : null}
                 </div>
               </div>
             </div>,
