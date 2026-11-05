@@ -808,7 +808,7 @@ export function QuoteActions({
       >
         {pending ? copy.savingQuote : copy.saveAndClose}
       </button>
-      {variant !== "panel" && onCancel ? (
+      {onCancel ? (
         <button type="button" onClick={onCancel} disabled={pending} className={cancelClass}>
           <X className="h-3.5 w-3.5 shrink-0 text-red-500" aria-hidden="true" />
           {copy.cancel}

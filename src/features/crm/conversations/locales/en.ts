@@ -293,7 +293,6 @@ export const copy = {
   inboundCall: "Inbound Call",
   outboundCall: "Outbound Call",
   scriptMatch: "script match",
-  details: "Details",
   quoteUnavailable: "This quote is no longer available.",
   composerPlaceholder: "Type your message...",
   configurationDetected: "New Configuration Detected",
