@@ -42,3 +42,12 @@ export function defaultDealName(source: string, createdAt: string | Date, number
   const count = Number.isInteger(number) && number > 0 ? number : 1;
   return `Deal ${count} (${detail})`.slice(0, dealNameMaxLength);
 }
+
+export function dealHeadingName(name: string, viewport: "mobile" | "desktop"): string {
+  if (viewport === "desktop") return name;
+  const trimmed = name.trim();
+  const split = trimmed.indexOf("(");
+  if (split <= 0) return trimmed;
+  const prefix = trimmed.slice(0, split).trim();
+  return prefix || trimmed;
+}

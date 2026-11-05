@@ -79,9 +79,9 @@ export function CustomerMenu({
           </span>
         ))}
       </span>
-      <span className="flex items-center gap-1">
+      <span className="flex min-w-0 items-center gap-1">
         <h2
-          className={`font-serif text-base font-bold tracking-tight text-gray-950 ${
+          className={`truncate font-serif text-base font-bold tracking-tight text-gray-950 ${
             multiple ? "transition-colors group-hover:text-gray-700" : ""
           }`}
         >
@@ -100,7 +100,7 @@ export function CustomerMenu({
   );
 
   return (
-    <div ref={menu} className="relative z-50 flex items-center">
+    <div ref={menu} className="relative z-50 flex min-w-0 items-center">
       {multiple ? (
         <button
           type="button"
@@ -108,12 +108,12 @@ export function CustomerMenu({
           aria-expanded={open}
           aria-label={copy.dealCustomers}
           onClick={() => setOpen((value) => !value)}
-          className="group -m-1 flex cursor-pointer items-center gap-2 rounded-lg p-1 text-left transition-colors hover:bg-gray-100 focus:outline-none"
+          className="group -m-1 flex min-w-0 cursor-pointer items-center gap-2 rounded-lg p-1 text-left transition-colors hover:bg-gray-100 focus:outline-none"
         >
           {identity}
         </button>
       ) : (
-        <div className="-m-1 flex items-center gap-2 p-1">{identity}</div>
+        <div className="-m-1 flex min-w-0 items-center gap-2 p-1">{identity}</div>
       )}
       {multiple && open ? (
         <div

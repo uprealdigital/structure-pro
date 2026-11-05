@@ -1,6 +1,6 @@
 "use client";
 
-import { Camera, Paperclip, Phone } from "lucide-react";
+import { Camera, ChevronLeft, Paperclip, Phone } from "lucide-react";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { BuildingConfigurator } from "@/src/features/cpq/components/building-configurator";
 import type { QuoteRevisionRenderCapture, QuoteRevisionRenderFiles } from "@/src/features/cpq/components/building-scene";
@@ -682,23 +682,37 @@ export function ConversationDetail({
   const [intentQuoteChoice, setIntentQuoteChoice] = useState<{ suggestionId: string; quoteId: string } | null>(null);
   const composerRef = useRef<HTMLTextAreaElement>(null);
   const headerRef = useRef<HTMLElement>(null);
-  const statusRef = useRef<HTMLDivElement>(null);
+  const desktopStatusRef = useRef<HTMLDivElement>(null);
+  const mobileStatusRef = useRef<HTMLDivElement>(null);
+  const [mobileActionsSlot, setMobileActionsSlot] = useState<HTMLDivElement | null>(null);
   const [detailsTop, setDetailsTop] = useState<number | null>(null);
 
   useLayoutEffect(() => {
     const header = headerRef.current;
-    const status = statusRef.current;
-    if (!header || !status) return;
+    const desktopStatus = desktopStatusRef.current;
+    const mobileStatus = mobileStatusRef.current;
+    if (!header) return;
+    const query = window.matchMedia("(min-width: 1024px)");
     const place = () => {
       const headerBox = header.getBoundingClientRect();
-      const statusBox = status.getBoundingClientRect();
+      if (!query.matches) {
+        setDetailsTop(headerBox.height);
+        return;
+      }
+      if (!desktopStatus) return;
+      const statusBox = desktopStatus.getBoundingClientRect();
       setDetailsTop(statusBox.bottom - headerBox.top);
     };
     place();
     const observer = new ResizeObserver(place);
     observer.observe(header);
-    observer.observe(status);
-    return () => observer.disconnect();
+    if (desktopStatus) observer.observe(desktopStatus);
+    if (mobileStatus) observer.observe(mobileStatus);
+    query.addEventListener("change", place);
+    return () => {
+      observer.disconnect();
+      query.removeEventListener("change", place);
+    };
   }, [editing, focusedDealId, detailsOpen]);
 
   const [updatingStatus, setUpdatingStatus] = useState(false);
@@ -2101,12 +2115,12 @@ export function ConversationDetail({
             type="button"
             aria-haspopup="listbox"
             aria-expanded={channelOpen}
-            aria-label={copy.messageSource}
+            aria-label={`${copy.messageSource}: ${activityChannelLabel(channel)}`}
             onClick={() => setChannelOpen((open) => !open)}
             className="inline-flex items-center gap-1.5 rounded-md bg-transparent px-2.5 py-1.5 text-xs font-semibold text-gray-800 transition-colors hover:bg-gray-100 disabled:opacity-50"
           >
             <ChannelIcon channel={channel} className="h-3.5 w-3.5 shrink-0 text-gray-900" />
-            <span className="font-medium">{activityChannelLabel(channel)}</span>
+            <span className="hidden font-medium lg:inline">{activityChannelLabel(channel)}</span>
             <svg className="h-3 w-3 shrink-0 text-gray-500" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" aria-hidden="true">
               <path strokeLinecap="round" strokeLinejoin="round" d="M5 15l7-7 7 7" />
             </svg>
@@ -2159,29 +2173,45 @@ export function ConversationDetail({
       <div className="relative z-40 shrink-0 border-b border-gray-200 bg-white shadow-xs">
         <header
           ref={headerRef}
-          className="relative z-20 flex flex-row items-center justify-between gap-4 overflow-visible bg-white px-5 py-3"
+          className="relative z-20 flex flex-col gap-3 overflow-visible bg-white px-5 py-3 lg:flex-row lg:items-center lg:justify-between lg:gap-4"
         >
-          <div className="flex shrink-0 flex-col items-start justify-start gap-2 p-1">
-            <div className="mb-1 lg:hidden">
-              <button type="button" onClick={onBack} className="text-xs font-medium text-gray-900">
-                {copy.backToList}
-              </button>
-            </div>
-            <div className="flex items-center gap-2.5">
-              <CustomerMenu
-                participants={participants}
-                customer={customer}
-                conversationId={conversation.id}
-                onSelect={(participant) => onSelectCustomer(participant, focused.deal.id)}
-              />
-              <a
-                href={`tel:${customer.phone}`}
-                aria-label={copy.callNow}
-                title={`${copy.callNow} ${customer.fullName}`}
-                className="ml-0.5 flex h-7 w-7 items-center justify-center rounded-full bg-transparent text-gray-700 transition-colors hover:bg-gray-50"
+          <div className="flex w-full min-w-0 flex-col items-start justify-start gap-2 p-1 lg:w-auto lg:shrink-0">
+            <div className="flex w-full min-w-0 items-center gap-1 lg:w-auto">
+              <button
+                type="button"
+                onClick={onBack}
+                aria-label={copy.backToList}
+                className="-ml-1.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-gray-900 transition-colors hover:bg-gray-100 lg:hidden"
               >
-                <Phone className="h-3.5 w-3.5" strokeWidth={1.8} aria-hidden="true" />
-              </a>
+                <ChevronLeft className="h-5 w-5" strokeWidth={2} aria-hidden="true" />
+              </button>
+              <div className="flex min-w-0 flex-1 items-center gap-2.5 lg:flex-none">
+                <CustomerMenu
+                  participants={participants}
+                  customer={customer}
+                  conversationId={conversation.id}
+                  onSelect={(participant) => onSelectCustomer(participant, focused.deal.id)}
+                />
+                <a
+                  href={`tel:${customer.phone}`}
+                  aria-label={copy.callNow}
+                  title={`${copy.callNow} ${customer.fullName}`}
+                  className="ml-0.5 hidden h-7 w-7 shrink-0 items-center justify-center rounded-full bg-transparent text-gray-700 transition-colors hover:bg-gray-50 lg:flex"
+                >
+                  <Phone className="h-3.5 w-3.5" strokeWidth={1.8} aria-hidden="true" />
+                </a>
+              </div>
+              <div className="ml-auto flex shrink-0 items-center gap-1.5 lg:hidden">
+                <a
+                  href={`tel:${customer.phone}`}
+                  aria-label={copy.callNow}
+                  title={`${copy.callNow} ${customer.fullName}`}
+                  className="flex h-7 w-7 items-center justify-center rounded-full bg-gray-100 text-gray-700 transition-colors hover:bg-gray-200"
+                >
+                  <Phone className="h-3.5 w-3.5" strokeWidth={1.8} aria-hidden="true" />
+                </a>
+                <div ref={setMobileActionsSlot} />
+              </div>
             </div>
             <DealHeading
               title={focusedOption?.title || copy.quote}
@@ -2204,15 +2234,17 @@ export function ConversationDetail({
               onToggleCustomer={(customerId) => void people.toggle(customerId)}
               onMarkLost={() => void markLost()}
               onReopen={() => void reopen()}
+              statusRef={mobileStatusRef}
+              mobileActionsSlot={mobileActionsSlot}
             />
-            <div ref={statusRef}>
+            <div ref={desktopStatusRef} className="hidden lg:block">
               <DealStatusBadge status={focused.deal.status} />
             </div>
           </div>
 
-          <div className="flex shrink-0 items-center gap-2.5">
+          <div className="flex w-full justify-center lg:block lg:w-auto lg:shrink-0">
             {focused.quote && viewed ? (
-              <div className="flex flex-row items-center gap-3 p-1">
+              <div className="flex flex-row items-center gap-3 p-1 max-lg:[zoom:0.72]">
                 <div className="relative flex h-16 w-20 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-white">
                   {viewed.renders?.render_small_url ? (
                     <img

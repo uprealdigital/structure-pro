@@ -6,6 +6,7 @@ import { ContactShadows, Environment } from "@react-three/drei";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import {
   PerspectiveCamera,
+  Vector2,
   Vector4,
   WebGLRenderTarget,
   type Scene,
@@ -78,6 +79,7 @@ function roundedRectPath(x: number, y: number, width: number, height: number, ra
   return `M ${x + r} ${y} H ${x + width - r} A ${r} ${r} 0 0 1 ${x + width} ${y + r} V ${y + height - r} A ${r} ${r} 0 0 1 ${x + width - r} ${y + height} H ${x + r} A ${r} ${r} 0 0 1 ${x} ${y + height - r} V ${y + r} A ${r} ${r} 0 0 1 ${x + r} ${y} Z`;
 }
 
+const drawingSize = new Vector2();
 const linearToSrgb = new Uint8Array(256);
 for (let value = 0; value < 256; value++) {
   const channel = value / 255;
@@ -268,8 +270,10 @@ function SharedStage({
     }
 
     const canvasRect = gl.domElement.getBoundingClientRect();
-    const scaleX = canvasRect.width > 0 ? gl.domElement.width / canvasRect.width : 1;
-    const scaleY = canvasRect.height > 0 ? gl.domElement.height / canvasRect.height : 1;
+    gl.getSize(drawingSize);
+    // setViewport and setScissor take CSS pixels and multiply by the pixel ratio themselves.
+    const scaleX = canvasRect.width > 0 ? drawingSize.x / canvasRect.width : 1;
+    const scaleY = canvasRect.height > 0 ? drawingSize.y / canvasRect.height : 1;
     gl.setScissorTest(true);
     gl.setClearColor("#ffffff", 1);
     let drewShadow = false;

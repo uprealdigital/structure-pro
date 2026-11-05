@@ -1,13 +1,15 @@
 "use client";
 
 import { ArrowLeftRight, Check, ChevronDown, ChevronRight, EllipsisVertical, Eye, Pencil, Plus, RotateCcw, Search, X } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type Ref } from "react";
+import { createPortal } from "react-dom";
 import type { Customer } from "@/src/features/crm/common/types";
 import { copy } from "@/src/features/crm/conversations/locales/en";
 import type { ConversationDealListItem, ConversationDealOption } from "@/src/features/crm/conversations/types";
 import { orderedDealMenu } from "@/src/features/crm/conversations/utils/deals";
 import { peopleMatchingName } from "@/src/features/crm/conversations/utils/people";
 import { DealStatusBadge } from "@/src/features/crm/deals/components/deal-status-badge";
+import { dealHeadingName } from "@/src/features/crm/deals/utils/naming";
 import { canMarkDealLost } from "@/src/features/crm/deals/utils/status";
 import { dealNameMaxLength, type DealStatus } from "@/src/features/crm/deals/types";
 
@@ -32,6 +34,15 @@ function SwitchCustomersIcon() {
         <path d="M20 17H4" />
       </g>
     </svg>
+  );
+}
+
+function DealHeadingLabel({ name }: { name: string }) {
+  return (
+    <>
+      <span className="lg:hidden">{dealHeadingName(name, "mobile")}</span>
+      <span className="hidden lg:inline">{dealHeadingName(name, "desktop")}</span>
+    </>
   );
 }
 
@@ -374,6 +385,8 @@ export function DealHeading({
   onToggleCustomer,
   onMarkLost,
   onReopen,
+  statusRef,
+  mobileActionsSlot,
 }: {
   title: string;
   deals: ConversationDealOption[];
@@ -395,6 +408,8 @@ export function DealHeading({
   onToggleCustomer: (customerId: string) => void;
   onMarkLost: () => void;
   onReopen: () => void;
+  statusRef: Ref<HTMLDivElement>;
+  mobileActionsSlot: HTMLElement | null;
 }) {
   const [actionsOpen, setActionsOpen] = useState(false);
   const [switchOpen, setSwitchOpen] = useState(false);
@@ -419,12 +434,12 @@ export function DealHeading({
 
   useEffect(() => {
     function close(event: MouseEvent) {
-      if (!menu.current?.contains(event.target as Node)) {
-        setActionsOpen(false);
-        setSwitchOpen(false);
-        setPeopleOpen(false);
-        setDealsOpen(false);
-      }
+      const target = event.target as Node;
+      if (menu.current?.contains(target) || mobileActionsSlot?.contains(target)) return;
+      setActionsOpen(false);
+      setSwitchOpen(false);
+      setPeopleOpen(false);
+      setDealsOpen(false);
     }
     function onKey(event: KeyboardEvent) {
       if (event.key === "Escape") {
@@ -440,7 +455,7 @@ export function DealHeading({
       document.removeEventListener("mousedown", close);
       document.removeEventListener("keydown", onKey);
     };
-  }, []);
+  }, [mobileActionsSlot]);
 
   useEffect(() => {
     setRenaming(false);
@@ -522,6 +537,139 @@ export function DealHeading({
     onSelectDeal(dealId);
   }
 
+  function actionsMenu(align: "start" | "end") {
+    const menuClass =
+      align === "end"
+        ? "absolute top-full right-0 z-50 mt-1.5 w-52 rounded-xl border border-gray-200/90 bg-white p-1 shadow-xl"
+        : "absolute top-full left-0 z-50 mt-1.5 w-52 rounded-xl border border-gray-200/90 bg-white p-1 shadow-xl";
+    const switchClass =
+      align === "end"
+        ? "absolute top-full right-0 z-50 mt-1 w-max min-w-80 max-w-[calc(100vw-2.5rem)] overflow-hidden rounded-xl border border-gray-200/90 bg-white shadow-2xl"
+        : "absolute top-full left-0 z-50 mt-1 w-max min-w-80 max-w-[calc(100vw-2.5rem)] overflow-hidden rounded-xl border border-gray-200/90 bg-white shadow-2xl md:top-0 md:left-full md:mt-0 md:ml-1.5";
+    const peopleClass =
+      align === "end"
+        ? "absolute top-full right-0 z-50 mt-1 overflow-hidden rounded-xl border border-gray-200/90 bg-white shadow-2xl"
+        : "absolute top-full left-0 z-50 mt-1 overflow-hidden rounded-xl border border-gray-200/90 bg-white shadow-2xl md:top-0 md:left-full md:mt-0 md:ml-1.5";
+    return (
+      <div role="menu" className={menuClass}>
+        {items.length > 1 ? (
+          <div className="relative">
+            <button
+              type="button"
+              role="menuitem"
+              aria-expanded={switchOpen}
+              aria-haspopup="menu"
+              onClick={toggleSwitch}
+              className={`flex w-full cursor-pointer items-center justify-between rounded-lg px-2.5 py-1.5 text-left text-xs font-medium transition-colors ${
+                switchOpen ? "bg-gray-100 text-black" : "text-gray-800 hover:bg-gray-50"
+              }`}
+            >
+              <span className="flex items-center gap-2">
+                <ArrowLeftRight className="h-3.5 w-3.5 shrink-0 text-gray-700" aria-hidden="true" />
+                <span>{copy.switchActiveDeal}</span>
+              </span>
+              <ChevronRight className="h-3 w-3 shrink-0 text-gray-500" aria-hidden="true" />
+            </button>
+            {switchOpen ? (
+              <div className={switchClass}>
+                <DealSwitchList
+                  deals={visible}
+                  selectedId={selectedId}
+                  showLost={showLost}
+                  lostCount={lostCount}
+                  onShowLost={() => setShowLost((value) => !value)}
+                  onChoose={choose}
+                />
+              </div>
+            ) : null}
+          </div>
+        ) : null}
+        <button
+          type="button"
+          role="menuitem"
+          onClick={beginRename}
+          className="flex w-full cursor-pointer items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-xs font-medium text-gray-700 transition-colors hover:bg-gray-50 hover:text-black"
+        >
+          <Pencil className="h-3.5 w-3.5 shrink-0 text-gray-500" aria-hidden="true" />
+          <span>{copy.renameDeal}</span>
+        </button>
+        <div className="relative">
+          <button
+            type="button"
+            role="menuitem"
+            aria-expanded={peopleOpen}
+            aria-haspopup="menu"
+            onClick={togglePeople}
+            className={`flex w-full cursor-pointer items-center justify-between rounded-lg px-2.5 py-1.5 text-left text-xs font-medium transition-colors ${
+              peopleOpen ? "bg-gray-100 text-black" : "text-gray-700 hover:bg-gray-50 hover:text-black"
+            }`}
+          >
+            <span className="flex items-center gap-2">
+              <SwitchCustomersIcon />
+              <span>{copy.addPersonToDeal}</span>
+            </span>
+            <ChevronRight className="h-3 w-3 shrink-0 text-gray-500" aria-hidden="true" />
+          </button>
+          {peopleOpen ? (
+            <div className={peopleClass}>
+              <DealPeopleList
+                customers={customers}
+                linkedIds={linkedCustomerIds}
+                primaryId={primaryCustomerId}
+                loading={customersLoading}
+                error={customersError}
+                pendingId={pendingCustomerId}
+                onToggle={onToggleCustomer}
+              />
+            </div>
+          ) : null}
+        </div>
+        <button
+          type="button"
+          role="menuitem"
+          disabled={creating}
+          onClick={() => {
+            setActionsOpen(false);
+            setSwitchOpen(false);
+            setPeopleOpen(false);
+            onCreateDeal();
+          }}
+          className="flex w-full cursor-pointer items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-xs font-medium text-gray-700 transition-colors hover:bg-gray-50 hover:text-black disabled:opacity-50"
+        >
+          <Plus className="h-3.5 w-3.5 shrink-0 text-gray-500" aria-hidden="true" />
+          <span>{copy.createDeal}</span>
+        </button>
+        {canMarkLost || lost ? (
+          <>
+            <div className="my-1 border-t border-gray-100" />
+            <button
+              type="button"
+              role="menuitem"
+              disabled={pending}
+              onClick={() => {
+                setActionsOpen(false);
+                setSwitchOpen(false);
+                setPeopleOpen(false);
+                if (lost) onReopen();
+                else onMarkLost();
+              }}
+              className={`flex w-full cursor-pointer items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-xs font-medium disabled:opacity-50 ${
+                lost ? "text-gray-700 hover:bg-gray-50" : "text-red-600 hover:bg-red-50"
+              }`}
+            >
+              {lost ? (
+                <RotateCcw className="h-3.5 w-3.5 shrink-0 text-gray-600" aria-hidden="true" />
+              ) : (
+                <X className="h-3.5 w-3.5 shrink-0 text-red-600" aria-hidden="true" />
+              )}
+              <span>{lost ? copy.reopenDeal : copy.markAsLost}</span>
+            </button>
+          </>
+        ) : null}
+      </div>
+    );
+  }
+
   return (
     <div ref={menu} className="relative z-40 flex items-center gap-1.5">
       <div className="relative flex items-center">
@@ -547,7 +695,7 @@ export function DealHeading({
             className="group -ml-1.5 inline-flex cursor-pointer items-center rounded-md py-0.5 pr-1 pl-1.5 text-left transition-colors hover:bg-gray-50"
           >
             <span className="font-serif text-sm font-normal tracking-tight whitespace-nowrap text-gray-950">
-              {title || copy.quote}
+              <DealHeadingLabel name={title || copy.quote} />
             </span>
             {hasNewDeal ? (
               <span className="ml-1.5 inline-flex items-center rounded-full bg-[#121314] px-1.5 py-0.5 text-[10px] leading-none font-medium text-white">
@@ -568,7 +716,7 @@ export function DealHeading({
           </button>
         ) : (
           <span className="font-serif text-sm font-normal tracking-tight whitespace-nowrap text-gray-950">
-            {title || copy.quote}
+            <DealHeadingLabel name={title || copy.quote} />
           </span>
         )}
         {dealsOpen ? (
@@ -584,7 +732,10 @@ export function DealHeading({
           </div>
         ) : null}
       </div>
-      <div className="relative">
+      <div ref={statusRef} className="lg:hidden">
+        <DealStatusBadge status={selectedStage} />
+      </div>
+      <div className="relative hidden lg:block">
         <button
           type="button"
           aria-expanded={actionsOpen}
@@ -595,128 +746,26 @@ export function DealHeading({
         >
           <EllipsisVertical className="h-4 w-4" aria-hidden="true" />
         </button>
-        {actionsOpen ? (
-          <div
-            role="menu"
-            className="absolute top-full left-0 z-50 mt-1.5 w-52 rounded-xl border border-gray-200/90 bg-white p-1 shadow-xl"
-          >
-            {items.length > 1 ? (
-              <div className="relative">
-                <button
-                  type="button"
-                  role="menuitem"
-                  aria-expanded={switchOpen}
-                  aria-haspopup="menu"
-                  onClick={toggleSwitch}
-                  className={`flex w-full cursor-pointer items-center justify-between rounded-lg px-2.5 py-1.5 text-left text-xs font-medium transition-colors ${
-                    switchOpen ? "bg-gray-100 text-black" : "text-gray-800 hover:bg-gray-50"
-                  }`}
-                >
-                  <span className="flex items-center gap-2">
-                    <ArrowLeftRight className="h-3.5 w-3.5 shrink-0 text-gray-700" aria-hidden="true" />
-                    <span>{copy.switchActiveDeal}</span>
-                  </span>
-                  <ChevronRight className="h-3 w-3 shrink-0 text-gray-500" aria-hidden="true" />
-                </button>
-                {switchOpen ? (
-                  <div className="absolute top-full left-0 z-50 mt-1 w-max min-w-80 max-w-[calc(100vw-2.5rem)] overflow-hidden rounded-xl border border-gray-200/90 bg-white shadow-2xl md:top-0 md:left-full md:mt-0 md:ml-1.5">
-                    <DealSwitchList
-                      deals={visible}
-                      selectedId={selectedId}
-                      showLost={showLost}
-                      lostCount={lostCount}
-                      onShowLost={() => setShowLost((value) => !value)}
-                      onChoose={choose}
-                    />
-                  </div>
-                ) : null}
-              </div>
-            ) : null}
-            <button
-              type="button"
-              role="menuitem"
-              onClick={beginRename}
-              className="flex w-full cursor-pointer items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-xs font-medium text-gray-700 transition-colors hover:bg-gray-50 hover:text-black"
-            >
-              <Pencil className="h-3.5 w-3.5 shrink-0 text-gray-500" aria-hidden="true" />
-              <span>{copy.renameDeal}</span>
-            </button>
+        {actionsOpen ? actionsMenu("start") : null}
+      </div>
+      {mobileActionsSlot
+        ? createPortal(
             <div className="relative">
               <button
                 type="button"
-                role="menuitem"
-                aria-expanded={peopleOpen}
+                aria-expanded={actionsOpen}
                 aria-haspopup="menu"
-                onClick={togglePeople}
-                className={`flex w-full cursor-pointer items-center justify-between rounded-lg px-2.5 py-1.5 text-left text-xs font-medium transition-colors ${
-                  peopleOpen ? "bg-gray-100 text-black" : "text-gray-700 hover:bg-gray-50 hover:text-black"
-                }`}
+                aria-label={copy.moreDealActions}
+                onClick={toggleActions}
+                className="flex h-7 w-7 cursor-pointer items-center justify-center rounded-full bg-gray-100 text-gray-600 transition-colors hover:bg-gray-200 hover:text-gray-900"
               >
-                <span className="flex items-center gap-2">
-                  <SwitchCustomersIcon />
-                  <span>{copy.addPersonToDeal}</span>
-                </span>
-                <ChevronRight className="h-3 w-3 shrink-0 text-gray-500" aria-hidden="true" />
+                <EllipsisVertical className="h-4 w-4" aria-hidden="true" />
               </button>
-              {peopleOpen ? (
-                <div className="absolute top-full left-0 z-50 mt-1 overflow-hidden rounded-xl border border-gray-200/90 bg-white shadow-2xl md:top-0 md:left-full md:mt-0 md:ml-1.5">
-                  <DealPeopleList
-                    customers={customers}
-                    linkedIds={linkedCustomerIds}
-                    primaryId={primaryCustomerId}
-                    loading={customersLoading}
-                    error={customersError}
-                    pendingId={pendingCustomerId}
-                    onToggle={onToggleCustomer}
-                  />
-                </div>
-              ) : null}
-            </div>
-            <button
-              type="button"
-              role="menuitem"
-              disabled={creating}
-              onClick={() => {
-                setActionsOpen(false);
-                setSwitchOpen(false);
-                setPeopleOpen(false);
-                onCreateDeal();
-              }}
-              className="flex w-full cursor-pointer items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-xs font-medium text-gray-700 transition-colors hover:bg-gray-50 hover:text-black disabled:opacity-50"
-            >
-              <Plus className="h-3.5 w-3.5 shrink-0 text-gray-500" aria-hidden="true" />
-              <span>{copy.createDeal}</span>
-            </button>
-            {canMarkLost || lost ? (
-              <>
-                <div className="my-1 border-t border-gray-100" />
-                <button
-                  type="button"
-                  role="menuitem"
-                  disabled={pending}
-                  onClick={() => {
-                    setActionsOpen(false);
-                    setSwitchOpen(false);
-                    setPeopleOpen(false);
-                    if (lost) onReopen();
-                    else onMarkLost();
-                  }}
-                  className={`flex w-full cursor-pointer items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-xs font-medium disabled:opacity-50 ${
-                    lost ? "text-gray-700 hover:bg-gray-50" : "text-red-600 hover:bg-red-50"
-                  }`}
-                >
-                  {lost ? (
-                    <RotateCcw className="h-3.5 w-3.5 shrink-0 text-gray-600" aria-hidden="true" />
-                  ) : (
-                    <X className="h-3.5 w-3.5 shrink-0 text-red-600" aria-hidden="true" />
-                  )}
-                  <span>{lost ? copy.reopenDeal : copy.markAsLost}</span>
-                </button>
-              </>
-            ) : null}
-          </div>
-        ) : null}
-      </div>
+              {actionsOpen ? actionsMenu("end") : null}
+            </div>,
+            mobileActionsSlot,
+          )
+        : null}
     </div>
   );
 }
