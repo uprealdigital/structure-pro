@@ -60,7 +60,6 @@ function SheetRow({
   disabled,
   destructive,
   chevron,
-  filled,
 }: {
   icon: ReactNode;
   label: string;
@@ -68,7 +67,6 @@ function SheetRow({
   disabled?: boolean;
   destructive?: boolean;
   chevron?: boolean;
-  filled?: boolean;
 }) {
   return (
     <button
@@ -76,7 +74,7 @@ function SheetRow({
       disabled={disabled}
       onClick={onClick}
       className={`flex w-full items-center gap-3 rounded-lg p-2 text-left transition-colors disabled:opacity-50 ${
-        destructive ? "text-[#dc2626] hover:bg-[#fef2f2]" : filled ? "bg-gray-50 text-gray-800 hover:bg-gray-100" : "text-gray-800 hover:bg-gray-100"
+        destructive ? "text-[#dc2626] hover:bg-[#fef2f2]" : "text-gray-800 hover:bg-gray-100"
       }`}
     >
       {icon}
@@ -508,8 +506,11 @@ export function DealHeading({
     function onKey(event: KeyboardEvent) {
       if (event.key !== "Escape") return;
       if (sheetOpen) {
-        if (sheetStep === "actions") setSheetOpen(false);
-        else setSheetStep("actions");
+        if (sheetStep === "actions" || sheetStep === "details") {
+          setSheetOpen(false);
+          setSheetStep("actions");
+          setSheetHeight(null);
+        } else setSheetStep("actions");
         return;
       }
       setActionsOpen(false);
@@ -531,6 +532,7 @@ export function DealHeading({
     setRenameError("");
     setSheetOpen(false);
     setSheetStep("actions");
+    setSheetHeight(null);
   }, [selectedId]);
 
   function toggleActions() {
@@ -574,6 +576,7 @@ export function DealHeading({
   function closeSheet() {
     setSheetOpen(false);
     setSheetStep("actions");
+    setSheetHeight(null);
   }
 
   function openSheetStep(step: "deals" | "people" | "details") {
@@ -860,19 +863,38 @@ export function DealHeading({
       </div>
       {mobileActionsSlot
         ? createPortal(
-            <button
-              type="button"
-              aria-expanded={sheetOpen}
-              aria-haspopup="dialog"
-              aria-label={copy.conversationActions}
-              onClick={() => {
-                setSheetStep("actions");
-                setSheetOpen(true);
-              }}
-              className="flex h-7 w-7 cursor-pointer items-center justify-center rounded-full bg-[#edeef0] text-gray-600 transition-colors hover:bg-[#e4e5e7] hover:text-gray-900"
-            >
-              <EllipsisVertical className="h-4 w-4" aria-hidden="true" />
-            </button>,
+            <>
+              <button
+                type="button"
+                aria-expanded={sheetOpen && sheetStep === "details"}
+                aria-haspopup="dialog"
+                aria-label={copy.viewDetails}
+                onClick={() => {
+                  onViewDetails();
+                  setSheetHeight(null);
+                  openSheetStep("details");
+                  setSheetOpen(true);
+                }}
+                className="flex h-7 w-7 cursor-pointer items-center justify-center rounded-lg bg-[#edeef0] text-gray-600 transition-colors hover:bg-[#e4e5e7] hover:text-gray-900"
+              >
+                <Info className="h-4 w-4" aria-hidden="true" />
+              </button>
+              <button
+                type="button"
+                aria-expanded={sheetOpen && sheetStep === "actions"}
+                aria-haspopup="dialog"
+                aria-label={copy.conversationActions}
+                onClick={() => {
+                  setSubStep("deals");
+                  setSheetStep("actions");
+                  setSheetHeight(null);
+                  setSheetOpen(true);
+                }}
+                className="flex h-7 w-7 cursor-pointer items-center justify-center rounded-lg bg-[#edeef0] text-gray-600 transition-colors hover:bg-[#e4e5e7] hover:text-gray-900"
+              >
+                <EllipsisVertical className="h-4 w-4" aria-hidden="true" />
+              </button>
+            </>,
             mobileActionsSlot,
           )
         : null}
@@ -888,7 +910,9 @@ export function DealHeading({
               >
                 <div
                   className={`relative overflow-hidden ${
-                    subStep === "details" ? "" : "transition-[height] duration-300 ease-out motion-reduce:transition-none"
+                    subStep === "details" || sheetHeight == null
+                      ? ""
+                      : "transition-[height] duration-300 ease-out motion-reduce:transition-none"
                   }`}
                   style={sheetHeight == null ? undefined : { height: sheetHeight }}
                 >
@@ -916,18 +940,6 @@ export function DealHeading({
                         >
                           <X className="h-4 w-4" aria-hidden="true" />
                         </button>
-                      </div>
-                      <div className="mt-3">
-                        <SheetRow
-                          icon={<Info className="h-[18px] w-[18px] shrink-0 text-gray-500" aria-hidden="true" />}
-                          label={copy.viewDetails}
-                          chevron
-                          filled
-                          onClick={() => {
-                            onViewDetails();
-                            openSheetStep("details");
-                          }}
-                        />
                       </div>
                     </div>
                     <div className="flex flex-col gap-3 px-3 py-3">
@@ -1052,17 +1064,35 @@ export function DealHeading({
                     } ${sheetStep === "actions" ? "translate-x-full" : "translate-x-0"}`}
                   >
                     <div className="flex shrink-0 items-center gap-2 border-b border-gray-200 px-3 py-3">
-                      <button
-                        type="button"
-                        aria-label={copy.goBack}
-                        onClick={() => setSheetStep("actions")}
-                        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-gray-900 transition-colors hover:bg-gray-100"
-                      >
-                        <ChevronLeft className="h-5 w-5" strokeWidth={2} aria-hidden="true" />
-                      </button>
-                      <h2 id={sheetStep === "actions" ? undefined : sheetTitleId} className="min-w-0 truncate font-serif text-base font-semibold text-gray-900">
-                        {subStep === "deals" ? copy.switchActiveDeal : subStep === "people" ? copy.addPersonToDeal : copy.dealDetails}
-                      </h2>
+                      {subStep === "details" ? (
+                        <div className="flex w-full items-center gap-2">
+                          <h2 id={sheetTitleId} className="min-w-0 flex-1 truncate font-serif text-sm font-semibold text-gray-900">
+                            {copy.details}
+                          </h2>
+                          <button
+                            type="button"
+                            aria-label={copy.close}
+                            onClick={closeSheet}
+                            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-gray-100 text-gray-500 transition-colors hover:bg-gray-200 hover:text-gray-900"
+                          >
+                            <X className="h-4 w-4" aria-hidden="true" />
+                          </button>
+                        </div>
+                      ) : (
+                        <>
+                          <button
+                            type="button"
+                            aria-label={copy.goBack}
+                            onClick={() => setSheetStep("actions")}
+                            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-gray-900 transition-colors hover:bg-gray-100"
+                          >
+                            <ChevronLeft className="h-5 w-5" strokeWidth={2} aria-hidden="true" />
+                          </button>
+                          <h2 id={sheetStep === "actions" ? undefined : sheetTitleId} className="min-w-0 flex-1 truncate font-serif text-base font-semibold text-gray-900">
+                            {subStep === "deals" ? copy.switchActiveDeal : copy.addPersonToDeal}
+                          </h2>
+                        </>
+                      )}
                     </div>
                     <div className="min-h-0 flex-1 overflow-y-auto">
                       {subStep === "deals" ? (

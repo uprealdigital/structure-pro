@@ -575,48 +575,111 @@ export function QuoteMenu({
   );
 }
 
+function quotePanelName(quote: ConversationQuote | null | undefined, revision: ConversationQuoteRevision): string {
+  const specs = revision.specs.length > 0 ? revision.specs : (quote?.specs ?? []);
+  if (quote?.quoteNumber) return quoteDisplayName(quote.quoteNumber, specs);
+  const style = specValue(specs, "Style");
+  const size = specValue(specs, "Size");
+  if (style && size) return `${style} (${size})`;
+  return style || size || copy.quote;
+}
+
 export function QuotePanel({
   revision,
+  quote,
 }: {
   revision: ConversationQuoteRevision | null;
+  quote?: ConversationQuote | null;
 }) {
   const updated = revision ? formatUpdatedAgo(revision.updatedAt) : "";
   const delivery = revision ? specValue(revision.specs, "Delivery ZIP") : "";
+  const name = revision ? quotePanelName(quote, revision) : copy.quote;
+  const imageUrl = revision?.renders?.render_small_url || revision?.imageUrl || "";
 
   return (
-    <div className="relative col-span-1 space-y-3.5 max-lg:px-2.5 lg:pl-4">
-      <div className="flex flex-col items-start gap-1">
-        <h3 className={sectionTitle}>{copy.quote}</h3>
-        {revision && updated ? (
-          <span className="text-[10px] leading-none font-normal whitespace-nowrap text-gray-400">
-            {copy.updated} {updated}
-          </span>
-        ) : null}
-        {revision ? null : <p className="text-xs text-gray-500">{copy.quoteUnavailable}</p>}
-      </div>
-
-      {revision ? (
-        <div className="space-y-3 pt-1 text-xs text-gray-700">
-          {revision.lines.map((line) => (
-            <div key={line.label} className="flex items-baseline justify-between gap-4">
-              <span className="text-gray-700">{line.label}</span>
-              <span className="font-bold whitespace-nowrap text-gray-950">{line.amountLabel}</span>
+    <div className="relative col-span-1 max-lg:px-2.5 lg:pl-4">
+      <div className="lg:hidden">
+        {revision ? (
+          <div className="-mx-2.5 mt-3 rounded-2xl bg-gray-50/90 px-2.5 py-3.5">
+            <div className="flex items-start justify-between gap-2">
+              <div className="min-w-0">
+                <div className="truncate text-xs font-bold text-gray-900">{name}</div>
+                <p className="mt-1 text-[10px] leading-none font-normal text-gray-400">{revisionMenuLabel(revision.revisionNumber)}</p>
+              </div>
+              <QuoteStatusBadge status={quote?.status ?? revision.status} />
             </div>
-          ))}
-          <div className="flex items-baseline justify-between pt-4 text-xs font-bold text-gray-950">
-            <span className="text-[10px] font-bold tracking-wider text-gray-700 uppercase">{copy.totalEstimate}</span>
-            <span className="text-sm font-bold text-gray-950">{revision.totalLabel}</span>
+            <div className="mt-3 flex items-center gap-3">
+              <div className="flex h-16 w-20 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-white">
+                {imageUrl ? <img alt={name} src={imageUrl} className="h-full w-full object-contain p-0.5" /> : null}
+              </div>
+              <div className="min-w-0 flex-1 space-y-3 text-xs text-gray-700">
+                {revision.lines.map((line) => (
+                  <div key={line.label} className="flex items-baseline justify-between gap-4">
+                    <span className="text-gray-700">{line.label}</span>
+                    <span className="font-normal whitespace-nowrap text-gray-950">{line.amountLabel}</span>
+                  </div>
+                ))}
+                <div className="mt-1 flex items-baseline justify-between border-t border-gray-200 pt-3 text-xs font-normal text-gray-950">
+                  <span className="text-[10px] font-normal tracking-wider text-gray-700 uppercase">{copy.totalEstimate}</span>
+                  <span className="text-sm font-normal text-gray-950">{revision.totalLabel}</span>
+                </div>
+              </div>
+            </div>
+            {delivery || updated ? (
+              <div className="mt-3 flex items-center justify-between gap-3">
+                {updated ? (
+                  <p className="text-[10px] leading-none font-normal text-gray-400">
+                    {copy.updated} {updated}
+                  </p>
+                ) : (
+                  <span />
+                )}
+                {delivery ? (
+                  <p className="text-right text-[10px] leading-none font-normal text-gray-400">
+                    {copy.deliveryTo} <span className="underline">{delivery}</span>
+                  </p>
+                ) : null}
+              </div>
+            ) : null}
           </div>
-          {delivery ? (
-            <div className="flex items-center gap-2 pt-3 text-xs text-gray-600">
-              <Calendar className="h-3.5 w-3.5 text-gray-400" strokeWidth={1.8} aria-hidden="true" />
-              <span>
-                {copy.deliveryTo} <span className="font-semibold text-gray-800 underline">{delivery}</span>
-              </span>
-            </div>
+        ) : (
+          <p className="text-xs text-gray-500">{copy.quoteUnavailable}</p>
+        )}
+      </div>
+      <div className="hidden space-y-3.5 lg:block">
+        <div className="flex flex-col items-start gap-1">
+          <h3 className={sectionTitle}>{copy.quote}</h3>
+          {revision && updated ? (
+            <span className="text-[10px] leading-none font-normal whitespace-nowrap text-gray-400">
+              {copy.updated} {updated}
+            </span>
           ) : null}
+          {revision ? null : <p className="text-xs text-gray-500">{copy.quoteUnavailable}</p>}
         </div>
-      ) : null}
+
+        {revision ? (
+          <div className="space-y-3 pt-1 text-xs text-gray-700">
+            {revision.lines.map((line) => (
+              <div key={line.label} className="flex items-baseline justify-between gap-4">
+                <span className="text-gray-700">{line.label}</span>
+                <span className="font-bold whitespace-nowrap text-gray-950">{line.amountLabel}</span>
+              </div>
+            ))}
+            <div className="flex items-baseline justify-between pt-4 text-xs font-bold text-gray-950">
+              <span className="text-[10px] font-bold tracking-wider text-gray-700 uppercase">{copy.totalEstimate}</span>
+              <span className="text-sm font-bold text-gray-950">{revision.totalLabel}</span>
+            </div>
+            {delivery ? (
+              <div className="flex items-center gap-2 pt-3 text-xs text-gray-600">
+                <Calendar className="h-3.5 w-3.5 text-gray-400" strokeWidth={1.8} aria-hidden="true" />
+                <span>
+                  {copy.deliveryTo} <span className="font-semibold text-gray-800 underline">{delivery}</span>
+                </span>
+              </div>
+            ) : null}
+          </div>
+        ) : null}
+      </div>
     </div>
   );
 }

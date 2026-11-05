@@ -262,21 +262,30 @@ export function DesignPreviewModal({ current, revisions, selections, suggested, 
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-4 backdrop-blur-sm"
+      className="fixed inset-0 z-50 lg:flex lg:items-center lg:justify-center lg:bg-black/45 lg:p-4 lg:backdrop-blur-sm"
       role="presentation"
       onMouseDown={() => {
         if (!attaching && !beautified.beautifying) onClose();
       }}
     >
+      <button
+        type="button"
+        aria-label={copy.close}
+        className="absolute inset-0 bg-black/60 backdrop-blur-sm lg:hidden"
+        onMouseDown={(event) => event.stopPropagation()}
+        onClick={() => {
+          if (!attaching && !beautified.beautifying) onClose();
+        }}
+      />
       <div
         role="dialog"
         aria-modal="true"
         aria-labelledby="design-preview-title"
         onMouseDown={(event) => event.stopPropagation()}
-        className="flex max-h-[min(860px,calc(100vh-2rem))] w-full max-w-[640px] flex-col overflow-hidden rounded-2xl bg-white text-gray-900 shadow-2xl"
+        className="absolute inset-x-0 bottom-0 flex max-h-[100dvh] flex-col overflow-hidden rounded-t-2xl border-t border-gray-200 bg-white text-gray-900 lg:relative lg:inset-auto lg:max-h-[min(860px,calc(100vh-2rem))] lg:w-full lg:max-w-[640px] lg:rounded-2xl lg:border-t-0 lg:shadow-2xl"
       >
-        <header className="flex shrink-0 items-center justify-between gap-4 px-6 pt-5 pb-3">
-          <h2 id="design-preview-title" className="text-base font-semibold tracking-tight text-gray-950">
+        <header className="flex shrink-0 items-center justify-between gap-2 border-b border-gray-200 px-3 py-3 lg:border-b-0 lg:gap-4 lg:px-6 lg:pt-5 lg:pb-3">
+          <h2 id="design-preview-title" className="min-w-0 flex-1 truncate font-serif text-sm font-semibold text-gray-900 lg:font-sans lg:text-base lg:tracking-tight lg:text-gray-950">
             {copy.designPreviewTitle}
           </h2>
           <button
@@ -284,13 +293,13 @@ export function DesignPreviewModal({ current, revisions, selections, suggested, 
             aria-label={copy.close}
             disabled={attaching || beautified.beautifying}
             onClick={onClose}
-            className="flex h-8 w-8 items-center justify-center rounded-md text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-700 disabled:opacity-40"
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-gray-100 text-gray-500 transition-colors hover:bg-gray-200 hover:text-gray-900 disabled:opacity-40 lg:rounded-md lg:bg-transparent lg:text-gray-400 lg:hover:bg-gray-100 lg:hover:text-gray-700"
           >
             <X className="h-4 w-4" strokeWidth={2} aria-hidden="true" />
           </button>
         </header>
 
-        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-6 pb-4">
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 pt-3 pb-4 lg:px-6 lg:pt-0">
           <RevisionChangeList current={current} revisions={revisions} suggested={suggested} />
 
           <div className="mt-6 mb-3 flex items-center justify-between gap-3">
@@ -329,14 +338,14 @@ export function DesignPreviewModal({ current, revisions, selections, suggested, 
           <div ref={listEnd} />
         </div>
 
-        <footer className="flex shrink-0 flex-wrap items-center justify-between gap-3 px-6 py-4">
-          <div className="flex flex-wrap items-center gap-2">
+        <footer className="grid shrink-0 grid-cols-2 items-center gap-x-3 gap-y-2 px-3 pt-4 lg:flex lg:flex-wrap lg:justify-between lg:gap-3 lg:px-6 lg:py-4">
+          <div className="contents lg:flex lg:flex-wrap lg:items-center lg:gap-2">
             <button
               type="button"
               onClick={addView}
               disabled={locked || views.length >= maxDesignViews}
               title={views.length >= maxDesignViews ? copy.designPreviewViewLimit : undefined}
-              className="inline-flex items-center gap-1.5 rounded-full border border-dashed border-gray-300 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 transition-colors hover:bg-gray-50 disabled:opacity-40"
+              className="inline-flex items-center justify-self-start gap-1.5 rounded-full border border-dashed border-gray-300 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 transition-colors hover:bg-gray-50 disabled:opacity-40"
             >
               <Plus className="h-3.5 w-3.5 text-gray-500" strokeWidth={2} aria-hidden="true" />
               {copy.addAnotherView}
@@ -359,7 +368,7 @@ export function DesignPreviewModal({ current, revisions, selections, suggested, 
                 void beautified.beautify(captures);
               }}
               disabled={beautified.beautifying || attaching || !modelReady || views.length === 0}
-              className="inline-flex items-center gap-1.5 rounded-full border border-gray-200 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 transition-colors hover:bg-gray-50 disabled:opacity-40"
+              className="inline-flex items-center justify-self-end gap-1.5 rounded-full border border-gray-200 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 transition-colors hover:bg-gray-50 disabled:opacity-40"
             >
               {showingPhotos ? (
                 <Undo2 className="h-3.5 w-3.5 text-gray-500" strokeWidth={2} aria-hidden="true" />
@@ -369,12 +378,12 @@ export function DesignPreviewModal({ current, revisions, selections, suggested, 
               {beautified.beautifying ? copy.beautifying : showingPhotos ? copy.revertBeautify : copy.beautify}
             </button>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="col-span-2 -mx-3 grid grid-cols-2 gap-3 bg-white px-3 pt-4 pb-[45px] lg:col-auto lg:mx-0 lg:flex lg:w-auto lg:gap-2 lg:bg-transparent lg:p-0">
             <button
               type="button"
               onClick={onClose}
               disabled={attaching || beautified.beautifying}
-              className="rounded-md px-3 py-2 text-xs font-medium text-gray-600 transition-colors hover:text-gray-900 disabled:opacity-40"
+              className="flex w-full items-center justify-center rounded-lg bg-[#edeef0] px-3 py-2 text-xs font-medium text-gray-700 transition-colors hover:bg-[#e4e5e7] disabled:opacity-40 lg:w-auto lg:rounded-md lg:bg-transparent lg:text-gray-600 lg:hover:bg-transparent lg:hover:text-gray-900"
             >
               {copy.cancel}
             </button>
@@ -382,7 +391,7 @@ export function DesignPreviewModal({ current, revisions, selections, suggested, 
               type="button"
               onClick={() => void attach()}
               disabled={attaching || beautified.beautifying || views.length === 0}
-              className="inline-flex items-center gap-1.5 rounded-lg bg-black px-3.5 py-2 text-xs font-semibold whitespace-nowrap text-white shadow-sm transition-colors hover:bg-gray-800 disabled:opacity-40"
+              className="inline-flex w-full items-center justify-center gap-1.5 rounded-lg bg-black px-3.5 py-2 text-xs font-semibold whitespace-nowrap text-white shadow-sm transition-colors hover:bg-gray-800 disabled:opacity-40 lg:w-auto"
             >
               <Check className="h-3.5 w-3.5" strokeWidth={2.4} aria-hidden="true" />
               {attaching ? copy.attachingDesignPreview : copy.attachDesignPreviewAction}

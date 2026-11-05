@@ -2204,11 +2204,11 @@ export function ConversationDetail({
                   href={`tel:${customer.phone}`}
                   aria-label={copy.callNow}
                   title={`${copy.callNow} ${customer.fullName}`}
-                  className="flex h-7 w-7 items-center justify-center rounded-full bg-[#edeef0] text-gray-700 transition-colors hover:bg-[#e4e5e7]"
+                  className="flex h-7 w-7 items-center justify-center rounded-lg bg-[#edeef0] text-gray-700 transition-colors hover:bg-[#e4e5e7]"
                 >
                   <Phone className="h-3.5 w-3.5" strokeWidth={1.8} aria-hidden="true" />
                 </a>
-                <div ref={setMobileActionsSlot} />
+                <div ref={setMobileActionsSlot} className="flex items-center gap-1.5" />
               </div>
             </div>
             <DealHeading
@@ -2235,7 +2235,7 @@ export function ConversationDetail({
               mobileActionsSlot={mobileActionsSlot}
               onViewDetails={() => setMobileSummaryDealId(focused.deal.id)}
               details={
-                <div className="grid grid-cols-1 gap-6 bg-white px-6 py-4">
+                <div className="grid grid-cols-1 gap-6 bg-white px-3 py-4">
                   <DealSummary
                     source={focused.deal.source}
                     createdAt={conversation.created_at}
@@ -2243,8 +2243,11 @@ export function ConversationDetail({
                     customerId={customer.id}
                     participants={participants}
                     summary={generatedSummary}
+                    title={focusedOption?.title || copy.quote}
+                    status={focused.deal.status}
+                    customersClosed
                   />
-                  <QuotePanel revision={viewed} />
+                  <QuotePanel revision={viewed} quote={focused.quote} />
                 </div>
               }
               quoteActions={
