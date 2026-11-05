@@ -37,8 +37,8 @@ import {
   quoteCommunicationWriteSchema,
   quoteRevisionActivateSchema,
   quoteRevisionRenderFilesSchema,
+  type LoadedQuotePortal,
   type QuoteListItem,
-  type QuotePortal,
   type QuoteRevisionRenders,
   type QuoteStatus,
 } from "@/src/features/crm/quotes/types";
@@ -53,7 +53,7 @@ function revalidateConversations() {
 
 export async function loadQuotePortal(
   input: unknown,
-): Promise<{ success: true; data: QuotePortal } | { error: string }> {
+): Promise<{ success: true; data: LoadedQuotePortal } | { error: string }> {
   const parsed = payQuoteDepositSchema.safeParse(input);
   if (!parsed.success) return { error: "A quote is required" };
   try {

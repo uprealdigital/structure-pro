@@ -1,6 +1,5 @@
 import { z } from "zod";
 import { quoteSelectionsSchema } from "@/src/features/cpq/types";
-import { customerSchema } from "@/src/features/crm/common/types";
 
 export const quoteStatusSchema = z.enum([
   "draft",
@@ -16,13 +15,6 @@ export type QuoteStatus = z.infer<typeof quoteStatusSchema>;
 
 export const quoteRecordStatusSchema = quoteStatusSchema;
 export type QuoteRecordStatus = QuoteStatus;
-
-export const quoteCustomerSchema = z.object({
-  id: z.string(),
-  name: z.string(),
-});
-
-export type QuoteCustomer = z.infer<typeof quoteCustomerSchema>;
 
 export const quoteListCustomerSchema = z.object({
   id: z.string(),
@@ -170,57 +162,67 @@ export const quoteLifecycleSchema = z.object({
   openedByCustomer: z.boolean().default(false),
 });
 
-export const quotePortalLineSchema = z.object({
-  label: z.string(),
-  amountLabel: z.string(),
-});
+const quotePortalDealStatusSchema = z.enum([
+  "new_lead",
+  "active_quote",
+  "pending_deposit",
+  "deal_won",
+  "deal_lost",
+]);
 
-export const quotePortalDetailSchema = z.object({
-  label: z.string(),
-  value: z.string(),
-});
-
-export const quotePortalCustomerSchema = quoteCustomerSchema.extend({
-  primary: z.boolean(),
+export const quotePortalCustomerSchema = z.object({
+  id: z.string(),
+  full_name: z.string(),
+  phone: z.string(),
+  email: z.string(),
+  opted_out: z.boolean(),
+  active_deal_id: z.string().nullable(),
+  created_at: z.string(),
 });
 
 export type QuotePortalCustomer = z.infer<typeof quotePortalCustomerSchema>;
 
-export const quotePortalRecipientSchema = z.object({
-  dealId: z.string(),
-  isPrimary: z.boolean(),
-  customer: customerSchema,
+export const quotePortalDealSchema = z.object({
+  id: z.string(),
+  quote_id: z.string().nullable(),
+  status: quotePortalDealStatusSchema,
+  name: z.string().nullable(),
+  deal_customers: z.array(
+    z.object({
+      is_primary: z.boolean(),
+      customer: quotePortalCustomerSchema,
+    }),
+  ),
+  deal_quotes: z.array(z.object({ quote_id: z.string() })),
 });
 
-export type QuotePortalRecipient = z.infer<typeof quotePortalRecipientSchema>;
+export const quotePortalRevisionSchema = z.object({
+  id: z.string(),
+  revision_number: z.number().int().positive(),
+  status: quoteStatusSchema,
+  config: quoteSelectionsSchema,
+  communication: quoteCommunicationSchema.nullable(),
+  renders: quoteRevisionRendersSchema.nullable(),
+  created_at: z.string(),
+});
 
 export const quotePortalSchema = z.object({
-  id: z.string().min(1),
-  invoiceId: z.string().min(1),
-  revisionId: z.string().min(1),
-  dealName: z.string().min(1),
-  versionLabel: z.string().min(1),
-  dateLabel: z.string(),
-  imageUrl: z.string().min(1),
-  renders: quoteRevisionRendersSchema.nullable().default(null),
-  monthlyLabel: z.string(),
-  monthsLabel: z.string(),
-  lines: z.array(quotePortalLineSchema),
-  details: z.array(quotePortalDetailSchema),
-  totalLabel: z.string(),
-  zip: z.string(),
-  won: z.boolean(),
-  confirmedAt: z.string().default(""),
-  customers: z.array(quotePortalCustomerSchema),
-  recipients: z.array(quotePortalRecipientSchema),
-  dealIds: z.array(z.string()),
-  quoteCount: z.number().int().nonnegative(),
-  selections: quoteSelectionsSchema,
-  communication: quoteCommunicationSchema.nullable(),
-  status: quotePortalStatusSchema,
+  id: z.string(),
+  invoice_id: z.string(),
+  quote_number: z.number().int().positive(),
+  status: quoteStatusSchema,
+  created_at: z.string(),
+  updated_at: z.string(),
+  quote_revision: quotePortalRevisionSchema.nullable(),
+  deals: z.array(quotePortalDealSchema),
+  deal_quotes: z.array(z.object({ deal: quotePortalDealSchema })),
 });
 
 export type QuotePortal = z.infer<typeof quotePortalSchema>;
+
+export type LoadedQuotePortal = QuotePortal & {
+  quote_revision: NonNullable<QuotePortal["quote_revision"]>;
+};
 
 export const payQuoteDepositSchema = z.object({
   quoteId: z.string().trim().min(1),

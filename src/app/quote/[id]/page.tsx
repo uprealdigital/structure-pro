@@ -3,8 +3,9 @@ import { redirect } from "next/navigation";
 import { QuotePortal } from "@/src/features/crm/quotes/components/quote-portal";
 import { QuoteUnavailable } from "@/src/features/crm/quotes/components/quote-unavailable";
 import { getQuotePortal } from "@/src/features/crm/quotes/server/queries";
-import type { QuotePortal as QuotePortalData } from "@/src/features/crm/quotes/types";
+import type { LoadedQuotePortal } from "@/src/features/crm/quotes/types";
 import { quotePortalMode } from "@/src/features/crm/quotes/utils/formatting";
+import { quotePortalView } from "@/src/features/crm/quotes/utils/portal";
 
 export const dynamic = "force-dynamic";
 
@@ -18,7 +19,7 @@ export async function generateMetadata({
   const { id } = await params;
   const { mode } = await searchParams;
   const quote = await publishedQuote(id, quotePortalMode(mode));
-  return { title: quote ? `${quote.dealName} — Quote` : "Quote" };
+  return { title: quote ? `${quotePortalView(quote).dealName} — Quote` : "Quote" };
 }
 
 function firstQueryValue(value: string | string[] | undefined): string | undefined {
@@ -44,7 +45,7 @@ export default async function QuotePage({
 async function publishedQuote(
   id: string,
   mode: ReturnType<typeof quotePortalMode>,
-): Promise<QuotePortalData | undefined> {
+): Promise<LoadedQuotePortal | undefined> {
   const quote = await getQuotePortal(id);
   if (!quote || (mode === "external" && quote.status === "draft")) return undefined;
   return quote;

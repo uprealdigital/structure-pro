@@ -1,6 +1,7 @@
 import { portalCopy } from "@/src/features/crm/quotes/locales/en";
-import type { QuotePortal } from "@/src/features/crm/quotes/types";
+import type { LoadedQuotePortal } from "@/src/features/crm/quotes/types";
 import { formatQuoteDateTime } from "@/src/features/crm/quotes/utils/formatting";
+import { quotePortalView } from "@/src/features/crm/quotes/utils/portal";
 
 export type QuotePdfKind = "quote" | "agreement" | "receipt";
 
@@ -36,8 +37,9 @@ function wrap(value: string, width: number): string[] {
   return lines.length > 0 ? lines : [""];
 }
 
-function quoteLines(quote: QuotePortal, kind: QuotePdfKind): string[] {
-  const confirmedAt = formatQuoteDateTime(quote.confirmedAt);
+function quoteLines(quote: LoadedQuotePortal, kind: QuotePdfKind): string[] {
+  const view = quotePortalView(quote);
+  const confirmedAt = formatQuoteDateTime(view.confirmedAt);
   const header =
     kind === "receipt"
       ? [
@@ -52,19 +54,19 @@ function quoteLines(quote: QuotePortal, kind: QuotePdfKind): string[] {
         : [];
   const lines = [
     ...header,
-    quote.dealName,
+    view.dealName,
     "",
-    `${quote.versionLabel}    ${quote.dateLabel}`,
+    `${view.versionLabel}    ${view.dateLabel}`,
     "",
     portalCopy.paymentOptions,
-    `${portalCopy.fromAsLowAs} ${quote.monthlyLabel} ${quote.monthsLabel}`,
+    `${portalCopy.fromAsLowAs} ${view.monthlyLabel} ${view.monthsLabel}`,
     "",
   ];
-  for (const line of quote.lines) lines.push(`${line.label}    ${line.amountLabel}`);
-  lines.push("", `${portalCopy.total}    ${quote.totalLabel}`, "");
+  for (const line of view.lines) lines.push(`${line.label}    ${line.amountLabel}`);
+  lines.push("", `${portalCopy.total}    ${view.totalLabel}`, "");
   lines.push(...wrap(portalCopy.disclaimer, 88), "");
   lines.push(...wrap(portalCopy.satisfaction, 88));
-  if (quote.zip) lines.push("", `${portalCopy.deliveryTo} ${quote.zip}`);
+  if (view.zip) lines.push("", `${portalCopy.deliveryTo} ${view.zip}`);
   return lines;
 }
 
@@ -74,17 +76,17 @@ function chunk(lines: string[], size: number): string[][] {
   return pages.length > 0 ? pages : [[""]];
 }
 
-export function quotePdfFilename(quote: QuotePortal, kind: QuotePdfKind = "quote"): string {
-  const name = pdfText(quote.dealName)
+export function quotePdfFilename(quote: LoadedQuotePortal, kind: QuotePdfKind = "quote"): string {
+  const name = pdfText(quotePortalView(quote).dealName)
     .trim()
     .replace(/[^\w.-]+/g, "-")
     .replace(/-+/g, "-")
     .replace(/^-|-$/g, "");
   const suffix = kind === "quote" ? "" : `-${kind}`;
-  return `${name || quote.invoiceId}${suffix}.pdf`;
+  return `${name || quote.invoice_id}${suffix}.pdf`;
 }
 
-export function quotePdfBytes(quote: QuotePortal, kind: QuotePdfKind = "quote"): Uint8Array {
+export function quotePdfBytes(quote: LoadedQuotePortal, kind: QuotePdfKind = "quote"): Uint8Array {
   const pages = chunk(quoteLines(quote, kind), 42);
   const encoder = new TextEncoder();
   const objects: string[] = [
@@ -132,14 +134,14 @@ export function quotePdfBytes(quote: QuotePortal, kind: QuotePdfKind = "quote"):
   return bytes;
 }
 
-export function quotePdfBlob(quote: QuotePortal, kind: QuotePdfKind = "quote"): Blob {
+export function quotePdfBlob(quote: LoadedQuotePortal, kind: QuotePdfKind = "quote"): Blob {
   const bytes = quotePdfBytes(quote, kind);
   const buffer = new ArrayBuffer(bytes.byteLength);
   new Uint8Array(buffer).set(bytes);
   return new Blob([buffer], { type: "application/pdf" });
 }
 
-export function downloadQuotePdf(quote: QuotePortal, kind: QuotePdfKind = "quote") {
+export function downloadQuotePdf(quote: LoadedQuotePortal, kind: QuotePdfKind = "quote") {
   const url = URL.createObjectURL(quotePdfBlob(quote, kind));
   const link = document.createElement("a");
   link.href = url;
@@ -148,10 +150,10 @@ export function downloadQuotePdf(quote: QuotePortal, kind: QuotePdfKind = "quote
   URL.revokeObjectURL(url);
 }
 
-export async function shareQuotePdf(quote: QuotePortal) {
+export async function shareQuotePdf(quote: LoadedQuotePortal) {
   const file = new File([quotePdfBlob(quote)], quotePdfFilename(quote), { type: "application/pdf" });
   if (typeof navigator.share === "function" && navigator.canShare?.({ files: [file] })) {
-    await navigator.share({ files: [file], title: quote.dealName });
+    await navigator.share({ files: [file], title: quotePortalView(quote).dealName });
     return;
   }
   downloadQuotePdf(quote);

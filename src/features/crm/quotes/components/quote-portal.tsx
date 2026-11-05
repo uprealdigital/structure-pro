@@ -8,7 +8,7 @@ import { useEffect, useRef, useState } from "react";
 import { BuildingConfigurator } from "@/src/features/cpq/components/building-configurator";
 import type { QuoteRevisionRenderFiles } from "@/src/features/cpq/components/building-scene";
 import type { QuoteSelections } from "@/src/features/cpq/types";
-import { CustomerPills, type CustomerPill } from "@/src/features/crm/common/components/customer-pills";
+import { CustomerPills } from "@/src/features/crm/common/components/customer-pills";
 import { QuoteStatusActions } from "@/src/features/crm/conversations/components/quote-status-actions";
 import { ReviewSendModal } from "@/src/features/crm/conversations/components/review-send-modal";
 import type { ConversationParticipant } from "@/src/features/crm/conversations/types";
@@ -30,7 +30,8 @@ import {
   saveQuoteCommunication,
   signQuoteAgreement,
 } from "@/src/features/crm/quotes/server/actions";
-import type { QuoteChangeEvent, QuoteCommunication, QuotePortal, QuotePortalMode } from "@/src/features/crm/quotes/types";
+import type { LoadedQuotePortal, QuoteChangeEvent, QuoteCommunication, QuotePortalMode } from "@/src/features/crm/quotes/types";
+import { quotePortalView } from "@/src/features/crm/quotes/utils/portal";
 import { downloadQuotePdf, shareQuotePdf, type QuotePdfKind } from "@/src/features/crm/quotes/utils/quote-pdf";
 
 const actionClass =
@@ -99,7 +100,7 @@ export function QuotePortal({
   quote: initialQuote,
   mode = "external",
 }: {
-  quote: QuotePortal;
+  quote: LoadedQuotePortal;
   mode?: QuotePortalMode;
 }) {
   const router = useRouter();
@@ -111,15 +112,16 @@ export function QuotePortal({
   quoteRef.current = quote;
   incomingRef.current = initialQuote;
   const internal = mode === "internal";
-  const { pending, error, pay } = usePayDeposit(quote.id, quote.won);
+  const view = quotePortalView(quote);
+  const { pending, error, pay } = usePayDeposit(quote.id, view.won);
   const { save } = useSaveQuoteRevision(quote.id);
   const { send } = useSendQuote({
     quoteId: quote.id,
-    revisionId: quote.revisionId,
-    dealIds: quote.dealIds,
-    dealName: quote.dealName,
-    dealPrice: quote.totalLabel,
-    quoteName: quote.dealName,
+    revisionId: quote.quote_revision.id,
+    dealIds: view.dealIds,
+    dealName: view.dealName,
+    dealPrice: view.totalLabel,
+    quoteName: view.dealName,
   });
   const [editing, setEditing] = useState(false);
   const [signing, setSigning] = useState(false);
@@ -131,13 +133,13 @@ export function QuotePortal({
   const [updateReady, setUpdateReady] = useState(false);
   const [loadingLatest, setLoadingLatest] = useState(false);
   const shareRef = useRef<HTMLDivElement>(null);
-  const dealId = quote.dealIds[0];
+  const dealId = view.dealIds[0];
 
   function showError(message: string) {
     setToast({ id: Date.now(), message });
   }
 
-  function replaceQuote(next: QuotePortal) {
+  function replaceQuote(next: LoadedQuotePortal) {
     quoteRef.current = next;
     setQuote(next);
     setUpdateReady(false);
@@ -147,7 +149,8 @@ export function QuotePortal({
     const current = quoteRef.current;
     if (event.id !== current.id || event.kind === "delete") return;
     const statusChanged = event.status != null && event.status !== current.status;
-    const revisionChanged = typeof event.activeRevisionId === "string" && event.activeRevisionId !== current.revisionId;
+    const revisionChanged =
+      typeof event.activeRevisionId === "string" && event.activeRevisionId !== current.quote_revision.id;
     const markedViewed = statusChanged && current.status === "sent" && event.status === "viewed";
     if (markedViewed) replaceQuote({ ...current, status: "viewed" });
     if (revisionChanged || (statusChanged && !markedViewed)) setUpdateReady(true);
@@ -217,29 +220,9 @@ export function QuotePortal({
   const updatePill = updateReady ? (
     <QuoteUpdatePill pending={loadingLatest} onView={() => void viewLatest()} />
   ) : null;
-  const depositPaid = quote.won || quote.status === "deposit_paid";
+  const depositPaid = view.won || quote.status === "deposit_paid";
   const agreementSigned = depositPaid || quote.status === "signed";
-
-  const participants: ConversationParticipant[] = quote.recipients.map((recipient) => ({
-    dealId: recipient.dealId,
-    isPrimary: recipient.isPrimary,
-    customer: recipient.customer,
-  }));
-  const people = new Map<string, CustomerPill>();
-  for (const recipient of quote.recipients) {
-    const existing = people.get(recipient.customer.id);
-    if (existing) {
-      if (recipient.isPrimary) existing.primary = true;
-      continue;
-    }
-    people.set(recipient.customer.id, {
-      id: recipient.customer.id,
-      fullName: recipient.customer.fullName,
-      phone: recipient.customer.phone,
-      email: recipient.customer.email,
-      primary: recipient.isPrimary,
-    });
-  }
+  const participants: ConversationParticipant[] = view.memberships;
 
   async function saveRevision(selections: QuoteSelections, renders: QuoteRevisionRenderFiles) {
     suppressRemote.current = true;
@@ -273,14 +256,14 @@ export function QuotePortal({
   }
 
   async function saveCommunication(communication: QuoteCommunication) {
-    const result = await saveQuoteCommunication({ revisionId: quote.revisionId, communication });
+    const result = await saveQuoteCommunication({ revisionId: quote.quote_revision.id, communication });
     if ("error" in result) throw new Error(result.error);
   }
 
   async function copyQuote() {
     if (!dealId || actionPending) return;
     setActionPending(true);
-    const result = await duplicateQuote({ dealId, quoteId: quote.id, revisionId: quote.revisionId });
+    const result = await duplicateQuote({ dealId, quoteId: quote.id, revisionId: quote.quote_revision.id });
     setActionPending(false);
     if ("error" in result) {
       showError(portalCopy.actionError);
@@ -346,8 +329,7 @@ export function QuotePortal({
     replaceQuote({
       ...previous,
       status: "deposit_paid",
-      won: true,
-      confirmedAt: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
     });
     suppressRemote.current = true;
     try {
@@ -445,13 +427,13 @@ export function QuotePortal({
           <div className="flex flex-col justify-between gap-4 lg:flex-row lg:items-start lg:gap-6">
           <div className="flex min-w-0 flex-col gap-2">
             <h1 className="font-serif text-2xl font-semibold tracking-tight text-[#1a1c1d] lg:text-3xl">
-              {quote.dealName}
+              {view.dealName}
             </h1>
             <div className="flex flex-wrap items-center gap-3">
               {internal ? (
                 <QuoteStatusBadge status={quote.status} />
               ) : null}
-              <p className="text-xs font-medium text-[#655d55]">{quote.versionLabel}</p>
+              <p className="text-xs font-medium text-[#655d55]">{view.versionLabel}</p>
             </div>
           </div>
 
@@ -511,22 +493,22 @@ export function QuotePortal({
                 </Link>
               ) : null}
             </div>
-            {quote.dateLabel ? (
-              <p className="text-xs font-medium text-[#655d55]">{quote.dateLabel}</p>
+            {view.dateLabel ? (
+              <p className="text-xs font-medium text-[#655d55]">{view.dateLabel}</p>
             ) : null}
             {copied && !shareOpen ? <p className="text-xs text-[#44474a]">{portalCopy.linkCopied}</p> : null}
           </div>
           </div>
-          {internal ? <CustomerPills people={[...people.values()]} /> : null}
+          {internal ? <CustomerPills people={view.people} /> : null}
         </div>
       </header>
 
       {editing ? (
         <div className="flex min-h-0 flex-1 flex-col">
           <BuildingConfigurator
-            key={quote.revisionId}
+            key={quote.quote_revision.id}
             mode="internal"
-            selections={quote.selections}
+            selections={quote.quote_revision.config}
             onSave={saveRevision}
             onCancel={() => setEditing(false)}
           />
@@ -536,8 +518,8 @@ export function QuotePortal({
           <section className="mx-auto grid w-full max-w-7xl grid-cols-1 items-start gap-8 px-4 py-6 sm:px-6 lg:grid-cols-12 lg:px-10">
             <div className="flex min-h-[460px] items-center justify-center lg:col-span-7 lg:min-h-[520px]">
               <img
-                src={quote.renders?.render_full_url || quote.imageUrl}
-                alt={quote.dealName}
+                src={quote.quote_revision.renders?.render_full_url || view.imageUrl}
+                alt={view.dealName}
                 className="max-h-[420px] w-auto max-w-full object-contain drop-shadow-2xl select-none"
               />
             </div>
@@ -547,7 +529,7 @@ export function QuotePortal({
                 {!internal && agreementSigned ? (
                   <QuoteReceipts
                     paid={depositPaid}
-                    confirmedLabel={formatQuoteDateTime(quote.confirmedAt)}
+                    confirmedLabel={formatQuoteDateTime(view.confirmedAt)}
                     onDownloadAgreement={() => onDownload("agreement")}
                   />
                 ) : null}
@@ -559,13 +541,13 @@ export function QuotePortal({
                   <span className="underline">{portalCopy.paymentOptions}</span>
                   <span>{portalCopy.fromAsLowAs}</span>
                   <span className="rounded border border-[#dca270] bg-[#fdf6e9] px-2 py-0.5 font-medium text-[#ad662b]">
-                    {quote.monthlyLabel}
+                    {view.monthlyLabel}
                   </span>
-                  <span>{quote.monthsLabel}</span>
+                  <span>{view.monthsLabel}</span>
                 </p>
 
                 <div className="flex flex-col">
-                  {quote.lines.map((line) => (
+                  {view.lines.map((line) => (
                     <div
                       key={line.label}
                       className="flex items-center justify-between gap-4 py-1.5 text-xs"
@@ -580,7 +562,7 @@ export function QuotePortal({
                   <span className="font-serif text-sm font-bold tracking-wider text-[#1a1c1d] uppercase">
                     {portalCopy.total}
                   </span>
-                  <span className="font-mono text-3xl font-bold text-black lg:text-4xl">{quote.totalLabel}</span>
+                  <span className="font-mono text-3xl font-bold text-black lg:text-4xl">{view.totalLabel}</span>
                 </div>
 
                 <div className="space-y-2 pt-1 text-[11px] leading-relaxed text-[#655d55]">
@@ -642,7 +624,7 @@ export function QuotePortal({
                     <span>
                       {portalCopy.deliveryTo}{" "}
                       <button type="button" className="font-medium text-[#1a1c1d] underline">
-                        {quote.zip}
+                        {view.zip}
                       </button>
                     </span>
                   </div>
@@ -671,13 +653,13 @@ export function QuotePortal({
       {reviewOpen ? (
         <ReviewSendModal
           participants={participants}
-          title={quote.dealName}
-          priceLabel={quote.totalLabel}
+          title={view.dealName}
+          priceLabel={view.totalLabel}
           quoteId={quote.id}
-          revisionId={quote.revisionId}
-          imageUrl={quote.renders?.render_small_url || quote.imageUrl}
+          revisionId={quote.quote_revision.id}
+          imageUrl={quote.quote_revision.renders?.render_small_url || view.imageUrl}
           statusLabel={quoteStatuses[quote.status].label}
-          communication={quote.communication}
+          communication={quote.quote_revision.communication}
           onSave={saveCommunication}
           onSend={sendQuote}
           onClose={() => setReviewOpen(false)}

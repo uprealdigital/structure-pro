@@ -214,14 +214,24 @@ export function systemEventText(text: string): SystemEvent {
       const quoteName = decodedName(rest.slice(0, split));
       const revisionName = decodedName(rest.slice(split + 1));
       if (quoteName && revisionName) {
-        return { kind: "quote", label: copy.revisionSwitchedTo, previousName: quoteName, name: revisionName };
+        return {
+          kind: "quote",
+          label: copy.revisionSwitchedTo,
+          previousName: quoteName,
+          name: savedRevisionName(revisionName),
+        };
       }
     }
     const legacy = rest.lastIndexOf(" on ");
     const quoteName = legacy > 0 ? rest.slice(legacy + 4) : "";
     const revisionName = legacy > 0 ? rest.slice(0, legacy) : "";
     if (quoteName.startsWith(`${copy.quote} `) && revisionName.startsWith(`${copy.revision} `)) {
-      return { kind: "quote", label: copy.revisionSwitchedTo, previousName: quoteName, name: revisionName };
+      return {
+        kind: "quote",
+        label: copy.revisionSwitchedTo,
+        previousName: quoteName,
+        name: savedRevisionName(revisionName),
+      };
     }
     return { kind: "quote", label: copy.activeQuoteSwitchedTo, name: rest };
   }
@@ -236,10 +246,7 @@ export function activityPreview(activity: Activity | undefined): string {
     if (event.kind === "renamed" && event.previousName) {
       return `${event.label} ${messagePreview(event.previousName)} ${copy.dealWasRenamedTo} ${name}`;
     }
-    if (event.kind === "quote" && event.previousName) {
-      return `${messagePreview(event.previousName)} ${copy.revisionSwitchedTo} ${name}`;
-    }
-    if (event.kind === "savedRevision" && event.previousName) {
+    if ((event.kind === "quote" || event.kind === "savedRevision") && event.previousName) {
       return `${messagePreview(event.previousName)} ${name}`;
     }
     if (event.kind === "movedQuote" && event.previousName) {

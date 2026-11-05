@@ -1,27 +1,16 @@
-import type { QuoteSelections } from "@/src/features/cpq/types";
 import {
   configChangesSchema,
   quoteCommunicationSchema,
   quoteChangeEventSchema,
-  quotePortalSchema,
   quoteRevisionRendersSchema,
   quoteRevisionSchema,
   quoteStatusSchema,
   type QuoteChangeEvent,
   type QuoteChangeKind,
   type QuoteCommunication,
-  type QuotePortal,
-  type QuotePortalCustomer,
-  type QuotePortalRecipient,
   type QuoteRevision,
   type QuoteStatus,
 } from "@/src/features/crm/quotes/types";
-import {
-  formatQuoteCash,
-  formatQuoteDate,
-  quoteMonthsLabel,
-  quoteVersionLabel,
-} from "@/src/features/crm/quotes/utils/formatting";
 
 export type QuoteRevisionRow = {
   id: string;
@@ -62,64 +51,6 @@ export function toQuoteRevision(row: QuoteRevisionRow): QuoteRevision | undefine
     updatedAt: row.updated_at ?? row.created_at ?? "",
   });
   return revision.success ? revision.data : undefined;
-}
-
-export function toQuotePortal(input: {
-  id: string;
-  invoiceId: string;
-  revisionId: string;
-  dealName: string;
-  revisionNumber: number;
-  createdAt: string;
-  imageUrl: string;
-  renders?: QuotePortal["renders"];
-  monthly: number;
-  months: number;
-  lines: { label: string; amount: number }[];
-  specs: { label: string; value: string }[];
-  total: number;
-  zip: string;
-  won: boolean;
-  confirmedAt?: string;
-  customers: QuotePortalCustomer[];
-  recipients: QuotePortalRecipient[];
-  dealIds: string[];
-  quoteCount: number;
-  selections: QuoteSelections;
-  communication: QuoteCommunication | null;
-  status: QuoteStatus;
-}): QuotePortal | undefined {
-  const portal = quotePortalSchema.safeParse({
-    id: input.id,
-    invoiceId: input.invoiceId,
-    revisionId: input.revisionId,
-    dealName: input.dealName,
-    versionLabel: quoteVersionLabel(input.revisionNumber),
-    dateLabel: formatQuoteDate(input.createdAt),
-    imageUrl: input.imageUrl,
-    renders: input.renders ?? null,
-    monthlyLabel: `${formatQuoteCash(input.monthly)}/mo`,
-    monthsLabel: quoteMonthsLabel(input.months),
-    lines: input.lines.map((line) => ({
-      label: line.label,
-      amountLabel: formatQuoteCash(line.amount),
-    })),
-    details: input.specs
-      .filter((spec) => spec.label !== "Delivery ZIP" && spec.value.trim())
-      .map((spec) => ({ label: spec.label, value: spec.value })),
-    totalLabel: formatQuoteCash(input.total),
-    zip: input.zip,
-    won: input.won,
-    confirmedAt: input.confirmedAt ?? "",
-    customers: input.customers,
-    recipients: input.recipients,
-    dealIds: input.dealIds,
-    quoteCount: input.quoteCount,
-    selections: input.selections,
-    communication: input.communication,
-    status: input.status,
-  });
-  return portal.success ? portal.data : undefined;
 }
 
 export function toQuoteChangeEvent(

@@ -135,7 +135,7 @@ function SystemActivity({
             {copy.dealWasRenamedFrom} <strong className="font-bold text-gray-900">{event.previousName}</strong>{" "}
             {copy.dealWasRenamedTo} <strong className="font-bold text-gray-900">{event.name}</strong>
           </span>
-        ) : event.kind === "savedRevision" && event.previousName ? (
+        ) : (event.kind === "savedRevision" || event.kind === "quote") && event.previousName ? (
           <NamedChange name={event.previousName} badge={event.name} />
         ) : event.kind === "movedQuote" && event.previousName ? (
           <NamedChange name={event.previousName} badge={event.name} />
@@ -147,11 +147,6 @@ function SystemActivity({
             <ArrowRight className="h-3.5 w-3.5 shrink-0 text-gray-400" strokeWidth={1.8} aria-hidden="true" />
             <StatusChangePill kind={event.kind as "dealStatus" | "quoteStatus"} label={event.status ?? ""} />
           </>
-        ) : event.kind === "quote" && event.previousName ? (
-          <span>
-            <strong className="font-bold text-gray-900">{event.previousName}</strong> {copy.revisionSwitchedTo}{" "}
-            <strong className="font-bold text-gray-900">{event.name}</strong>
-          </span>
         ) : (
           <span>
             {event.label} <strong className="font-bold text-gray-900">{event.name}</strong>
