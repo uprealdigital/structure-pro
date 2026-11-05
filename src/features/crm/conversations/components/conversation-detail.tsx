@@ -2257,9 +2257,9 @@ export function ConversationDetail({
                   href={`tel:${customer.phone}`}
                   aria-label={copy.callNow}
                   title={`${copy.callNow} ${customer.fullName}`}
-                  className="flex h-7 w-7 items-center justify-center rounded-lg bg-[#edeef0] text-gray-700 transition-colors hover:bg-[#e4e5e7]"
+                  className="flex h-[37px] w-[37px] items-center justify-center rounded-lg bg-[#edeef0] text-gray-700 transition-colors hover:bg-[#e4e5e7]"
                 >
-                  <Phone className="h-3.5 w-3.5" strokeWidth={1.8} aria-hidden="true" />
+                  <Phone className="h-[19px] w-[19px]" strokeWidth={1.8} aria-hidden="true" />
                 </a>
                 <div ref={setMobileActionsSlot} className="flex items-center gap-1.5" />
               </div>

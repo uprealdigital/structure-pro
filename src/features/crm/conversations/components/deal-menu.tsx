@@ -1029,9 +1029,9 @@ export function DealHeading({
                   openSheetStep("details");
                   setSheetOpen(true);
                 }}
-                className="flex h-7 w-7 cursor-pointer items-center justify-center rounded-lg bg-[#edeef0] text-gray-600 transition-colors hover:bg-[#e4e5e7] hover:text-gray-900"
+                className="flex h-[37px] w-[37px] cursor-pointer items-center justify-center rounded-lg bg-[#edeef0] text-gray-600 transition-colors hover:bg-[#e4e5e7] hover:text-gray-900"
               >
-                <Info className="h-4 w-4" aria-hidden="true" />
+                <Info className="h-[21px] w-[21px]" aria-hidden="true" />
               </button>
               <button
                 type="button"
@@ -1044,9 +1044,9 @@ export function DealHeading({
                   setSheetHeight(null);
                   setSheetOpen(true);
                 }}
-                className="flex h-7 w-7 cursor-pointer items-center justify-center rounded-lg bg-[#edeef0] text-gray-600 transition-colors hover:bg-[#e4e5e7] hover:text-gray-900"
+                className="flex h-[37px] w-[37px] cursor-pointer items-center justify-center rounded-lg bg-[#edeef0] text-gray-600 transition-colors hover:bg-[#e4e5e7] hover:text-gray-900"
               >
-                <EllipsisVertical className="h-4 w-4" aria-hidden="true" />
+                <EllipsisVertical className="h-[21px] w-[21px]" aria-hidden="true" />
               </button>
             </>,
             mobileActionsSlot,
