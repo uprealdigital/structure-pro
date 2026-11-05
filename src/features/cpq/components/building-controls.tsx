@@ -605,11 +605,11 @@ function SaveAndShareMenu({
     variant === "panel"
       ? "flex w-full items-center justify-center gap-1.5 rounded-full border border-transparent bg-black py-3 text-sm font-medium text-white hover:bg-black disabled:cursor-not-allowed disabled:opacity-60"
       : variant === "header"
-        ? "inline-flex shrink-0 items-center justify-center gap-1.5 rounded-full border border-transparent bg-[#1A1A1A] px-5 py-2.5 text-[13px] leading-tight font-medium whitespace-nowrap text-white hover:bg-black disabled:cursor-not-allowed disabled:opacity-60"
-        : "inline-flex shrink-0 items-center justify-center gap-1.5 rounded-full border border-transparent bg-black px-5 py-3 text-sm leading-none font-medium whitespace-nowrap text-white disabled:cursor-not-allowed disabled:opacity-60";
+        ? "inline-flex w-full shrink-0 items-center justify-center gap-1.5 rounded-full border border-transparent bg-[#1A1A1A] px-5 py-2.5 text-[13px] leading-tight font-medium whitespace-nowrap text-white hover:bg-black disabled:cursor-not-allowed disabled:opacity-60 lg:w-auto"
+        : "inline-flex w-full shrink-0 items-center justify-center gap-1.5 rounded-full border border-transparent bg-black px-5 py-3 text-sm leading-none font-medium whitespace-nowrap text-white disabled:cursor-not-allowed disabled:opacity-60 lg:w-auto";
 
   return (
-    <div ref={menuRef} className={variant === "panel" ? "relative mt-2" : "relative"}>
+    <div ref={menuRef} className={variant === "panel" ? "relative mt-2" : "relative w-full lg:w-auto"}>
       <button
         type="button"
         aria-haspopup="menu"
@@ -785,8 +785,13 @@ export function QuoteActions({
     );
   }
 
+  const cancelClass =
+    variant === "header"
+      ? "inline-flex w-full items-center justify-center gap-1.5 rounded-full border border-red-500 bg-white px-4 py-2.5 text-center text-[13px] leading-tight font-medium whitespace-nowrap text-red-600 hover:bg-red-50 disabled:opacity-60 lg:hidden"
+      : "inline-flex w-full items-center justify-center gap-1.5 rounded-full border border-red-500 bg-white px-5 py-3 text-center text-sm leading-none font-medium whitespace-nowrap text-red-600 hover:bg-red-50 disabled:opacity-60 lg:hidden";
+
   return (
-    <div className="flex shrink-0 flex-col items-end gap-2">
+    <div className="inline-grid shrink-0 grid-cols-1 gap-2 lg:flex lg:w-auto lg:flex-col lg:items-end">
       <SaveAndShareMenu
         variant={variant}
         pending={pending}
@@ -799,10 +804,16 @@ export function QuoteActions({
         onClick={activate}
         disabled={blocked}
         title={unchangedTitle}
-        className={`${secondaryClass} disabled:cursor-not-allowed`}
+        className={`${secondaryClass} w-full disabled:cursor-not-allowed lg:w-auto`}
       >
         {pending ? copy.savingQuote : copy.saveAndClose}
       </button>
+      {variant !== "panel" && onCancel ? (
+        <button type="button" onClick={onCancel} disabled={pending} className={cancelClass}>
+          <X className="h-3.5 w-3.5 shrink-0 text-red-500" aria-hidden="true" />
+          {copy.cancel}
+        </button>
+      ) : null}
     </div>
   );
 }

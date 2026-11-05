@@ -39,7 +39,7 @@ import type {
 import { emailActivityText } from "@/src/features/crm/conversations/utils/email-message";
 import { uploadComposerAttachment } from "@/src/features/crm/conversations/utils/upload-attachment";
 import { formatDealMenuDate, productTitle, quoteMenuName, revisionMenuLabel, systemEventText } from "@/src/features/crm/conversations/utils/formatting";
-import { quoteDisplayName } from "@/src/features/crm/quotes/utils/formatting";
+import { quoteDisplayName, quoteSpecDetail } from "@/src/features/crm/quotes/utils/formatting";
 import {
   conversationQuoteFromSelections,
   conversationQuoteWithActiveRevision,
@@ -68,6 +68,7 @@ import {
 import type { ConfigChanges, QuoteChangeEvent, QuoteCommunication, QuoteStatus } from "@/src/features/crm/quotes/types";
 import type { QuoteSelections } from "@/src/features/cpq/types";
 import { DealStatusBadge } from "@/src/features/crm/deals/components/deal-status-badge";
+import { QuoteStatusBadge } from "@/src/features/crm/quotes/components/quote-status-badge";
 import type { DealChangeEvent } from "@/src/features/crm/deals/types";
 import { canMarkDealLost } from "@/src/features/crm/deals/utils/status";
 import { dealNameMaxLength, dealSchema, type Deal, type DealStatus } from "@/src/features/crm/deals/types";
@@ -2223,7 +2224,7 @@ export function ConversationDetail({
       <div className="relative z-40 shrink-0 border-b border-gray-200 bg-white shadow-xs">
         <header
           ref={headerRef}
-          className="relative z-20 flex flex-col gap-3 overflow-visible bg-white px-5 py-3 lg:flex-row lg:items-center lg:justify-between lg:gap-4"
+          className="relative z-20 flex flex-col gap-1.5 overflow-visible bg-white px-5 py-3 lg:flex-row lg:items-center lg:justify-between lg:gap-4"
         >
           <div className="flex w-full min-w-0 flex-col items-start justify-start gap-2 p-1 lg:w-auto lg:shrink-0">
             <div className="-mx-6 -mt-4 flex w-[calc(100%+3rem)] min-w-0 items-center gap-1 bg-[#f9f9fb] px-6 pt-4 pb-3 lg:m-0 lg:w-auto lg:bg-transparent lg:p-0">
@@ -2351,10 +2352,10 @@ export function ConversationDetail({
             </div>
           </div>
 
-          <div className="flex w-full justify-center lg:block lg:w-auto lg:shrink-0">
+          <div className="-mx-2.5 -mb-1.5 flex w-[calc(100%+1.25rem)] justify-center lg:m-0 lg:block lg:w-auto lg:shrink-0">
             {focused.quote && viewed ? (
-              <div className="flex flex-row items-center gap-3 p-1 max-lg:[zoom:0.72]">
-                <div className="relative flex h-16 w-20 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-white">
+              <div className="flex w-full items-center gap-2 rounded-2xl bg-gray-50/90 p-1.5 lg:w-auto lg:gap-3 lg:rounded-none lg:bg-transparent lg:p-1">
+                <div className="relative flex h-11 w-14 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-white lg:h-16 lg:w-20">
                   {viewed.renders?.render_small_url ? (
                     <img
                       alt={title || copy.quote}
@@ -2389,7 +2390,31 @@ export function ConversationDetail({
                     />
                   )}
                 </div>
-                <div className="inline-grid shrink-0 grid-cols-[minmax(22rem,max-content)] gap-1.5">
+                <div className="flex min-w-0 flex-1 items-center gap-2 lg:contents">
+                  <div className="min-w-0 flex-1 lg:hidden">
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-sm leading-none font-bold text-gray-950">{viewed.totalLabel}</span>
+                      <span className="rounded-md bg-white px-1.5 py-0.5 text-[10px] leading-none font-semibold text-gray-600">
+                        V{viewed.revisionNumber}
+                      </span>
+                    </div>
+                    <p className="mt-0.5 text-xs leading-tight font-normal text-gray-900">
+                      {quoteSpecDetail(focused.quote.specs) ||
+                        quoteMenuName(Math.max(0, listedQuotes.findIndex((item) => item.id === focused.quote?.id)))}
+                    </p>
+                    <div className="mt-1">
+                      <QuoteStatusBadge status={focused.quote.status} />
+                    </div>
+                  </div>
+                  <div className="flex shrink-0 items-center gap-1.5 lg:hidden">
+                    <QuoteStatusActions
+                      status={focused.quote.status}
+                      editing={editing}
+                      size="rail"
+                      onAction={runQuoteStatusAction}
+                    />
+                  </div>
+                  <div className="hidden shrink-0 grid-cols-[minmax(22rem,max-content)] gap-1.5 lg:inline-grid">
                   <QuoteMenu
                     quotes={listedQuotes}
                     viewingQuoteId={viewingQuote?.id ?? focused.quote.id}
@@ -2455,6 +2480,7 @@ export function ConversationDetail({
                       }}
                     />
                   </div>
+                </div>
                 </div>
               </div>
             ) : null}
@@ -2723,7 +2749,7 @@ export function ConversationDetail({
         </div>
       </form>
         {editing && focused.quote && viewed ? (
-          <div className="absolute inset-0 z-30 flex min-h-0 flex-col overflow-hidden">
+          <div className="absolute inset-0 z-30 flex min-h-0 flex-col overflow-hidden max-lg:fixed max-lg:z-50">
             <BuildingConfigurator
               key={`${focused.quote.id}:${viewed.id}:${suggestedSelections ? "suggestion" : "saved"}`}
               mode="internal"
@@ -2732,6 +2758,7 @@ export function ConversationDetail({
               onSave={saveFocusedQuote}
               onSaveAndShare={saveAndShareFocusedQuote}
               onSaveAndReview={saveAndReviewFocusedQuote}
+              onCancel={() => setEditing(false)}
             />
           </div>
         ) : null}

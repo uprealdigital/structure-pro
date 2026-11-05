@@ -88,10 +88,14 @@ export function quoteNumberValue(value: unknown): number | undefined {
   return Number.isInteger(number) && number > 0 ? number : undefined;
 }
 
-export function quoteDisplayName(quoteNumber: number, specs: { label: string; value: string }[]): string {
+export function quoteSpecDetail(specs: { label: string; value: string }[]): string {
   const style = specValue(specs, "Style");
   const size = specValue(specs, "Size");
-  const detail = [style, size].filter(Boolean).join(" — ");
+  return [style, size].filter(Boolean).join(" — ");
+}
+
+export function quoteDisplayName(quoteNumber: number, specs: { label: string; value: string }[]): string {
+  const detail = quoteSpecDetail(specs);
   const prefix = `${portalCopy.quote} #${quoteNumber}`;
   return detail ? `${prefix} (${detail})` : prefix;
 }

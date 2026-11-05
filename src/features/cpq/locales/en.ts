@@ -25,6 +25,7 @@ export const copy = {
   saveAndClose: "Save & Close",
   saveNeedsChange: "Make a change before saving a new revision.",
   cancelEditing: "Cancel Editing",
+  cancel: "Cancel",
   saveAndShare: "Save & Share",
   shareDesignPreview: "Photos...",
   reviewAndSendFormalQuote: "Quote...",

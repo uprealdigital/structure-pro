@@ -771,12 +771,16 @@ export function ReviewSendModal({
       .catch(() => setSendError({ id: Date.now(), message: copy.saveQuoteError }));
   }, [flush]);
 
+  const finishedSend = useRef(false);
   const finishSend = useCallback(() => {
+    if (finishedSend.current) return;
+    finishedSend.current = true;
     onCloseRef.current();
   }, []);
 
   async function submit() {
     if (sending) return;
+    finishedSend.current = false;
     const attempt = ++sendAttempt.current;
     const sendId = crypto.randomUUID();
     activeSendId.current = sendId;
@@ -818,30 +822,67 @@ export function ReviewSendModal({
     return () => document.removeEventListener("keydown", onKey);
   }, [dismiss]);
 
+  function cancelButton() {
+    return (
+      <button
+        type="button"
+        onClick={dismiss}
+        className="cursor-pointer rounded-lg border border-gray-300 bg-white px-4 py-2 text-xs font-semibold text-gray-700 shadow-xs transition-colors hover:bg-gray-100"
+      >
+        {copy.cancel}
+      </button>
+    );
+  }
+
+  function sendButton() {
+    return (
+      <button
+        type="button"
+        disabled={sending}
+        aria-busy={sending}
+        onClick={() => void submit()}
+        className={
+          sending
+            ? "flex cursor-default items-center gap-2 rounded-lg bg-gray-400 px-5 py-2 text-xs font-semibold text-white shadow-sm"
+            : "flex cursor-pointer items-center gap-2 rounded-lg bg-black px-5 py-2 text-xs font-semibold text-white shadow-sm transition-all hover:bg-gray-800"
+        }
+      >
+        <span>{sending ? copy.sendingNow : copy.sendNow}</span>
+        {sending ? (
+          <SendMeter complete={sendComplete} onFilled={finishSend} />
+        ) : (
+          <Send className="h-3.5 w-3.5" aria-hidden="true" />
+        )}
+      </button>
+    );
+  }
+
   const dialog = (
-    <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-black/60 p-4 backdrop-blur-sm">
-      <button type="button" className="absolute inset-0" aria-label={copy.close} onClick={dismiss} />
+    <div className="fixed inset-0 z-50 lg:flex lg:items-center lg:justify-center lg:overflow-y-auto lg:bg-black/60 lg:p-4 lg:backdrop-blur-sm">
+      <button type="button" className="absolute inset-0 hidden bg-transparent lg:block" aria-label={copy.close} onClick={dismiss} />
       <div
         role="dialog"
         aria-modal="true"
         aria-labelledby="review-send-title"
-        className="relative z-10 my-auto flex max-h-[90vh] min-h-0 w-full max-w-xl flex-col overflow-y-auto rounded-2xl border border-gray-100 bg-white p-6 font-sans shadow-2xl"
+        className="absolute inset-0 z-10 flex h-[100dvh] min-h-0 flex-col overflow-hidden bg-white font-sans text-gray-900 lg:relative lg:inset-auto lg:h-auto lg:max-h-[90vh] lg:w-full lg:max-w-xl lg:overflow-y-auto lg:rounded-2xl lg:border lg:border-gray-100 lg:p-6 lg:shadow-2xl"
       >
-        <div className="flex items-start justify-between pb-4">
-          <h3 id="review-send-title" className="font-serif text-xl leading-tight font-bold text-gray-950">
+        <div className="grid shrink-0 grid-cols-[1fr_auto_1fr] items-center gap-2 border-b border-gray-200 px-3 py-3 lg:flex lg:items-start lg:justify-between lg:border-b-0 lg:p-0 lg:pb-4">
+          <div className="justify-self-start lg:hidden">{cancelButton()}</div>
+          <h3 id="review-send-title" className="min-w-0 truncate text-center font-serif text-sm font-semibold text-gray-900 lg:flex-1 lg:text-left lg:text-xl lg:leading-tight lg:font-bold lg:text-gray-950">
             {copy.reviewAndSendQuote}
           </h3>
+          <div className="justify-self-end lg:hidden">{sendButton()}</div>
           <button
             type="button"
             aria-label={copy.close}
             onClick={dismiss}
-            className="flex h-8 w-8 cursor-pointer items-center justify-center rounded-full text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-900"
+            className="hidden h-8 w-8 shrink-0 cursor-pointer items-center justify-center rounded-full text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-900 lg:flex"
           >
             <X className="h-4 w-4" aria-hidden="true" />
           </button>
         </div>
 
-        <div className="mt-4 space-y-4">
+        <div className="min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain px-3 pt-3 pb-[45px] lg:mt-4 lg:flex-none lg:overflow-visible lg:p-0">
           <div className="flex items-center gap-4 py-2">
             <div className="flex h-14 w-16 shrink-0 items-center justify-center rounded-lg">
               <img alt={title} src={imageUrl} className="h-full w-full object-contain" />
@@ -926,32 +967,9 @@ export function ReviewSendModal({
           </section>
         </div>
 
-        <div className="mt-4 flex items-center justify-end gap-3 pt-5">
-          <button
-            type="button"
-            onClick={dismiss}
-            className="cursor-pointer rounded-lg border border-gray-300 bg-white px-4 py-2 text-xs font-semibold text-gray-700 shadow-xs transition-colors hover:bg-gray-100"
-          >
-            {copy.cancel}
-          </button>
-          <button
-            type="button"
-            disabled={sending}
-            aria-busy={sending}
-            onClick={() => void submit()}
-            className={
-              sending
-                ? "flex cursor-default items-center gap-2 rounded-lg bg-gray-400 px-5 py-2 text-xs font-semibold text-white shadow-sm"
-                : "flex cursor-pointer items-center gap-2 rounded-lg bg-black px-5 py-2 text-xs font-semibold text-white shadow-sm transition-all hover:bg-gray-800"
-            }
-          >
-            <span>{sending ? copy.sendingNow : copy.sendNow}</span>
-            {sending ? (
-              <SendMeter complete={sendComplete} onFilled={finishSend} />
-            ) : (
-              <Send className="h-3.5 w-3.5" aria-hidden="true" />
-            )}
-          </button>
+        <div className="hidden shrink-0 items-center justify-end gap-3 lg:mt-4 lg:flex lg:pt-5">
+          {cancelButton()}
+          {sendButton()}
         </div>
       </div>
     </div>

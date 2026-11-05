@@ -19,6 +19,7 @@ export type QuoteStatusActionId =
 export type QuoteStatusAction = {
   id: QuoteStatusActionId;
   label: string;
+  shortLabel: string;
   tone: "primary" | "secondary";
 };
 
@@ -42,58 +43,58 @@ export const quoteStatuses: Record<QuoteStatus, QuoteStatusInfo> = {
     badgeClass: "border-gray-200 bg-gray-100 text-gray-600",
     priority: 40,
     actions: [
-      { id: "send", label: copy.actionSend, tone: "primary" },
-      { id: "edit", label: copy.actionEdit, tone: "secondary" },
+      { id: "send", label: copy.actionSend, shortLabel: copy.actionSendShort, tone: "primary" },
+      { id: "edit", label: copy.actionEdit, shortLabel: copy.actionEditShort, tone: "secondary" },
     ],
-    menu: { id: "delete_draft", label: copy.actionDeleteDraft, tone: "secondary" },
+    menu: { id: "delete_draft", label: copy.actionDeleteDraft, shortLabel: copy.actionDeleteDraft, tone: "secondary" },
   },
   sent: {
     label: copy.statusSent,
     badgeClass: "border-blue-200 bg-blue-50 text-blue-600",
     priority: 50,
     actions: [
-      { id: "resend", label: copy.actionResend, tone: "primary" },
-      { id: "edit", label: copy.actionEdit, tone: "secondary" },
+      { id: "resend", label: copy.actionResend, shortLabel: copy.actionResendShort, tone: "primary" },
+      { id: "edit", label: copy.actionEdit, shortLabel: copy.actionEditShort, tone: "secondary" },
     ],
-    menu: { id: "void", label: copy.actionVoid, tone: "secondary" },
+    menu: { id: "void", label: copy.actionVoid, shortLabel: copy.actionVoid, tone: "secondary" },
   },
   viewed: {
     label: copy.statusViewed,
     badgeClass: "border-violet-200 bg-violet-50 text-violet-700",
     priority: 60,
     actions: [
-      { id: "resend", label: copy.actionResend, tone: "primary" },
-      { id: "edit", label: copy.actionEdit, tone: "secondary" },
+      { id: "resend", label: copy.actionResend, shortLabel: copy.actionResendShort, tone: "primary" },
+      { id: "edit", label: copy.actionEdit, shortLabel: copy.actionEditShort, tone: "secondary" },
     ],
-    menu: { id: "void", label: copy.actionVoid, tone: "secondary" },
+    menu: { id: "void", label: copy.actionVoid, shortLabel: copy.actionVoid, tone: "secondary" },
   },
   changes_requested: {
     label: copy.statusChangesRequested,
     badgeClass: "border-orange-200 bg-orange-50 text-orange-600",
     priority: 70,
     actions: [
-      { id: "edit", label: copy.actionEdit, tone: "primary" },
-      { id: "view_requested_changes", label: copy.actionViewRequestedChanges, tone: "secondary" },
+      { id: "edit", label: copy.actionEdit, shortLabel: copy.actionEditShort, tone: "primary" },
+      { id: "view_requested_changes", label: copy.actionViewRequestedChanges, shortLabel: copy.actionViewRequestedChangesShort, tone: "secondary" },
     ],
-    menu: { id: "void", label: copy.actionVoid, tone: "secondary" },
+    menu: { id: "void", label: copy.actionVoid, shortLabel: copy.actionVoid, tone: "secondary" },
   },
   signed: {
     label: copy.statusSigned,
     badgeClass: "border-amber-200 bg-amber-50 text-amber-700",
     priority: 80,
     actions: [
-      { id: "collect_deposit", label: copy.actionCollectDeposit, tone: "primary" },
-      { id: "view_signed_quote", label: copy.actionViewSignedQuote, tone: "secondary" },
+      { id: "collect_deposit", label: copy.actionCollectDeposit, shortLabel: copy.actionCollectDepositShort, tone: "primary" },
+      { id: "view_signed_quote", label: copy.actionViewSignedQuote, shortLabel: copy.actionViewSignedQuoteShort, tone: "secondary" },
     ],
-    menu: { id: "void", label: copy.actionVoid, tone: "secondary" },
+    menu: { id: "void", label: copy.actionVoid, shortLabel: copy.actionVoid, tone: "secondary" },
   },
   deposit_paid: {
     label: copy.statusDepositPaid,
     badgeClass: "border-emerald-200 bg-emerald-50 text-emerald-700",
     priority: 30,
     actions: [
-      { id: "view_signed_quote", label: copy.actionViewSignedQuote, tone: "secondary" },
-      { id: "view_deposit_receipt", label: copy.actionViewDepositReceipt, tone: "secondary" },
+      { id: "view_signed_quote", label: copy.actionViewSignedQuote, shortLabel: copy.actionViewSignedQuoteShort, tone: "secondary" },
+      { id: "view_deposit_receipt", label: copy.actionViewDepositReceipt, shortLabel: copy.actionViewDepositReceiptShort, tone: "secondary" },
     ],
   },
   expired: {
@@ -101,14 +102,14 @@ export const quoteStatuses: Record<QuoteStatus, QuoteStatusInfo> = {
     badgeClass: "border-stone-200 bg-stone-100 text-stone-600",
     priority: 20,
     actions: [
-      { id: "renew", label: copy.actionRenew, tone: "primary" },
-      { id: "edit", label: copy.actionEdit, tone: "secondary" },
+      { id: "renew", label: copy.actionRenew, shortLabel: copy.actionRenewShort, tone: "primary" },
+      { id: "edit", label: copy.actionEdit, shortLabel: copy.actionEditShort, tone: "secondary" },
     ],
   },
   voided: {
     label: copy.statusVoided,
     badgeClass: "border-red-200 bg-red-50 text-red-600",
     priority: 10,
-    actions: [{ id: "copy", label: copy.actionCopy, tone: "secondary" }],
+    actions: [{ id: "copy", label: copy.actionCopy, shortLabel: copy.actionCopyShort, tone: "secondary" }],
   },
 };

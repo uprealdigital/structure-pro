@@ -105,6 +105,7 @@ export const copy = {
   revisionsMenu: "Revisions",
   updated: "updated",
   cancelQuoteEdits: "Cancel Editing",
+  cancelQuoteEditsShort: "Cancel",
   moreDealActions: "More deal actions",
   conversationActions: "Deal and quote actions",
   dealsSection: "Deals",
