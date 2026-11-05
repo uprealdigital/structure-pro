@@ -229,6 +229,50 @@ export function DesignPreviewModal({ current, revisions, selections, suggested, 
     setViews((currentViews) => (currentViews.length <= 1 ? currentViews : currentViews.filter((view) => view.id !== id)));
   }
 
+  function angleActions() {
+    return (
+      <>
+        <button
+          type="button"
+          onClick={addView}
+          disabled={locked || views.length >= maxDesignViews}
+          title={views.length >= maxDesignViews ? copy.designPreviewViewLimit : undefined}
+          className="inline-flex items-center justify-self-start gap-1.5 rounded-full border border-dashed border-gray-300 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 transition-colors hover:bg-gray-50 disabled:opacity-40"
+        >
+          <Plus className="h-3.5 w-3.5 text-gray-500" strokeWidth={2} aria-hidden="true" />
+          {copy.addAnotherView}
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            if (showingPhotos) {
+              beautified.revert();
+              return;
+            }
+            const captures = views.flatMap((view) => {
+              const capture = captureRefs.current.get(view.id)?.current;
+              return capture ? [{ id: view.id, capture }] : [];
+            });
+            if (captures.length !== views.length) {
+              setError({ id: Date.now(), message: copy.designPreviewViewsLoading });
+              return;
+            }
+            void beautified.beautify(captures);
+          }}
+          disabled={beautified.beautifying || attaching || !modelReady || views.length === 0}
+          className="inline-flex items-center justify-self-end gap-1.5 rounded-full border border-gray-200 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 transition-colors hover:bg-gray-50 disabled:opacity-40"
+        >
+          {showingPhotos ? (
+            <Undo2 className="h-3.5 w-3.5 text-gray-500" strokeWidth={2} aria-hidden="true" />
+          ) : (
+            <Sparkles className="h-3.5 w-3.5 text-gray-500" strokeWidth={2} aria-hidden="true" />
+          )}
+          {beautified.beautifying ? copy.beautifying : showingPhotos ? copy.revertBeautify : copy.beautify}
+        </button>
+      </>
+    );
+  }
+
   async function attach() {
     if (attaching || beautified.beautifying || views.length === 0) return;
     setAttaching(true);
@@ -335,55 +379,26 @@ export function DesignPreviewModal({ current, revisions, selections, suggested, 
               ))}
             </ul>
           </div>
+          <div className="mt-3 grid grid-cols-2 items-center lg:hidden">{angleActions()}</div>
           <div ref={listEnd} />
         </div>
 
         <footer className="grid shrink-0 grid-cols-2 items-center gap-x-3 gap-y-2 px-3 pt-4 lg:flex lg:flex-wrap lg:justify-between lg:gap-3 lg:px-6 lg:py-4">
-          <div className="contents lg:flex lg:flex-wrap lg:items-center lg:gap-2">
-            <button
-              type="button"
-              onClick={addView}
-              disabled={locked || views.length >= maxDesignViews}
-              title={views.length >= maxDesignViews ? copy.designPreviewViewLimit : undefined}
-              className="inline-flex items-center justify-self-start gap-1.5 rounded-full border border-dashed border-gray-300 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 transition-colors hover:bg-gray-50 disabled:opacity-40"
-            >
-              <Plus className="h-3.5 w-3.5 text-gray-500" strokeWidth={2} aria-hidden="true" />
-              {copy.addAnotherView}
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                if (showingPhotos) {
-                  beautified.revert();
-                  return;
-                }
-                const captures = views.flatMap((view) => {
-                  const capture = captureRefs.current.get(view.id)?.current;
-                  return capture ? [{ id: view.id, capture }] : [];
-                });
-                if (captures.length !== views.length) {
-                  setError({ id: Date.now(), message: copy.designPreviewViewsLoading });
-                  return;
-                }
-                void beautified.beautify(captures);
-              }}
-              disabled={beautified.beautifying || attaching || !modelReady || views.length === 0}
-              className="inline-flex items-center justify-self-end gap-1.5 rounded-full border border-gray-200 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 transition-colors hover:bg-gray-50 disabled:opacity-40"
-            >
-              {showingPhotos ? (
-                <Undo2 className="h-3.5 w-3.5 text-gray-500" strokeWidth={2} aria-hidden="true" />
-              ) : (
-                <Sparkles className="h-3.5 w-3.5 text-gray-500" strokeWidth={2} aria-hidden="true" />
-              )}
-              {beautified.beautifying ? copy.beautifying : showingPhotos ? copy.revertBeautify : copy.beautify}
-            </button>
-          </div>
+          <div className="hidden lg:flex lg:flex-wrap lg:items-center lg:gap-2">{angleActions()}</div>
           <div className="col-span-2 -mx-3 grid grid-cols-2 gap-3 bg-white px-3 pt-4 pb-[45px] lg:col-auto lg:mx-0 lg:flex lg:w-auto lg:gap-2 lg:bg-transparent lg:p-0">
             <button
               type="button"
               onClick={onClose}
               disabled={attaching || beautified.beautifying}
-              className="flex w-full items-center justify-center rounded-lg bg-[#edeef0] px-3 py-2 text-xs font-medium text-gray-700 transition-colors hover:bg-[#e4e5e7] disabled:opacity-40 lg:w-auto lg:rounded-md lg:bg-transparent lg:text-gray-600 lg:hover:bg-transparent lg:hover:text-gray-900"
+              className="flex w-full cursor-pointer items-center justify-center rounded-lg border border-gray-300 bg-white px-4 py-2 text-xs font-semibold text-gray-700 shadow-xs transition-colors hover:bg-gray-100 disabled:opacity-40 lg:hidden"
+            >
+              {copy.cancel}
+            </button>
+            <button
+              type="button"
+              onClick={onClose}
+              disabled={attaching || beautified.beautifying}
+              className="hidden items-center justify-center rounded-md bg-transparent px-3 py-2 text-xs font-medium text-gray-600 transition-colors hover:bg-transparent hover:text-gray-900 disabled:opacity-40 lg:flex"
             >
               {copy.cancel}
             </button>

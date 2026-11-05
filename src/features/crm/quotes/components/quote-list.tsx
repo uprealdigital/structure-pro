@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { Toast } from "@/src/common/components/toast";
 import { useCrmDesktop } from "@/src/features/crm/common/hooks/use-crm-desktop";
-import { contactInitials } from "@/src/features/crm/common/utils/formatting";
 import { CreateWalkInDealSheet } from "@/src/features/crm/deals/components/create-walk-in-deal-sheet";
 import { useCreateWalkInDeal } from "@/src/features/crm/deals/hooks/use-create-walk-in-deal";
 import { copy as dealCopy } from "@/src/features/crm/deals/locales/en";
@@ -18,7 +17,6 @@ import { loadQuoteListItem } from "@/src/features/crm/quotes/server/actions";
 import type { QuoteListCustomer, QuoteListItem } from "@/src/features/crm/quotes/types";
 import {
   formatQuoteDate,
-  formatQuoteMonthly,
   formatQuotePrice,
   quoteDisplayName,
   quotePageNumbers,
@@ -44,7 +42,7 @@ function listedQuote(quote: QuoteListItem) {
   const customers = listedCustomers(quote);
   const revision = quote.quote_revision;
   if (!revision) {
-    return { customers, label: `Quote #${quote.quote_number}`, zip: "", price: "—", monthly: "" };
+    return { customers, label: `Quote #${quote.quote_number}`, zip: "", price: "—" };
   }
   const described = describeSelections(revision.config);
   return {
@@ -52,49 +50,32 @@ function listedQuote(quote: QuoteListItem) {
     label: quoteDisplayName(quote.quote_number, described.specs),
     zip: quoteZip(described.specs),
     price: formatQuotePrice(described.estimate.total),
-    monthly: formatQuoteMonthly(described.estimate.rto),
   };
 }
 
 function QuoteListMobileRow({ quote, onOpen }: { quote: QuoteListItem; onOpen: () => void }) {
   const listed = listedQuote(quote);
   const customers = listed.customers;
-  const primary = customers[0];
-  const extra = Math.max(0, customers.length - 1);
 
   return (
     <button
       type="button"
       onClick={onOpen}
-      className="block w-full cursor-pointer border-b border-gray-100 px-4 py-3 text-left transition-colors hover:bg-gray-50/80"
+      className="block w-full cursor-pointer border-b border-gray-100 px-4 py-4 text-left transition-colors hover:bg-gray-50/80"
     >
       <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3">
         <div className="min-w-0">
-          <div className="truncate text-xs font-medium text-gray-900">{listed.label}</div>
-          <div className="mt-1 flex min-w-0 items-center gap-1.5">
-            {customers.length > 0 ? (
-              <span className="flex shrink-0 items-center -space-x-2">
-                {customers.map((customer, index) => (
-                  <span
-                    key={customer.id}
-                    className="flex h-7 w-7 items-center justify-center rounded-full border-2 border-white bg-gray-100 text-xs font-semibold text-gray-800 ring-1 ring-gray-200"
-                    style={{ zIndex: customers.length - index }}
-                  >
-                    {contactInitials(customer.full_name)}
-                  </span>
-                ))}
-              </span>
-            ) : null}
-            {primary ? (
-              <span className="truncate font-serif text-xs font-semibold text-gray-950">{primary.full_name}</span>
-            ) : (
+          <div className="truncate text-[13px] font-normal text-gray-900">{listed.label}</div>
+          <div className="mt-1.5 min-w-0">
+            {customers.length === 0 ? (
               <span className="text-xs text-gray-400">—</span>
+            ) : (
+              <QuoteCustomers customers={customers.map((customer) => ({ id: customer.id, name: customer.full_name }))} />
             )}
-            {extra > 0 ? <span className="shrink-0 font-serif text-xs font-semibold text-gray-500">+{extra}</span> : null}
           </div>
         </div>
         <div className="flex shrink-0 flex-col items-end gap-1">
-          <div className="font-mono text-xs font-semibold whitespace-nowrap text-gray-950">{listed.price}</div>
+          <div className="font-sans text-xs font-normal whitespace-nowrap text-gray-950">{listed.price}</div>
           <QuoteStatusBadge status={quote.status} />
         </div>
       </div>
@@ -152,7 +133,7 @@ export function QuoteList({ quotes: initialQuotes, loadError }: { quotes: QuoteL
   const pages = quotePageNumbers(page + 1, pageCount);
 
   return (
-    <main className="flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-[#f9f9fb] lg:overflow-y-auto">
+    <main className="flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-white lg:overflow-y-auto">
       <header className="sticky top-0 z-10 border-b border-gray-200/80 bg-white">
         <div className="flex items-center gap-3 px-4 py-3.5 lg:justify-between lg:gap-4 lg:px-6 lg:py-4">
           <label className="relative min-w-0 flex-1 lg:max-w-lg">
@@ -219,8 +200,8 @@ export function QuoteList({ quotes: initialQuotes, loadError }: { quotes: QuoteL
           </div>
           <div className="hidden min-h-0 w-full min-w-0 flex-1 flex-col bg-transparent lg:flex">
             <div className="min-w-0 overflow-x-auto">
-              <table className="w-full text-left text-xs text-gray-600">
-                <thead className="border-b border-gray-200 bg-transparent font-serif text-[11px] font-bold tracking-wide text-gray-900 select-none">
+              <table className="w-full bg-white text-left text-xs text-gray-600">
+                <thead className="border-b border-gray-200 bg-white font-sans text-[11px] font-bold tracking-wide text-gray-900 select-none">
                   <tr>
                     <th className="py-3.5 pr-4 pl-6 font-semibold text-gray-900">{copy.dateCreated}</th>
                     <th className="px-4 py-3.5 font-semibold text-gray-900">{copy.quote}</th>
@@ -232,7 +213,7 @@ export function QuoteList({ quotes: initialQuotes, loadError }: { quotes: QuoteL
                     </th>
                   </tr>
                 </thead>
-                <tbody className="bg-transparent font-sans">
+                <tbody className="bg-white font-sans">
                   {rows.length === 0 ? (
                     <tr>
                       <td colSpan={6} className="px-6 py-8 text-sm text-gray-500">
@@ -251,23 +232,24 @@ export function QuoteList({ quotes: initialQuotes, loadError }: { quotes: QuoteL
                         }`}
                       >
                         <td className="py-3 pr-4 pl-6">
-                          <div className="text-xs font-semibold text-gray-950 group-hover:text-black">
+                          <div className="text-xs font-normal text-gray-950 group-hover:text-black">
                             {formatQuoteDate(quote.created_at)}
                           </div>
                         </td>
                         <td className="px-4 py-3 text-xs">
-                          <div className="font-semibold text-gray-950 group-hover:text-black">{listed.label}</div>
+                          <div className="font-normal text-gray-950 group-hover:text-black">{listed.label}</div>
                         </td>
                         <td className="px-4 py-3 text-xs">
                           {listed.customers.length === 0 ? (
                             <span className="text-gray-400">—</span>
                           ) : (
-                            <QuoteCustomers customers={listed.customers} />
+                            <QuoteCustomers
+                              customers={listed.customers.map((customer) => ({ id: customer.id, name: customer.full_name }))}
+                            />
                           )}
                         </td>
                         <td className="px-4 py-3 text-xs">
-                          <div className="font-mono font-semibold text-gray-950">{listed.price}</div>
-                          <div className="mt-0.5 text-[10px] text-gray-500">{listed.monthly}</div>
+                          <div className="font-sans font-normal text-gray-950">{listed.price}</div>
                         </td>
                         <td className="px-4 py-3 text-xs whitespace-nowrap">
                           <QuoteStatusBadge status={quote.status} />

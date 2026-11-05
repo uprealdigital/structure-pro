@@ -8,6 +8,7 @@ import {
   quoteMonthsLabel,
   quotePortalDealName,
   quoteVersionLabel,
+  quoteVersionShortLabel,
 } from "@/src/features/crm/quotes/utils/formatting";
 
 function customerFrom(person: QuotePortalCustomer): Customer {
@@ -61,6 +62,7 @@ export function quotePortalView(quote: LoadedQuotePortal) {
       ? quoteDisplayName(quote.quote_number, described.specs)
       : quotePortalDealName(deals, described.specs, quote.invoice_id),
     versionLabel: quoteVersionLabel(revision.revision_number),
+    versionShortLabel: quoteVersionShortLabel(revision.revision_number),
     dateLabel: formatQuoteDate(revision.created_at),
     imageUrl: described.style.image,
     monthlyLabel: `${formatQuoteCash(described.estimate.rto)}/mo`,

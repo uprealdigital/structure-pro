@@ -10,6 +10,7 @@ import { CreateWalkInDealSheet } from "@/src/features/crm/deals/components/creat
 import { DealStatusBadge } from "@/src/features/crm/deals/components/deal-status-badge";
 import { copy } from "@/src/features/crm/deals/locales/en";
 import type { DealListItem, DealSource, DealStatus } from "@/src/features/crm/deals/types";
+import { formatQuotePrice } from "@/src/features/crm/quotes/utils/formatting";
 import { dealStatusOption, dealStatusOptions, type DealStatusOption } from "@/src/features/crm/deals/utils/status";
 import { useReserveCrmMobileNavSpace } from "@/src/features/crm/common/hooks/use-crm-mobile-nav";
 import { contactInitials } from "@/src/features/crm/common/utils/formatting";
@@ -24,6 +25,10 @@ function dealTitle(deal: DealListItem): string {
 
 function quoteNumber(deal: DealListItem): string {
   return deal.quote ? String(deal.quote.quote_number) : "";
+}
+
+function dealValueLabel(deal: DealListItem): string {
+  return deal.value == null ? "—" : formatQuotePrice(deal.value);
 }
 
 function stageLabel(stage: DealStatus): string {
@@ -74,7 +79,7 @@ function DealCard({ deal }: { deal: DealListItem }) {
         <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-gray-200 bg-gray-100 text-xs font-semibold text-gray-800">
           {contactInitials(names)}
         </span>
-        <span className="font-serif text-sm leading-tight font-semibold text-gray-950">{names}</span>
+        <span className="font-sans text-sm leading-tight font-semibold text-gray-950">{names}</span>
       </span>
       {title ? <span className="mt-1 block text-xs leading-tight font-medium text-gray-500">{title}</span> : null}
       <span className="mt-2 flex items-center border-t border-gray-100 pt-2">
@@ -92,7 +97,7 @@ function DealListMobileRow({ deal }: { deal: DealListItem }) {
   const Icon = sourceIcon(deal.source);
   return (
     <article className="block border-b border-gray-100 px-4 py-3">
-      <div className="grid grid-cols-[minmax(0,1fr)_5rem_3.75rem] items-center gap-x-2">
+      <div className="grid grid-cols-[minmax(0,1fr)_5rem_auto] items-center gap-x-2">
         <div className="min-w-0">
           <div className="flex min-w-0 items-center gap-1.5">
             {customers.length > 0 ? (
@@ -109,11 +114,11 @@ function DealListMobileRow({ deal }: { deal: DealListItem }) {
               </span>
             ) : null}
             {primary ? (
-              <span className="truncate font-serif text-xs font-semibold text-gray-950">{primary.full_name}</span>
+              <span className="truncate font-sans text-xs font-semibold text-gray-950">{primary.full_name}</span>
             ) : null}
-            {extra > 0 ? <span className="shrink-0 font-serif text-xs font-semibold text-gray-500">+{extra}</span> : null}
+            {extra > 0 ? <span className="shrink-0 font-sans text-xs font-semibold text-gray-500">+{extra}</span> : null}
           </div>
-          <div className="mt-1 truncate text-xs font-medium text-gray-900">{dealTitle(deal)}</div>
+          <div className="mt-1 truncate font-sans text-xs font-medium text-gray-900">{dealTitle(deal)}</div>
         </div>
         <div className="flex w-[5rem] flex-col items-start gap-1">
           <span className="inline-flex items-center gap-1 text-[10px] font-medium whitespace-nowrap text-gray-600">
@@ -126,8 +131,8 @@ function DealListMobileRow({ deal }: { deal: DealListItem }) {
             {stage?.label}
           </span>
         </div>
-        <div className="w-[3.75rem] text-right font-serif text-xs font-semibold whitespace-nowrap text-gray-950 tabular-nums">
-          {quoteNumber(deal) || "—"}
+        <div className="text-right font-mono text-xs font-semibold whitespace-nowrap text-gray-950 tabular-nums">
+          {dealValueLabel(deal)}
         </div>
       </div>
     </article>
@@ -168,7 +173,7 @@ export function DealsBoard({ deals: initialDeals, loadError }: { deals: DealList
   const needle = query.trim().toLowerCase();
   const visible = needle
     ? deals.filter((deal) =>
-        [dealTitle(deal), customerNames(deal), quoteNumber(deal), stageLabel(deal.status), sourceLabel(deal.source)]
+        [dealTitle(deal), customerNames(deal), quoteNumber(deal), dealValueLabel(deal), stageLabel(deal.status), sourceLabel(deal.source)]
           .join(" ")
           .toLowerCase()
           .includes(needle),
@@ -186,15 +191,42 @@ export function DealsBoard({ deals: initialDeals, loadError }: { deals: DealList
       visible ? "flex" : "hidden"
     }`;
 
-  const toggleClass = (active: boolean) =>
-    `flex cursor-pointer items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-all ${
-      active ? "bg-white text-gray-900 shadow-sm" : "text-gray-600 hover:text-gray-900"
-    }`;
+  const toggleClass = (active: boolean, iconsOnly: boolean) =>
+    `flex cursor-pointer items-center rounded-md text-xs font-medium transition-all ${
+      iconsOnly ? "p-1" : "gap-1.5 px-3 py-1.5"
+    } ${active ? "bg-white text-gray-900 shadow-sm" : "text-gray-600 hover:text-gray-900"}`;
+
+  function viewToggle(iconsOnly: boolean) {
+    return (
+      <div className={`items-center rounded-lg border border-gray-200 bg-gray-100 ${iconsOnly ? "inline-flex h-[34px] px-1 lg:hidden" : "hidden p-1 lg:inline-flex"}`}>
+        <button
+          type="button"
+          aria-label={copy.kanban}
+          aria-pressed={mode === "kanban"}
+          className={toggleClass(mode === "kanban", iconsOnly)}
+          onClick={() => setMode("kanban")}
+        >
+          <KanbanIcon />
+          {iconsOnly ? null : copy.kanban}
+        </button>
+        <button
+          type="button"
+          aria-label={copy.listView}
+          aria-pressed={mode === "list"}
+          className={toggleClass(mode === "list", iconsOnly)}
+          onClick={() => setMode("list")}
+        >
+          <List className="h-3.5 w-3.5" aria-hidden="true" />
+          {iconsOnly ? null : copy.listView}
+        </button>
+      </div>
+    );
+  }
 
   return (
     <main className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-[#f9f9fb]">
-      <header className="z-10 border-b border-gray-200/80 bg-white px-6 py-4">
-        <div className="flex flex-col gap-3 pt-1 lg:flex-row lg:items-center lg:gap-4">
+      <header className="z-10 border-b border-gray-200/80 bg-white max-lg:px-4 max-lg:py-3.5 lg:px-6 lg:py-4">
+        <div className="flex items-center gap-3 lg:gap-4 lg:pt-1">
           <div className="flex min-w-0 flex-1 items-center gap-3">
             <label className="relative min-w-0 flex-1 lg:max-w-lg">
               <span className="sr-only">{copy.dealSearchPlaceholder}</span>
@@ -215,18 +247,10 @@ export function DealsBoard({ deals: initialDeals, loadError }: { deals: DealList
               <Filter className="h-3.5 w-3.5 text-gray-500" aria-hidden="true" />
               {copy.filters}
             </button>
+            {viewToggle(true)}
           </div>
-          <div className="flex shrink-0 items-center gap-3">
-            <div className="inline-flex items-center rounded-lg border border-gray-200 bg-gray-100 p-1">
-              <button type="button" className={toggleClass(mode === "kanban")} onClick={() => setMode("kanban")}>
-                <KanbanIcon />
-                {copy.kanban}
-              </button>
-              <button type="button" className={toggleClass(mode === "list")} onClick={() => setMode("list")}>
-                <List className="h-3.5 w-3.5" aria-hidden="true" />
-                {copy.listView}
-              </button>
-            </div>
+          <div className="hidden shrink-0 items-center gap-3 lg:flex">
+            {viewToggle(false)}
             <button
               type="button"
               aria-haspopup="dialog"
@@ -270,7 +294,7 @@ export function DealsBoard({ deals: initialDeals, loadError }: { deals: DealList
           </button>
           <div
             ref={scroller}
-            className="flex h-full min-h-0 flex-1 items-stretch gap-3 overflow-x-auto scroll-smooth px-6 pt-6 pb-20 lg:p-6"
+            className="deals-kanban-scroll flex h-full min-h-0 flex-1 items-stretch gap-3 overflow-x-auto scroll-smooth px-6 pt-6 lg:p-6"
           >
             {needle && visible.length === 0 ? (
               <p className="px-2 py-6 text-sm text-gray-500">{copy.emptyDealSearch}</p>
@@ -316,37 +340,41 @@ export function DealsBoard({ deals: initialDeals, loadError }: { deals: DealList
                 ))}
                 <div className="h-[calc(4rem+env(safe-area-inset-bottom))]" />
               </div>
-              <div className="hidden min-h-0 flex-1 flex-col overflow-y-auto px-6 lg:flex">
+              <div className="hidden min-h-0 flex-1 flex-col overflow-y-auto bg-white px-6 lg:flex">
               <div className="overflow-x-auto">
-                <table className="w-full text-left text-xs text-gray-600">
-                  <thead className="border-b border-gray-200 text-[11px] font-bold tracking-wide text-gray-900 select-none">
+                <table className="w-full bg-white text-left text-xs text-gray-600">
+                  <thead className="border-b border-gray-200 bg-white font-sans text-[11px] font-bold tracking-wide text-gray-900 select-none">
                     <tr>
-                      <th className="py-3.5 pr-4 pl-6 font-serif font-semibold">{copy.columnDealName}</th>
-                      <th className="px-4 py-3.5 font-serif font-semibold">{copy.customers}</th>
-                      <th className="px-4 py-3.5 font-serif font-semibold">{copy.source}</th>
-                      <th className="px-4 py-3.5 font-serif font-semibold">{copy.columnStage}</th>
-                      <th className="py-3.5 pr-6 pl-4 font-serif font-semibold">{copy.columnValue}</th>
+                      <th className="py-3.5 pr-4 pl-6 font-semibold text-gray-900">{copy.columnDealName}</th>
+                      <th className="px-4 py-3.5 font-semibold text-gray-900">{copy.customers}</th>
+                      <th className="px-4 py-3.5 font-semibold text-gray-900">{copy.source}</th>
+                      <th className="px-4 py-3.5 font-semibold text-gray-900">{copy.columnStage}</th>
+                      <th className="py-3.5 pr-6 pl-4 font-semibold text-gray-900">{copy.columnValue}</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-gray-100">
+                  <tbody className="divide-y divide-gray-100 bg-white">
                     {visible.map((deal) => {
                       const stage = dealStatusOption(deal.status);
                       const names = customerNames(deal);
+                      const SourceIcon = sourceIcon(deal.source);
                       return (
                         <tr key={deal.id}>
                           <td className="py-3.5 pr-4 pl-6">
-                            <div className="font-serif font-semibold text-gray-950">{dealTitle(deal)}</div>
+                            <div className="font-sans font-semibold text-gray-950">{dealTitle(deal)}</div>
                           </td>
                           <td className="px-4 py-3.5">
                             <div className="flex items-center space-x-2">
                               <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-gray-200 bg-gray-100 text-xs font-semibold text-gray-800">
                                 {contactInitials(names)}
                               </span>
-                              <span className="text-xs font-medium text-gray-900">{names}</span>
+                              <span className="font-sans text-xs font-medium text-gray-900">{names}</span>
                             </div>
                           </td>
                           <td className="px-4 py-3.5">
-                            <SourceBadge source={deal.source} />
+                            <span className="inline-flex items-center gap-1.5 text-xs font-medium text-gray-700">
+                              <SourceIcon className="h-3 w-3 shrink-0 text-gray-500" strokeWidth={2} aria-hidden="true" />
+                              {sourceLabel(deal.source)}
+                            </span>
                           </td>
                           <td className="px-4 py-3.5">
                             <span
@@ -355,8 +383,8 @@ export function DealsBoard({ deals: initialDeals, loadError }: { deals: DealList
                               {stage?.label}
                             </span>
                           </td>
-                          <td className="py-3.5 pr-6 pl-4 font-serif text-xs font-semibold text-gray-950">
-                            {quoteNumber(deal) || "—"}
+                          <td className="py-3.5 pr-6 pl-4">
+                            <div className="font-mono text-xs font-semibold text-gray-950">{dealValueLabel(deal)}</div>
                           </td>
                         </tr>
                       );

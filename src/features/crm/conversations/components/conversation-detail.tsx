@@ -238,6 +238,17 @@ function dealOptionsFrom(conversation: ConversationDetail): ConversationDealOpti
   });
 }
 
+export type RememberedQuoteView = {
+  quoteId: string;
+  revisionId: string | null;
+};
+
+function viewingQuoteIdsFrom(remembered: Record<string, RememberedQuoteView> | undefined): Record<string, string> {
+  const ids: Record<string, string> = {};
+  for (const [dealId, view] of Object.entries(remembered ?? {})) ids[dealId] = view.quoteId;
+  return ids;
+}
+
 function openingDealId(conversation: ConversationDetail, dealId?: string): string {
   const links = [...conversation.customer.deal_customers].sort((left, right) =>
     right.deal.created_at.localeCompare(left.deal.created_at),
@@ -399,6 +410,8 @@ function quoteLabel(quote: ConversationQuote | undefined, index: number): string
 export function ConversationDetail({
   conversation,
   initialDealId,
+  rememberedQuotes,
+  onRememberQuote,
   incoming = [],
   onBack,
   onMarkLost,
@@ -416,6 +429,8 @@ export function ConversationDetail({
 }: {
   conversation: ConversationDetail;
   initialDealId?: string;
+  rememberedQuotes?: Record<string, RememberedQuoteView>;
+  onRememberQuote?: (dealId: string, quoteId: string, revisionId: string | null) => void;
   incoming?: Activity[];
   onBack: () => void;
   onMarkLost: (dealId: string) => Promise<{ success: true } | { error: string }>;
@@ -443,8 +458,14 @@ export function ConversationDetail({
   const [focusedDealId, setFocusedDealId] = useState(() => openingDealId(conversation, initialDealId));
   const [loadedDealOptions, setLoadedDealOptions] = useState<Record<string, ConversationDealOption>>({});
   const dealLoad = useRef(0);
-  const [selectedRevisionId, setSelectedRevisionId] = useState<string | null>(null);
-  const [viewingQuoteIds, setViewingQuoteIds] = useState<Record<string, string>>({});
+  const [selectedRevisionId, setSelectedRevisionId] = useState<string | null>(
+    () => rememberedQuotes?.[openingDealId(conversation, initialDealId)]?.revisionId ?? null,
+  );
+  const [viewingQuoteIds, setViewingQuoteIds] = useState<Record<string, string>>(() =>
+    viewingQuoteIdsFrom(rememberedQuotes),
+  );
+  const onRememberQuoteRef = useRef(onRememberQuote);
+  onRememberQuoteRef.current = onRememberQuote;
   const [addedQuotes, setAddedQuotes] = useState<Record<string, ConversationQuote[]>>({});
   const [addingQuote, setAddingQuote] = useState(false);
   const [creatingDeal, setCreatingDeal] = useState(false);
@@ -507,6 +528,13 @@ export function ConversationDetail({
   const viewingQuote =
     listedQuotes.find((quote) => quote.id === viewingQuoteIds[focusedOption?.id ?? ""]) ?? listedQuotes[0] ?? null;
   const dealId = focusedOption?.id ?? focusedDealId;
+  useEffect(() => {
+    const quoteId = viewingQuote?.id;
+    if (!dealId || !quoteId) return;
+    const chosenId = viewingQuoteIds[dealId];
+    if (chosenId && chosenId !== quoteId) return;
+    onRememberQuoteRef.current?.(dealId, quoteId, selectedRevisionId);
+  }, [dealId, viewingQuote?.id, viewingQuoteIds, selectedRevisionId]);
   const people = useDealPeople({
     dealId,
     participants: storedParticipants,
@@ -2224,10 +2252,10 @@ export function ConversationDetail({
       <div className="relative z-40 shrink-0 border-b border-gray-200 bg-white shadow-xs">
         <header
           ref={headerRef}
-          className="relative z-20 flex flex-col gap-1.5 overflow-visible bg-white px-5 py-3 lg:flex-row lg:items-center lg:justify-between lg:gap-4"
+          className="relative z-20 flex flex-col gap-0 overflow-visible bg-white px-5 py-3 lg:flex-row lg:items-center lg:justify-between lg:gap-4"
         >
-          <div className="flex w-full min-w-0 flex-col items-start justify-start gap-2 p-1 lg:w-auto lg:shrink-0">
-            <div className="-mx-6 -mt-4 flex w-[calc(100%+3rem)] min-w-0 items-center gap-1 bg-[#f9f9fb] px-6 pt-4 pb-3 lg:m-0 lg:w-auto lg:bg-transparent lg:p-0">
+          <div className="flex w-full min-w-0 flex-col items-start justify-start gap-2 px-1 pt-1 lg:w-auto lg:shrink-0 lg:p-1">
+            <div className="-mx-6 -mt-4 flex w-[calc(100%+3rem)] min-w-0 items-center gap-1 bg-white px-6 pt-4 pb-3 lg:m-0 lg:w-auto lg:bg-transparent lg:p-0">
               <button
                 type="button"
                 onClick={onBack}
@@ -2257,9 +2285,9 @@ export function ConversationDetail({
                   href={`tel:${customer.phone}`}
                   aria-label={copy.callNow}
                   title={`${copy.callNow} ${customer.fullName}`}
-                  className="flex h-[37px] w-[37px] items-center justify-center rounded-lg bg-[#edeef0] text-gray-700 transition-colors hover:bg-[#e4e5e7]"
+                  className="flex h-7 w-7 items-center justify-center rounded-lg bg-[#edeef0] text-gray-700 transition-colors hover:bg-[#e4e5e7]"
                 >
-                  <Phone className="h-[19px] w-[19px]" strokeWidth={1.8} aria-hidden="true" />
+                  <Phone className="h-3.5 w-3.5" strokeWidth={1.8} aria-hidden="true" />
                 </a>
                 <div ref={setMobileActionsSlot} className="flex items-center gap-1.5" />
               </div>
@@ -2352,10 +2380,10 @@ export function ConversationDetail({
             </div>
           </div>
 
-          <div className="-mx-2.5 -mb-1.5 flex w-[calc(100%+1.25rem)] justify-center lg:m-0 lg:block lg:w-auto lg:shrink-0">
+          <div className="-mx-5 -mb-3 flex w-[calc(100%+2.5rem)] justify-center bg-white px-2.5 pt-0.5 pb-1.5 lg:m-0 lg:block lg:w-auto lg:shrink-0 lg:bg-transparent lg:p-0">
             {focused.quote && viewed ? (
-              <div className="flex w-full items-center gap-2 rounded-2xl bg-gray-50/90 p-1.5 lg:w-auto lg:gap-3 lg:rounded-none lg:bg-transparent lg:p-1">
-                <div className="relative flex h-11 w-14 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-white lg:h-16 lg:w-20">
+              <div className="flex w-full items-center gap-2 rounded-2xl bg-[#f9f9fb] p-1.5 pr-2.5 lg:w-auto lg:gap-3 lg:rounded-none lg:bg-transparent lg:p-1">
+                <div className="relative flex h-11 w-14 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-[#f9f9fb] lg:h-16 lg:w-20 lg:bg-white">
                   {viewed.renders?.render_small_url ? (
                     <img
                       alt={title || copy.quote}
@@ -2390,19 +2418,14 @@ export function ConversationDetail({
                     />
                   )}
                 </div>
-                <div className="flex min-w-0 flex-1 items-center gap-2 lg:contents">
-                  <div className="min-w-0 flex-1 lg:hidden">
-                    <div className="flex items-center gap-1.5">
-                      <span className="text-sm leading-none font-bold text-gray-950">{viewed.totalLabel}</span>
-                      <span className="rounded-md bg-white px-1.5 py-0.5 text-[10px] leading-none font-semibold text-gray-600">
-                        V{viewed.revisionNumber}
-                      </span>
-                    </div>
-                    <p className="mt-0.5 text-xs leading-tight font-normal text-gray-900">
+                <div className="flex min-w-0 flex-1 items-center gap-3 lg:contents">
+                  <div className="flex min-w-0 flex-1 flex-col justify-center lg:hidden">
+                    <p className="truncate text-[10px] leading-tight font-bold text-gray-950">
                       {quoteSpecDetail(focused.quote.specs) ||
                         quoteMenuName(Math.max(0, listedQuotes.findIndex((item) => item.id === focused.quote?.id)))}
                     </p>
-                    <div className="mt-1">
+                    <div className="mt-0.5 flex items-center gap-1.5">
+                      <span className="text-[10px] leading-none font-normal text-gray-950">{viewed.totalLabel}</span>
                       <QuoteStatusBadge status={focused.quote.status} />
                     </div>
                   </div>

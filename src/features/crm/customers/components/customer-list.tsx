@@ -46,7 +46,7 @@ export function CustomerList({
   const pages = customerPageNumbers(page + 1, pageCount);
 
   return (
-    <main className="flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-y-auto bg-[#f9f9fb]">
+    <main className="flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-y-auto bg-white">
       <header className="sticky top-0 z-10 border-b border-gray-200/80 bg-white">
         <div className="flex items-center gap-3 px-4 py-3.5 lg:gap-4 lg:px-6">
           <label className="relative min-w-0 flex-1 lg:max-w-lg">
@@ -95,11 +95,11 @@ export function CustomerList({
           <p className="mt-2 max-w-sm text-sm leading-5 text-gray-500">{copy.emptyCustomersBody}</p>
         </div>
       ) : (
-        <div className="flex min-h-0 min-w-0 flex-1 flex-col px-4 pb-20 lg:px-6 lg:pb-0">
-          <div className="flex w-full min-w-0 flex-1 flex-col bg-transparent">
+        <div className="flex min-w-0 flex-col px-4 lg:min-h-0 lg:flex-1 lg:px-6">
+          <div className="flex w-full min-w-0 flex-col bg-transparent lg:flex-1">
             <div className="min-w-0 overflow-x-hidden lg:overflow-x-auto">
-              <table className="w-full table-fixed text-left text-xs text-gray-600 lg:table-auto">
-                <thead className="hidden border-b border-gray-200 bg-transparent font-serif text-[11px] font-bold tracking-wide text-gray-900 select-none lg:table-header-group">
+              <table className="w-full table-fixed text-left text-xs text-gray-600 lg:table-auto lg:bg-white">
+                <thead className="hidden border-b border-gray-200 bg-transparent font-sans text-[11px] font-bold tracking-wide text-gray-900 select-none lg:table-header-group lg:bg-white">
                   <tr>
                     <th className="py-3.5 pr-4 pl-6 font-semibold text-gray-900">{copy.dateCreated}</th>
                     <th className="px-4 py-3.5 font-semibold text-gray-900">{copy.firstName}</th>
@@ -111,7 +111,7 @@ export function CustomerList({
                     </th>
                   </tr>
                 </thead>
-                <tbody className="bg-transparent font-sans">
+                <tbody className="bg-transparent font-sans lg:bg-white">
                   {rows.length === 0 ? (
                     <tr>
                       <td colSpan={6} className="px-6 py-8 text-sm text-gray-500">
@@ -122,8 +122,8 @@ export function CustomerList({
                     rows.map((customer) => {
                       const name = customerName(customer.full_name);
                       return (
-                      <tr key={customer.id} className="group cursor-pointer transition-colors hover:bg-gray-50/80">
-                        <td className="hidden py-2.5 pr-4 pl-6 text-xs whitespace-nowrap text-gray-500 lg:table-cell">
+                      <tr key={customer.id} className="group cursor-pointer transition-colors hover:bg-gray-50/80 lg:h-[53px]">
+                        <td className="hidden py-3 pr-4 pl-6 text-xs whitespace-nowrap text-gray-500 lg:table-cell">
                           {formatCustomerDate(customer.created_at)}
                         </td>
                         <td className="max-w-0 py-3 pr-3 align-middle lg:hidden">
@@ -136,31 +136,31 @@ export function CustomerList({
                             </span>
                           </div>
                         </td>
-                        <td className="hidden px-4 py-2.5 font-medium text-gray-900 lg:table-cell">
+                        <td className="hidden px-4 py-3 text-gray-900 lg:table-cell">
                           <div className="flex items-center space-x-3">
-                            <span className="text-xs font-semibold text-gray-950 group-hover:text-black">
+                            <span className="text-xs font-normal text-gray-950 group-hover:text-black">
                               {name.first}
                             </span>
                           </div>
                         </td>
-                        <td className="hidden px-4 py-2.5 text-xs font-semibold text-gray-950 group-hover:text-black lg:table-cell">
+                        <td className="hidden px-4 py-3 text-xs font-normal text-gray-950 group-hover:text-black lg:table-cell">
                           {name.last}
                         </td>
-                        <td className="hidden px-4 py-2.5 font-mono text-xs text-gray-900 lg:table-cell">
+                        <td className="hidden px-4 py-3 font-sans text-xs text-gray-900 lg:table-cell">
                           {formatCustomerPhone(customer.phone)}
                         </td>
-                        <td className="hidden max-w-[140px] truncate px-4 py-2.5 text-xs text-gray-600 lg:table-cell" title={customer.email}>
+                        <td className="hidden max-w-[140px] truncate px-4 py-3 text-xs text-gray-600 lg:table-cell" title={customer.email}>
                           {customer.email}
                         </td>
                         <td className="max-w-0 py-3 pl-3 lg:hidden">
                           <div className="truncate text-xs text-gray-600" title={customer.email}>
                             {customer.email}
                           </div>
-                          <div className="mt-0.5 truncate font-mono text-xs text-gray-900">
+                          <div className="mt-0.5 truncate font-sans text-xs text-gray-900">
                             {formatCustomerPhone(customer.phone)}
                           </div>
                         </td>
-                        <td className="w-6 py-3 text-right lg:w-auto lg:py-2.5 lg:pr-6 lg:pl-4 lg:text-center">
+                        <td className="w-6 py-3 text-right lg:h-[53px] lg:w-auto lg:py-3 lg:pr-6 lg:pl-4 lg:text-center">
                           <div className="flex items-center justify-end lg:pr-2">
                             <ChevronRight
                               className="h-4 w-4 text-gray-400 transition-colors group-hover:text-gray-700"
@@ -176,6 +176,7 @@ export function CustomerList({
               </table>
             </div>
           </div>
+          <div className="h-[calc(5.5rem+env(safe-area-inset-bottom))] lg:hidden" />
 
           <div className="hidden items-center justify-between border-t border-gray-200/80 bg-transparent px-6 py-4 text-xs text-gray-500 lg:flex">
             <div className="font-medium">

@@ -65,6 +65,10 @@ export function quoteVersionLabel(revisionNumber: number): string {
   return `Revision ${revisionNumber}`;
 }
 
+export function quoteVersionShortLabel(revisionNumber: number): string {
+  return `v. ${revisionNumber}`;
+}
+
 export function quotePortalMode(value: string | string[] | undefined): QuotePortalMode {
   const mode = Array.isArray(value) ? value[0] : value;
   return mode === "internal" ? "internal" : "external";

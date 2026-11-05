@@ -176,7 +176,7 @@ function DealNameEditor({
       <span className="inline-grid min-w-[4ch] items-center">
         <span
           aria-hidden="true"
-          className="invisible col-start-1 row-start-1 px-0.5 font-serif text-sm tracking-tight whitespace-pre"
+          className="invisible col-start-1 row-start-1 px-0.5 font-sans text-sm tracking-tight whitespace-pre"
         >
           {value || " "}
         </span>
@@ -196,7 +196,7 @@ function DealNameEditor({
               onCancel();
             }
           }}
-          className="col-start-1 row-start-1 w-full min-w-0 bg-transparent px-0.5 font-serif text-sm tracking-tight text-gray-950 outline-none"
+          className="col-start-1 row-start-1 w-full min-w-0 bg-transparent px-0.5 font-sans text-sm tracking-tight text-gray-950 outline-none"
         />
       </span>
       <span aria-hidden="true" className="ml-1.5 shrink-0 text-[11px] tabular-nums text-gray-400">
@@ -964,7 +964,7 @@ export function DealHeading({
             onClick={toggleDeals}
             className="group -ml-1.5 inline-flex cursor-pointer items-center rounded-md py-0.5 pr-1 pl-1.5 text-left transition-colors hover:bg-gray-50"
           >
-            <span className="font-serif text-sm font-normal tracking-tight whitespace-nowrap text-gray-950">
+            <span className="font-sans text-sm font-normal tracking-tight whitespace-nowrap text-gray-950">
               <DealHeadingLabel name={title || copy.quote} />
             </span>
             {hasNewDeal ? (
@@ -985,7 +985,7 @@ export function DealHeading({
             />
           </button>
         ) : (
-          <span className="font-serif text-sm font-normal tracking-tight whitespace-nowrap text-gray-950">
+          <span className="font-sans text-sm font-normal tracking-tight whitespace-nowrap text-gray-950">
             <DealHeadingLabel name={title || copy.quote} />
           </span>
         )}
@@ -1029,9 +1029,9 @@ export function DealHeading({
                   openSheetStep("details");
                   setSheetOpen(true);
                 }}
-                className="flex h-[37px] w-[37px] cursor-pointer items-center justify-center rounded-lg bg-[#edeef0] text-gray-600 transition-colors hover:bg-[#e4e5e7] hover:text-gray-900"
+                className="flex h-7 w-7 cursor-pointer items-center justify-center rounded-lg bg-[#edeef0] text-gray-600 transition-colors hover:bg-[#e4e5e7] hover:text-gray-900"
               >
-                <Info className="h-[21px] w-[21px]" aria-hidden="true" />
+                <Info className="h-4 w-4" aria-hidden="true" />
               </button>
               <button
                 type="button"
@@ -1044,9 +1044,9 @@ export function DealHeading({
                   setSheetHeight(null);
                   setSheetOpen(true);
                 }}
-                className="flex h-[37px] w-[37px] cursor-pointer items-center justify-center rounded-lg bg-[#edeef0] text-gray-600 transition-colors hover:bg-[#e4e5e7] hover:text-gray-900"
+                className="flex h-7 w-7 cursor-pointer items-center justify-center rounded-lg bg-[#edeef0] text-gray-600 transition-colors hover:bg-[#e4e5e7] hover:text-gray-900"
               >
-                <EllipsisVertical className="h-[21px] w-[21px]" aria-hidden="true" />
+                <EllipsisVertical className="h-4 w-4" aria-hidden="true" />
               </button>
             </>,
             mobileActionsSlot,
@@ -1079,7 +1079,7 @@ export function DealHeading({
                     <div className="border-b border-gray-200 px-3 py-3">
                       <div className="flex items-start gap-2">
                         <div className="min-w-0 flex-1">
-                          <h2 id={sheetStep === "actions" ? sheetTitleId : undefined} className="truncate font-serif text-sm font-semibold text-gray-900">
+                          <h2 id={sheetStep === "actions" ? sheetTitleId : undefined} className="truncate font-sans text-sm font-semibold text-gray-900">
                             {title || copy.quote}
                           </h2>
                           <div className="mt-1.5">
@@ -1343,8 +1343,7 @@ export function DealHeading({
                           currentRevisionId={
                             (revisionQuoteId ?? quoteSwitch.viewingQuoteId) === quoteSwitch.viewingQuoteId
                               ? quoteSwitch.viewingRevisionId
-                              : (quoteSwitch.quotes.find((quote) => quote.id === revisionQuoteId)?.activeRevisionId ??
-                                quoteSwitch.viewingRevisionId)
+                              : ""
                           }
                           onChoose={(revisionId) => {
                             const quoteId = revisionQuoteId ?? quoteSwitch.viewingQuoteId;

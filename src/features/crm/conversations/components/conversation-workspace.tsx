@@ -8,6 +8,7 @@ import { useQuoteStream } from "@/src/features/crm/quotes/hooks/use-quote-stream
 import type { QuoteChangeEvent } from "@/src/features/crm/quotes/types";
 import {
   ConversationDetail as ConversationThread,
+  type RememberedQuoteView,
   type ThreadReadNotice,
 } from "@/src/features/crm/conversations/components/conversation-detail";
 import { ConversationDetailSkeleton } from "@/src/features/crm/conversations/components/conversation-skeleton";
@@ -85,6 +86,7 @@ export function ConversationWorkspaceView({
   const filters = useConversationFilters();
   const [statusByDeal, setStatusByDeal] = useState<Record<string, DealStatus>>({});
   const [activeDealByConversation, setActiveDealByConversation] = useState<Record<string, string>>({});
+  const [rememberedQuotes, setRememberedQuotes] = useState<Record<string, RememberedQuoteView>>({});
   const [opened, setOpened] = useState<ConversationListItem[]>([]);
   const [arrived, setArrived] = useState<ConversationListItem[]>([]);
   const [patches, setPatches] = useState<Record<string, InboxPatch>>({});
@@ -316,6 +318,14 @@ export function ConversationWorkspaceView({
     void selection.selectConversation(id, activeDealByConversation[id]);
   }
 
+  function rememberQuote(dealId: string, quoteId: string, revisionId: string | null) {
+    setRememberedQuotes((current) => {
+      const previous = current[dealId];
+      if (previous?.quoteId === quoteId && (previous.revisionId ?? null) === revisionId) return current;
+      return { ...current, [dealId]: { quoteId, revisionId } };
+    });
+  }
+
   async function selectCustomer(participant: ConversationParticipant, dealId: string) {
     let conversationId = participant.conversationId;
     if (!conversationId) {
@@ -390,6 +400,8 @@ export function ConversationWorkspaceView({
             key={selection.conversation.id}
             conversation={selection.conversation}
             initialDealId={selection.dealId}
+            rememberedQuotes={rememberedQuotes}
+            onRememberQuote={rememberQuote}
             incoming={liveActivities[selection.conversation.id] ?? []}
             onBack={selection.clearConversation}
             onMarkLost={onMarkLost}

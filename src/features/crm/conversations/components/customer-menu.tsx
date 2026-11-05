@@ -162,7 +162,7 @@ export function CustomerMenu({
       </span>
       <span className="flex min-w-0 items-center gap-1">
         <h2
-          className={`truncate font-serif text-base font-bold tracking-tight text-gray-950 ${
+          className={`truncate font-sans text-base font-bold tracking-tight text-gray-950 ${
             multiple ? "transition-colors group-hover:text-gray-700" : ""
           }`}
         >

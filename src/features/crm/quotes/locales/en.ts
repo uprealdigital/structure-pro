@@ -75,6 +75,8 @@ export const portalCopy = {
   share: "Share",
   download: "Download",
   viewAsCustomer: "View as a Customer",
+  moreActions: "More actions",
+  close: "Close",
   editQuote: "Edit Quote",
   reviewAndSend: "Review & Send",
   sharePdf: "Share PDF",

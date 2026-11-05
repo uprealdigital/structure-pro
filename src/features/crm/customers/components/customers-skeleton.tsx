@@ -7,7 +7,7 @@ const rows = 8;
 export function CustomersSkeleton() {
   return (
     <SkeletonStatus>
-      <main className="flex h-full min-w-0 flex-1 flex-col overflow-hidden bg-[#f9f9fb]" aria-busy="true">
+      <main className="flex h-full min-w-0 flex-1 flex-col overflow-hidden bg-white" aria-busy="true">
         <header className="border-b border-gray-200/80 bg-white">
           <div className="flex items-center gap-3 px-4 py-3.5 lg:gap-4 lg:px-6">
             <Bone className="h-8 min-w-0 flex-1 rounded-md lg:max-w-lg" />
@@ -29,10 +29,11 @@ export function CustomersSkeleton() {
               <Bone className="h-4 w-4 shrink-0" />
             </div>
           ))}
+          <div className="h-[calc(5.5rem+env(safe-area-inset-bottom))]" />
         </div>
         <div className="hidden min-h-0 flex-1 flex-col px-6 lg:flex">
-          <table className="w-full text-left text-xs">
-            <thead className="border-b border-gray-200 font-serif text-[11px] font-bold tracking-wide text-gray-400">
+          <table className="w-full bg-white text-left text-xs">
+            <thead className="border-b border-gray-200 bg-white font-sans text-[11px] font-bold tracking-wide text-gray-400">
               <tr>
                 {columns.map((label) => (
                   <th key={label} className="px-4 py-3.5 font-semibold first:pl-6">
@@ -42,7 +43,7 @@ export function CustomersSkeleton() {
                 <th className="py-3.5 pr-6 pl-4" />
               </tr>
             </thead>
-            <tbody>
+            <tbody className="bg-white">
               {Array.from({ length: rows }, (_, index) => (
                 <tr key={index}>
                   <td className="py-3 pr-4 pl-6">

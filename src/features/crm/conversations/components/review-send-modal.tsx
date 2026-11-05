@@ -672,7 +672,7 @@ function SendMeter({ complete, onFilled }: { complete: boolean; onFilled: () => 
   const offset = circumference - (Math.min(100, shown) / 100) * circumference;
 
   return (
-    <svg className="h-3.5 w-3.5 -rotate-90" viewBox="0 0 14 14" aria-hidden="true">
+    <svg className="hidden h-3.5 w-3.5 -rotate-90 lg:block" viewBox="0 0 14 14" aria-hidden="true">
       <circle cx="7" cy="7" r={radius} fill="none" stroke="currentColor" strokeOpacity="0.35" strokeWidth="1.6" />
       <circle
         cx="7"
@@ -827,9 +827,12 @@ export function ReviewSendModal({
       <button
         type="button"
         onClick={dismiss}
-        className="cursor-pointer rounded-lg border border-gray-300 bg-white px-4 py-2 text-xs font-semibold text-gray-700 shadow-xs transition-colors hover:bg-gray-100"
+        className="relative inline-flex cursor-pointer items-center justify-center rounded-lg border border-gray-300 bg-white px-4 py-2 text-xs font-semibold whitespace-nowrap text-gray-700 shadow-xs transition-colors hover:bg-gray-100"
       >
-        {copy.cancel}
+        <span className="invisible lg:hidden" aria-hidden="true">
+          {copy.sendNow}
+        </span>
+        <span className="absolute inset-0 flex items-center justify-center lg:static">{copy.cancel}</span>
       </button>
     );
   }
@@ -843,17 +846,45 @@ export function ReviewSendModal({
         onClick={() => void submit()}
         className={
           sending
-            ? "flex cursor-default items-center gap-2 rounded-lg bg-gray-400 px-5 py-2 text-xs font-semibold text-white shadow-sm"
-            : "flex cursor-pointer items-center gap-2 rounded-lg bg-black px-5 py-2 text-xs font-semibold text-white shadow-sm transition-all hover:bg-gray-800"
+            ? "inline-flex cursor-default items-center justify-center rounded-lg border border-transparent bg-gray-400 px-4 py-2 text-xs font-semibold whitespace-nowrap text-white shadow-sm lg:gap-2 lg:border-0 lg:px-5"
+            : "inline-flex cursor-pointer items-center justify-center rounded-lg border border-transparent bg-black px-4 py-2 text-xs font-semibold whitespace-nowrap text-white shadow-sm transition-all hover:bg-gray-800 lg:gap-2 lg:border-0 lg:px-5"
         }
       >
         <span>{sending ? copy.sendingNow : copy.sendNow}</span>
         {sending ? (
           <SendMeter complete={sendComplete} onFilled={finishSend} />
         ) : (
-          <Send className="h-3.5 w-3.5" aria-hidden="true" />
+          <Send className="hidden h-3.5 w-3.5 lg:block" aria-hidden="true" />
         )}
       </button>
+    );
+  }
+
+  function quoteCard() {
+    return (
+      <div className="flex items-center gap-4 py-2">
+        <div className="flex h-14 w-16 shrink-0 items-center justify-center rounded-lg">
+          <img alt={title} src={imageUrl} className="h-full w-full object-contain" />
+        </div>
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2">
+            <h4 className="truncate text-xs font-bold text-gray-950">{title}</h4>
+            <span className="inline-flex shrink-0 items-center rounded border border-gray-200 bg-gray-100 px-2 py-0.5 text-[10px] font-semibold text-gray-700">
+              {statusLabel}
+            </span>
+          </div>
+          <span className="mt-1 block text-base leading-none font-semibold text-gray-900">{priceLabel}</span>
+        </div>
+        <a
+          href={`/quote/${quoteId}?mode=internal`}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex shrink-0 cursor-pointer items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 shadow-xs transition-colors hover:bg-gray-50"
+        >
+          <ExternalLink className="h-3.5 w-3.5 shrink-0 text-gray-500" aria-hidden="true" />
+          <span>{copy.openQuote}</span>
+        </a>
+      </div>
     );
   }
 
@@ -864,9 +895,9 @@ export function ReviewSendModal({
         role="dialog"
         aria-modal="true"
         aria-labelledby="review-send-title"
-        className="absolute inset-0 z-10 flex h-[100dvh] min-h-0 flex-col overflow-hidden bg-white font-sans text-gray-900 lg:relative lg:inset-auto lg:h-auto lg:max-h-[90vh] lg:w-full lg:max-w-xl lg:overflow-y-auto lg:rounded-2xl lg:border lg:border-gray-100 lg:p-6 lg:shadow-2xl"
+        className="absolute inset-0 z-10 flex h-[100dvh] min-h-0 flex-col overflow-hidden bg-white font-sans text-gray-900 lg:relative lg:inset-auto lg:grid lg:h-auto lg:max-h-[90vh] lg:w-full lg:max-w-xl lg:grid-rows-[auto_auto_minmax(0,1fr)_auto] lg:overflow-hidden lg:rounded-2xl lg:border lg:border-gray-100 lg:shadow-2xl"
       >
-        <div className="grid shrink-0 grid-cols-[1fr_auto_1fr] items-center gap-2 border-b border-gray-200 px-3 py-3 lg:flex lg:items-start lg:justify-between lg:border-b-0 lg:p-0 lg:pb-4">
+        <div className="grid shrink-0 grid-cols-[1fr_auto_1fr] items-center gap-2 border-b border-gray-200 bg-white px-3 py-3 lg:flex lg:items-start lg:justify-between lg:border-b-0 lg:px-6 lg:pt-6 lg:pb-2">
           <div className="justify-self-start lg:hidden">{cancelButton()}</div>
           <h3 id="review-send-title" className="min-w-0 truncate text-center font-serif text-sm font-semibold text-gray-900 lg:flex-1 lg:text-left lg:text-xl lg:leading-tight lg:font-bold lg:text-gray-950">
             {copy.reviewAndSendQuote}
@@ -882,30 +913,12 @@ export function ReviewSendModal({
           </button>
         </div>
 
-        <div className="min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain px-3 pt-3 pb-[45px] lg:mt-4 lg:flex-none lg:overflow-visible lg:p-0">
-          <div className="flex items-center gap-4 py-2">
-            <div className="flex h-14 w-16 shrink-0 items-center justify-center rounded-lg">
-              <img alt={title} src={imageUrl} className="h-full w-full object-contain" />
-            </div>
-            <div className="min-w-0 flex-1">
-              <div className="flex items-center gap-2">
-                <h4 className="truncate text-xs font-bold text-gray-950">{title}</h4>
-                <span className="inline-flex shrink-0 items-center rounded border border-gray-200 bg-gray-100 px-2 py-0.5 text-[10px] font-semibold text-gray-700">
-                  {statusLabel}
-                </span>
-              </div>
-              <span className="mt-1 block text-base leading-none font-semibold text-gray-900">{priceLabel}</span>
-            </div>
-            <a
-              href={`/quote/${quoteId}?mode=internal`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex shrink-0 cursor-pointer items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 shadow-xs transition-colors hover:bg-gray-50"
-            >
-              <ExternalLink className="h-3.5 w-3.5 shrink-0 text-gray-500" aria-hidden="true" />
-              <span>{copy.openQuote}</span>
-            </a>
-          </div>
+        <div className="hidden shrink-0 border-b border-gray-200 bg-white px-6 pb-3 lg:block">
+          {quoteCard()}
+        </div>
+
+        <div className="min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain px-3 pt-3 pb-[45px] lg:px-6 lg:py-4">
+          <div className="lg:hidden">{quoteCard()}</div>
 
           <section className="pt-2 pb-3">
             <div className="mb-3 inline-flex items-center gap-2">
@@ -967,7 +980,7 @@ export function ReviewSendModal({
           </section>
         </div>
 
-        <div className="hidden shrink-0 items-center justify-end gap-3 lg:mt-4 lg:flex lg:pt-5">
+        <div className="hidden shrink-0 items-center justify-end gap-3 border-t border-gray-200 bg-white px-6 py-4 lg:flex">
           {cancelButton()}
           {sendButton()}
         </div>

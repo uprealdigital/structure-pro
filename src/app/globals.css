@@ -42,6 +42,12 @@ body {
   width: 5px;
 }
 
+@media (max-width: 1023px) {
+  .deals-kanban-scroll::-webkit-scrollbar {
+    height: 3px;
+  }
+}
+
 ::-webkit-scrollbar-track {
   background: #fafafa;
 }

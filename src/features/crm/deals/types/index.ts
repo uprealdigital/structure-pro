@@ -94,6 +94,7 @@ export const dealListItemSchema = z.object({
   status: dealStatusSchema,
   customers: z.array(dealListCustomerSchema),
   quote: dealListQuoteSchema.nullable(),
+  value: z.number().nullable(),
 });
 
 export type DealListItem = z.infer<typeof dealListItemSchema>;

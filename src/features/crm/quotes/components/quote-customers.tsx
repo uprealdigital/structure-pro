@@ -1,42 +1,30 @@
 import { contactInitials } from "@/src/features/crm/common/utils/formatting";
-import type { QuoteListCustomer } from "@/src/features/crm/quotes/types";
 
-export function QuoteCustomers({ customers }: { customers: QuoteListCustomer[] }) {
-  if (customers.length === 0) return null;
+export type QuoteCustomer = {
+  id: string;
+  name: string;
+};
 
-  if (customers.length === 1) {
-    const customer = customers[0];
-    return (
-      <div className="flex items-center gap-2.5">
-        <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-gray-200 bg-gray-100 text-[11px] font-medium text-gray-700">
-          {contactInitials(customer.full_name)}
-        </div>
-        <span className="text-xs font-medium text-gray-900">{customer.full_name}</span>
-      </div>
-    );
-  }
+export function QuoteCustomers({ customers }: { customers: QuoteCustomer[] }) {
+  const primary = customers[0];
+  if (!primary) return null;
+  const extra = customers.length - 1;
 
   return (
-    <div className="flex items-center gap-2.5">
-      <div className="flex shrink-0 items-center -space-x-2">
+    <div className="flex min-w-0 items-center gap-1.5">
+      <span className="flex shrink-0 items-center -space-x-2">
         {customers.map((customer, index) => (
-          <div
+          <span
             key={customer.id}
-            className={`flex h-7 w-7 items-center justify-center rounded-full border-2 border-white text-[10px] font-medium ring-1 ring-gray-200 ${
-              index === 0 ? "z-10 bg-gray-100 text-gray-700" : "bg-slate-100 text-slate-800"
-            }`}
+            className="flex h-7 w-7 items-center justify-center rounded-full border-2 border-white bg-gray-100 text-xs font-semibold text-gray-800 ring-1 ring-gray-200"
+            style={{ zIndex: customers.length - index }}
           >
-            {contactInitials(customer.full_name)}
-          </div>
+            {contactInitials(customer.name)}
+          </span>
         ))}
-      </div>
-      <div className="min-w-0">
-        {customers.map((customer) => (
-          <div key={customer.id} className="text-xs leading-tight font-medium text-gray-900">
-            {customer.full_name}
-          </div>
-        ))}
-      </div>
+      </span>
+      <span className="truncate font-sans text-xs font-normal text-gray-950">{primary.name}</span>
+      {extra > 0 ? <span className="shrink-0 font-sans text-xs font-semibold text-gray-500">+{extra}</span> : null}
     </div>
   );
 }
