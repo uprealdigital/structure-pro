@@ -437,6 +437,7 @@ export function ConversationDetail({
   const storedParticipants = participantsFrom(conversation);
   const openingActivities = activitiesFrom(conversation);
   const [detailsOpen, setDetailsOpen] = useState(false);
+  const [mobileSummaryDealId, setMobileSummaryDealId] = useState("");
   const [detailsSettled, setDetailsSettled] = useState(false);
   const [focusedDealId, setFocusedDealId] = useState(() => openingDealId(conversation, initialDealId));
   const [loadedDealOptions, setLoadedDealOptions] = useState<Record<string, ConversationDealOption>>({});
@@ -629,7 +630,7 @@ export function ConversationDetail({
   });
   const generatedSummary = useDealSummary(
     focused.deal.id,
-    detailsOpen,
+    detailsOpen || mobileSummaryDealId === focused.deal.id,
     summarySnapshot.request,
     summarySnapshot.fingerprint,
   );
@@ -683,14 +684,12 @@ export function ConversationDetail({
   const composerRef = useRef<HTMLTextAreaElement>(null);
   const headerRef = useRef<HTMLElement>(null);
   const desktopStatusRef = useRef<HTMLDivElement>(null);
-  const mobileStatusRef = useRef<HTMLDivElement>(null);
   const [mobileActionsSlot, setMobileActionsSlot] = useState<HTMLDivElement | null>(null);
   const [detailsTop, setDetailsTop] = useState<number | null>(null);
 
   useLayoutEffect(() => {
     const header = headerRef.current;
     const desktopStatus = desktopStatusRef.current;
-    const mobileStatus = mobileStatusRef.current;
     if (!header) return;
     const query = window.matchMedia("(min-width: 1024px)");
     const place = () => {
@@ -707,7 +706,6 @@ export function ConversationDetail({
     const observer = new ResizeObserver(place);
     observer.observe(header);
     if (desktopStatus) observer.observe(desktopStatus);
-    if (mobileStatus) observer.observe(mobileStatus);
     query.addEventListener("change", place);
     return () => {
       observer.disconnect();
@@ -2176,7 +2174,7 @@ export function ConversationDetail({
           className="relative z-20 flex flex-col gap-3 overflow-visible bg-white px-5 py-3 lg:flex-row lg:items-center lg:justify-between lg:gap-4"
         >
           <div className="flex w-full min-w-0 flex-col items-start justify-start gap-2 p-1 lg:w-auto lg:shrink-0">
-            <div className="flex w-full min-w-0 items-center gap-1 lg:w-auto">
+            <div className="-mx-6 -mt-4 flex w-[calc(100%+3rem)] min-w-0 items-center gap-1 bg-[#f9f9fb] px-6 pt-4 pb-3 lg:m-0 lg:w-auto lg:bg-transparent lg:p-0">
               <button
                 type="button"
                 onClick={onBack}
@@ -2206,7 +2204,7 @@ export function ConversationDetail({
                   href={`tel:${customer.phone}`}
                   aria-label={copy.callNow}
                   title={`${copy.callNow} ${customer.fullName}`}
-                  className="flex h-7 w-7 items-center justify-center rounded-full bg-gray-100 text-gray-700 transition-colors hover:bg-gray-200"
+                  className="flex h-7 w-7 items-center justify-center rounded-full bg-[#edeef0] text-gray-700 transition-colors hover:bg-[#e4e5e7]"
                 >
                   <Phone className="h-3.5 w-3.5" strokeWidth={1.8} aria-hidden="true" />
                 </a>
@@ -2234,8 +2232,54 @@ export function ConversationDetail({
               onToggleCustomer={(customerId) => void people.toggle(customerId)}
               onMarkLost={() => void markLost()}
               onReopen={() => void reopen()}
-              statusRef={mobileStatusRef}
               mobileActionsSlot={mobileActionsSlot}
+              onViewDetails={() => setMobileSummaryDealId(focused.deal.id)}
+              details={
+                <div className="grid grid-cols-1 gap-6 bg-white px-6 py-4">
+                  <DealSummary
+                    source={focused.deal.source}
+                    createdAt={conversation.created_at}
+                    specs={focused.quote?.specs ?? []}
+                    customerId={customer.id}
+                    participants={participants}
+                    summary={generatedSummary}
+                  />
+                  <QuotePanel revision={viewed} />
+                </div>
+              }
+              quoteActions={
+                focused.quote
+                  ? {
+                      quoteId: focused.quote.id,
+                      published: focused.quote.status !== "draft",
+                      pending: quoteAction != null,
+                      adding: addingQuote,
+                      canMove: canMoveQuoteToNewDeal(focused.quote.status, listedQuotes.length),
+                      menuAction:
+                        quoteStatuses[focused.quote.status].menu?.id === "delete_draft" && listedQuotes.length < 2
+                          ? undefined
+                          : quoteStatuses[focused.quote.status].menu,
+                      onAddQuote: () => void addQuote(),
+                      onMove: () => void moveFocusedQuote(),
+                      onDuplicate: () => void duplicateFocusedQuote(),
+                      onMenuAction: () => {
+                        const quote = focused.quote;
+                        if (!quote) return;
+                        const menu = quoteStatuses[quote.status].menu;
+                        if (menu?.id === "delete_draft") void deleteFocusedDraft();
+                        else void cancelFocusedQuote();
+                      },
+                      onCopied: () => {
+                        setRevisionError("");
+                        setQuoteToast({ id: Date.now(), message: copy.publishLinkCopied });
+                      },
+                      onCopyError: () => {
+                        setQuoteToast(null);
+                        setRevisionError(copy.copyPublishLinkError);
+                      },
+                    }
+                  : undefined
+              }
             />
             <div ref={desktopStatusRef} className="hidden lg:block">
               <DealStatusBadge status={focused.deal.status} />
@@ -2306,8 +2350,8 @@ export function ConversationDetail({
                   <div
                     className={`grid w-full items-stretch gap-1.5 ${
                       quoteStatuses[focused.quote.status].actions.length > 1
-                        ? "grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]"
-                        : "grid-cols-[minmax(0,1fr)_auto]"
+                        ? "grid-cols-2 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]"
+                        : "grid-cols-1 lg:grid-cols-[minmax(0,1fr)_auto]"
                     }`}
                   >
                     <QuoteStatusActions
@@ -2373,7 +2417,7 @@ export function ConversationDetail({
           ) : null}
           {editing || detailsTop == null ? null : (
             <div
-              className="pointer-events-none absolute left-1/2 z-20 -translate-x-1/2 -translate-y-1/2"
+              className="pointer-events-none absolute left-1/2 z-20 hidden -translate-x-1/2 -translate-y-1/2 lg:block"
               style={{ top: detailsTop }}
             >
               <DetailsToggle open={detailsOpen} onClick={toggleDetails} />
@@ -2382,7 +2426,7 @@ export function ConversationDetail({
         </header>
 
         <div
-          className={`grid transition-[grid-template-rows] duration-300 ease-out motion-reduce:transition-none ${detailsOpen ? "grid-rows-[1fr]" : "grid-rows-[0fr]"}`}
+          className={`hidden transition-[grid-template-rows] duration-300 ease-out motion-reduce:transition-none lg:grid ${detailsOpen ? "grid-rows-[1fr]" : "grid-rows-[0fr]"}`}
           onTransitionEnd={(event) => {
             if (event.target !== event.currentTarget || event.propertyName !== "grid-template-rows") return;
             if (detailsOpen) setDetailsSettled(true);

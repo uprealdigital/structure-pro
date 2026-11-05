@@ -1,7 +1,8 @@
 "use client";
 
-import { ChevronDown, Eye, Mail, Phone } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { ChevronDown, Eye, Mail, Phone, X } from "lucide-react";
+import { useEffect, useId, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { contactInitials } from "@/src/features/crm/common/utils/formatting";
 import { copy } from "@/src/features/crm/conversations/locales/en";
 import type { ConversationParticipant } from "@/src/features/crm/conversations/types";
@@ -25,6 +26,82 @@ function stackAvatars(participants: ConversationParticipant[], customerId: strin
   return back ? [front, back] : [front];
 }
 
+function CustomerChoices({
+  participants,
+  customerId,
+  onChoose,
+}: {
+  participants: ConversationParticipant[];
+  customerId: string;
+  onChoose: (participant: ConversationParticipant) => void;
+}) {
+  return (
+    <div className="space-y-2.5 p-3.5">
+      {menuOrder(participants, customerId).map((participant) => {
+        const primary = participant.isPrimary;
+        const current = participant.customer.id === customerId;
+        return (
+          <button
+            key={participant.customer.id}
+            type="button"
+            role="menuitem"
+            aria-current={current ? "true" : undefined}
+            onClick={() => onChoose(participant)}
+            className={`flex w-full items-center gap-2.5 rounded-xl border p-2.5 text-left transition-colors ${
+              current
+                ? "border-gray-300 bg-[#f5f5f7] hover:bg-gray-100"
+                : primary
+                  ? "border-gray-200/60 bg-gray-50/90 hover:bg-gray-100"
+                  : "border-gray-200/60 bg-white hover:bg-gray-50"
+            }`}
+          >
+            <span className="min-w-0 flex-1">
+              <span className="flex items-center gap-2.5">
+                <span
+                  className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full font-serif text-[11px] font-bold ${
+                    current || primary ? "bg-[#121314] text-white" : "bg-gray-200 text-gray-700"
+                  }`}
+                >
+                  {contactInitials(participant.customer.fullName)}
+                </span>
+                <span className="flex min-w-0 items-center gap-1.5">
+                  <span className={`text-xs text-gray-950 ${current || primary ? "font-bold" : "font-semibold"}`}>
+                    {participant.customer.fullName}
+                  </span>
+                  {primary ? (
+                    <span
+                      className={`rounded-full px-1.5 py-0.5 text-[9px] leading-none font-semibold text-gray-800 ${
+                        current ? "bg-white" : "bg-gray-200"
+                      }`}
+                    >
+                      {copy.primary}
+                    </span>
+                  ) : null}
+                </span>
+              </span>
+              <span className="mt-0.5 block space-y-0.5 pl-[2.375rem] text-[11px] text-gray-600">
+                <span className="flex items-center gap-1.5">
+                  <Phone className="h-3 w-3 shrink-0 text-gray-400" strokeWidth={1.8} aria-hidden="true" />
+                  <span>{participant.customer.phone}</span>
+                </span>
+                <span className="flex items-center gap-1.5">
+                  <Mail className="h-3 w-3 shrink-0 text-gray-400" strokeWidth={1.8} aria-hidden="true" />
+                  <span className="truncate">{participant.customer.email}</span>
+                </span>
+              </span>
+            </span>
+            {current ? (
+              <Eye className="h-3.5 w-3.5 shrink-0 text-black" strokeWidth={2} aria-hidden="true" />
+            ) : (
+              <span className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+            )}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 export function CustomerMenu({
   participants,
   customer,
@@ -38,13 +115,17 @@ export function CustomerMenu({
 }) {
   const [open, setOpen] = useState(false);
   const menu = useRef<HTMLDivElement>(null);
+  const sheet = useRef<HTMLDivElement>(null);
+  const sheetTitleId = useId();
   const avatars = stackAvatars(participants, customer.id);
   const multiple = participants.length > 1;
 
   useEffect(() => {
     if (!multiple) return;
     function close(event: MouseEvent) {
-      if (!menu.current?.contains(event.target as Node)) setOpen(false);
+      const target = event.target as Node;
+      if (menu.current?.contains(target) || sheet.current?.contains(target)) return;
+      setOpen(false);
     }
     function onKey(event: KeyboardEvent) {
       if (event.key === "Escape") setOpen(false);
@@ -119,73 +200,42 @@ export function CustomerMenu({
         <div
           role="menu"
           aria-label={copy.dealCustomers}
-          className="absolute top-full left-0 z-50 mt-2 w-80 overflow-hidden rounded-2xl border border-gray-200/80 bg-white shadow-xl"
+          className="absolute top-full left-0 z-50 mt-2 hidden w-80 overflow-hidden rounded-2xl border border-gray-200/80 bg-white shadow-xl lg:block"
         >
-          <div className="space-y-2.5 p-3.5">
-            {menuOrder(participants, customer.id).map((participant) => {
-              const primary = participant.isPrimary;
-              const current = participant.customer.id === customer.id;
-              return (
-                <button
-                  key={participant.customer.id}
-                  type="button"
-                  role="menuitem"
-                  aria-current={current ? "true" : undefined}
-                  onClick={() => choose(participant)}
-                  className={`flex w-full items-center gap-2.5 rounded-xl border p-2.5 text-left transition-colors ${
-                    current
-                      ? "border-gray-300 bg-[#f5f5f7] hover:bg-gray-100"
-                      : primary
-                        ? "border-gray-200/60 bg-gray-50/90 hover:bg-gray-100"
-                        : "border-gray-200/60 bg-white hover:bg-gray-50"
-                  }`}
-                >
-                  <span className="min-w-0 flex-1">
-                    <span className="flex items-center gap-2.5">
-                      <span
-                        className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full font-serif text-[11px] font-bold ${
-                          current || primary ? "bg-[#121314] text-white" : "bg-gray-200 text-gray-700"
-                        }`}
-                      >
-                        {contactInitials(participant.customer.fullName)}
-                      </span>
-                      <span className="flex min-w-0 items-center gap-1.5">
-                        <span className={`text-xs text-gray-950 ${current || primary ? "font-bold" : "font-semibold"}`}>
-                          {participant.customer.fullName}
-                        </span>
-                        {primary ? (
-                          <span
-                            className={`rounded-full px-1.5 py-0.5 text-[9px] leading-none font-semibold text-gray-800 ${
-                              current ? "bg-white" : "bg-gray-200"
-                            }`}
-                          >
-                            {copy.primary}
-                          </span>
-                        ) : null}
-                      </span>
-                    </span>
-                    <span className="mt-0.5 block space-y-0.5 pl-[2.375rem] text-[11px] text-gray-600">
-                      <span className="flex items-center gap-1.5">
-                        <Phone className="h-3 w-3 shrink-0 text-gray-400" strokeWidth={1.8} aria-hidden="true" />
-                        <span>{participant.customer.phone}</span>
-                      </span>
-                      <span className="flex items-center gap-1.5">
-                        <Mail className="h-3 w-3 shrink-0 text-gray-400" strokeWidth={1.8} aria-hidden="true" />
-                        <span className="truncate">{participant.customer.email}</span>
-                      </span>
-                    </span>
-                  </span>
-                  {current ? (
-                    <Eye className="h-3.5 w-3.5 shrink-0 text-black" strokeWidth={2} aria-hidden="true" />
-                  ) : (
-                    <span className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-                  )}
-                </button>
-              );
-            })}
-          </div>
+          <CustomerChoices participants={participants} customerId={customer.id} onChoose={choose} />
         </div>
       ) : null}
+      {multiple && open
+        ? createPortal(
+            <div ref={sheet} className="fixed inset-0 z-50 lg:hidden">
+              <button type="button" aria-label={copy.close} className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setOpen(false)} />
+              <div
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby={sheetTitleId}
+                className="absolute inset-x-0 bottom-0 flex max-h-full flex-col overflow-hidden rounded-t-2xl border-t border-gray-200 bg-white text-gray-900"
+              >
+                <div className="max-h-[100dvh] overflow-y-auto pb-[45px]">
+                  <div className="flex items-center gap-2 border-b border-gray-200 px-3 py-3">
+                    <h2 id={sheetTitleId} className="min-w-0 flex-1 truncate font-serif text-sm font-semibold text-gray-900">
+                      {copy.dealCustomers}
+                    </h2>
+                    <button
+                      type="button"
+                      aria-label={copy.close}
+                      onClick={() => setOpen(false)}
+                      className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-gray-100 text-gray-500 transition-colors hover:bg-gray-200 hover:text-gray-900"
+                    >
+                      <X className="h-4 w-4" aria-hidden="true" />
+                    </button>
+                  </div>
+                  <CustomerChoices participants={participants} customerId={customer.id} onChoose={choose} />
+                </div>
+              </div>
+            </div>,
+            document.body,
+          )
+        : null}
     </div>
   );
 }

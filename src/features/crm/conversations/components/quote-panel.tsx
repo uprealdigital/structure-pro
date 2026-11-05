@@ -584,7 +584,7 @@ export function QuotePanel({
   const delivery = revision ? specValue(revision.specs, "Delivery ZIP") : "";
 
   return (
-    <div className="relative col-span-1 space-y-3.5 pl-4">
+    <div className="relative col-span-1 space-y-3.5 max-lg:px-2.5 lg:pl-4">
       <div className="flex flex-col items-start gap-1">
         <h3 className={sectionTitle}>{copy.quote}</h3>
         {revision && updated ? (

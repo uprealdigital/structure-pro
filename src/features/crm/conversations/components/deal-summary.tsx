@@ -54,24 +54,26 @@ export function DealSummary({
   }));
 
   return (
-    <div className="col-span-1 space-y-3.5 border-gray-200 pr-4">
+    <div className="col-span-1 space-y-3.5 border-gray-200 lg:pr-4">
       <div className="space-y-3">
         <div className="space-y-2 p-2.5">
           <h3 className="text-sm font-bold tracking-wider text-gray-900 uppercase">{copy.dealSummary}</h3>
           <p className="text-xs leading-relaxed font-normal whitespace-pre-line text-gray-700">{text}</p>
         </div>
         <div className="border-gray-200 pt-3">
-          <CustomerPills people={people} openId={customerId} />
+          <div className="max-lg:px-2.5">
+            <CustomerPills people={people} openId={customerId} fullWidth />
+          </div>
 
-          <div className="mt-1 flex flex-col gap-3 border-gray-100 pt-2.5 text-xs text-gray-500">
-            <div className="flex flex-col gap-1">
+          <div className="mt-1 flex items-start gap-6 border-gray-100 px-2.5 pt-2.5 text-xs text-gray-500 lg:flex-col lg:gap-3 lg:px-0">
+            <div className="flex min-w-0 flex-col gap-1">
               <span className="text-[11px] font-medium text-gray-400">{copy.source}</span>
               <span className="inline-flex w-fit items-center gap-1 rounded-full border border-gray-200 bg-gray-100 px-2 py-0.5 text-[10px] font-medium text-gray-800">
                 <SourceIcon source={source} />
                 {sourceLabel(source)}
               </span>
             </div>
-            <div className="flex flex-col gap-1">
+            <div className="flex min-w-0 flex-col gap-1">
               <span className="text-[11px] font-medium text-gray-400">{copy.creationDate}</span>
               <span className="flex items-center gap-1 text-[11px] font-medium text-gray-700">
                 <Calendar className="h-3 w-3 shrink-0 text-gray-400" strokeWidth={1.8} aria-hidden="true" />

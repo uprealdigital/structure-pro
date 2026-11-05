@@ -1,7 +1,7 @@
 "use client";
 
-import { ArrowLeftRight, Check, ChevronDown, ChevronRight, EllipsisVertical, Eye, Pencil, Plus, RotateCcw, Search, X } from "lucide-react";
-import { useEffect, useRef, useState, type Ref } from "react";
+import { ArrowLeftRight, Ban, Check, ChevronDown, ChevronLeft, ChevronRight, CopyPlus, EllipsisVertical, ExternalLink, Eye, FolderOutput, Info, Link, Pencil, Plus, RotateCcw, Search, Trash2, X } from "lucide-react";
+import { useEffect, useId, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import type { Customer } from "@/src/features/crm/common/types";
 import { copy } from "@/src/features/crm/conversations/locales/en";
@@ -12,12 +12,13 @@ import { DealStatusBadge } from "@/src/features/crm/deals/components/deal-status
 import { dealHeadingName } from "@/src/features/crm/deals/utils/naming";
 import { canMarkDealLost } from "@/src/features/crm/deals/utils/status";
 import { dealNameMaxLength, type DealStatus } from "@/src/features/crm/deals/types";
+import type { QuoteStatusAction } from "@/src/features/crm/quotes/config/status";
 
-function SwitchCustomersIcon() {
+function SwitchCustomersIcon({ className = "h-3.5 w-3.5 shrink-0 text-gray-500" }: { className?: string }) {
   return (
     <svg
       viewBox="0 0 24 24"
-      className="h-3.5 w-3.5 shrink-0 text-gray-500"
+      className={className}
       fill="none"
       stroke="currentColor"
       strokeWidth="2"
@@ -34,6 +35,54 @@ function SwitchCustomersIcon() {
         <path d="M20 17H4" />
       </g>
     </svg>
+  );
+}
+
+type QuoteActionHandlers = {
+  quoteId: string;
+  published: boolean;
+  pending: boolean;
+  adding: boolean;
+  canMove: boolean;
+  menuAction?: QuoteStatusAction;
+  onAddQuote: () => void;
+  onMove: () => void;
+  onDuplicate: () => void;
+  onMenuAction: () => void;
+  onCopied: () => void;
+  onCopyError: () => void;
+};
+
+function SheetRow({
+  icon,
+  label,
+  onClick,
+  disabled,
+  destructive,
+  chevron,
+  filled,
+}: {
+  icon: ReactNode;
+  label: string;
+  onClick: () => void;
+  disabled?: boolean;
+  destructive?: boolean;
+  chevron?: boolean;
+  filled?: boolean;
+}) {
+  return (
+    <button
+      type="button"
+      disabled={disabled}
+      onClick={onClick}
+      className={`flex w-full items-center gap-3 rounded-lg p-2 text-left transition-colors disabled:opacity-50 ${
+        destructive ? "text-[#dc2626] hover:bg-[#fef2f2]" : filled ? "bg-gray-50 text-gray-800 hover:bg-gray-100" : "text-gray-800 hover:bg-gray-100"
+      }`}
+    >
+      {icon}
+      <span className="min-w-0 flex-1 text-[13px] font-medium">{label}</span>
+      {chevron ? <ChevronRight className="h-5 w-5 shrink-0 text-gray-400" aria-hidden="true" /> : null}
+    </button>
   );
 }
 
@@ -171,6 +220,7 @@ function DealPeopleList({
   error,
   pendingId,
   onToggle,
+  expanded = false,
 }: {
   customers: Customer[];
   linkedIds: string[];
@@ -179,6 +229,7 @@ function DealPeopleList({
   error: string;
   pendingId: string;
   onToggle: (customerId: string) => void;
+  expanded?: boolean;
 }) {
   const [query, setQuery] = useState("");
   const search = useRef<HTMLInputElement>(null);
@@ -190,7 +241,7 @@ function DealPeopleList({
   }, []);
 
   return (
-    <div className="w-72 max-w-[calc(100vw-2.5rem)]">
+    <div className={expanded ? "w-full" : "w-72 max-w-[calc(100vw-2.5rem)]"}>
       <div className="border-b border-gray-200 px-2.5 py-2">
         <label className="relative block">
           <span className="sr-only">{copy.searchCustomers}</span>
@@ -206,7 +257,7 @@ function DealPeopleList({
           />
         </label>
       </div>
-      <ul role="menu" aria-label={copy.addPersonToDeal} className="max-h-80 overflow-y-auto p-1">
+      <ul role="menu" aria-label={copy.addPersonToDeal} className={`overflow-y-auto p-1 ${expanded ? "" : "max-h-80"}`}>
         {loading && customers.length === 0 ? (
           <li className="px-2.5 py-2 text-xs text-gray-500">{copy.customersLoading}</li>
         ) : visible.length === 0 ? (
@@ -259,6 +310,7 @@ function DealSwitchList({
   lostCount,
   onShowLost,
   onChoose,
+  expanded = false,
 }: {
   deals: ConversationDealListItem[];
   selectedId: string;
@@ -266,6 +318,7 @@ function DealSwitchList({
   lostCount: number;
   onShowLost: () => void;
   onChoose: (dealId: string) => void;
+  expanded?: boolean;
 }) {
   const list = useRef<HTMLUListElement>(null);
 
@@ -284,7 +337,7 @@ function DealSwitchList({
 
   return (
     <>
-      <ul ref={list} role="menu" aria-label={copy.switchActiveDeal} className="max-h-80 space-y-1 overflow-y-auto p-2">
+      <ul ref={list} role="menu" aria-label={copy.switchActiveDeal} className={`space-y-1 overflow-y-auto p-2 ${expanded ? "" : "max-h-80"}`}>
         {deals.map((deal) => {
           const current = deal.id === selectedId;
           const lostDeal = deal.stage === "deal_lost";
@@ -385,8 +438,10 @@ export function DealHeading({
   onToggleCustomer,
   onMarkLost,
   onReopen,
-  statusRef,
   mobileActionsSlot,
+  quoteActions,
+  details,
+  onViewDetails,
 }: {
   title: string;
   deals: ConversationDealOption[];
@@ -408,10 +463,19 @@ export function DealHeading({
   onToggleCustomer: (customerId: string) => void;
   onMarkLost: () => void;
   onReopen: () => void;
-  statusRef: Ref<HTMLDivElement>;
   mobileActionsSlot: HTMLElement | null;
+  quoteActions?: QuoteActionHandlers;
+  details: ReactNode;
+  onViewDetails: () => void;
 }) {
   const [actionsOpen, setActionsOpen] = useState(false);
+  const [sheetOpen, setSheetOpen] = useState(false);
+  const [sheetStep, setSheetStep] = useState<"actions" | "deals" | "people" | "details">("actions");
+  const [subStep, setSubStep] = useState<"deals" | "people" | "details">("deals");
+  const [sheetHeight, setSheetHeight] = useState<number | null>(null);
+  const actionsPane = useRef<HTMLDivElement>(null);
+  const subPane = useRef<HTMLDivElement>(null);
+  const sheetTitleId = useId();
   const [switchOpen, setSwitchOpen] = useState(false);
   const [peopleOpen, setPeopleOpen] = useState(false);
   const [peopleDealId, setPeopleDealId] = useState(selectedId);
@@ -442,12 +506,16 @@ export function DealHeading({
       setDealsOpen(false);
     }
     function onKey(event: KeyboardEvent) {
-      if (event.key === "Escape") {
-        setActionsOpen(false);
-        setSwitchOpen(false);
-        setPeopleOpen(false);
-        setDealsOpen(false);
+      if (event.key !== "Escape") return;
+      if (sheetOpen) {
+        if (sheetStep === "actions") setSheetOpen(false);
+        else setSheetStep("actions");
+        return;
       }
+      setActionsOpen(false);
+      setSwitchOpen(false);
+      setPeopleOpen(false);
+      setDealsOpen(false);
     }
     document.addEventListener("mousedown", close);
     document.addEventListener("keydown", onKey);
@@ -455,12 +523,14 @@ export function DealHeading({
       document.removeEventListener("mousedown", close);
       document.removeEventListener("keydown", onKey);
     };
-  }, [mobileActionsSlot]);
+  }, [mobileActionsSlot, sheetOpen, sheetStep]);
 
   useEffect(() => {
     setRenaming(false);
     setRenamePending(false);
     setRenameError("");
+    setSheetOpen(false);
+    setSheetStep("actions");
   }, [selectedId]);
 
   function toggleActions() {
@@ -501,11 +571,36 @@ export function DealHeading({
     });
   }
 
+  function closeSheet() {
+    setSheetOpen(false);
+    setSheetStep("actions");
+  }
+
+  function openSheetStep(step: "deals" | "people" | "details") {
+    setSubStep(step);
+    setSheetStep(step);
+  }
+
+  useLayoutEffect(() => {
+    if (!sheetOpen) return;
+    const pane = sheetStep === "actions" ? actionsPane.current : subPane.current;
+    if (!pane) return;
+    const measure = () => {
+      const next = pane.offsetHeight;
+      setSheetHeight((current) => (current === next ? current : next));
+    };
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(pane);
+    return () => observer.disconnect();
+  }, [sheetOpen, sheetStep, subStep]);
+
   function beginRename() {
     setActionsOpen(false);
     setSwitchOpen(false);
     setPeopleOpen(false);
     setDealsOpen(false);
+    closeSheet();
     setRenameError("");
     setRenaming(true);
   }
@@ -533,8 +628,26 @@ export function DealHeading({
     setSwitchOpen(false);
     setPeopleOpen(false);
     setDealsOpen(false);
+    closeSheet();
     if (dealId === selectedId) return;
     onSelectDeal(dealId);
+  }
+
+  function runQuoteAction(action: () => void) {
+    closeSheet();
+    action();
+  }
+
+  async function copyQuoteLink() {
+    if (!quoteActions) return;
+    closeSheet();
+    const url = `${window.location.origin}/quote/${quoteActions.quoteId}`;
+    try {
+      await navigator.clipboard.writeText(url);
+      quoteActions.onCopied();
+    } catch {
+      quoteActions.onCopyError();
+    }
   }
 
   function actionsMenu(align: "start" | "end") {
@@ -671,7 +784,7 @@ export function DealHeading({
   }
 
   return (
-    <div ref={menu} className="relative z-40 flex items-center gap-1.5">
+    <div ref={menu} className={`relative z-40 items-center gap-1.5 ${renaming ? "flex" : "hidden lg:flex"}`}>
       <div className="relative flex items-center">
         {renaming ? (
           <div className="relative">
@@ -732,9 +845,6 @@ export function DealHeading({
           </div>
         ) : null}
       </div>
-      <div ref={statusRef} className="lg:hidden">
-        <DealStatusBadge status={selectedStage} />
-      </div>
       <div className="relative hidden lg:block">
         <button
           type="button"
@@ -750,20 +860,241 @@ export function DealHeading({
       </div>
       {mobileActionsSlot
         ? createPortal(
-            <div className="relative">
-              <button
-                type="button"
-                aria-expanded={actionsOpen}
-                aria-haspopup="menu"
-                aria-label={copy.moreDealActions}
-                onClick={toggleActions}
-                className="flex h-7 w-7 cursor-pointer items-center justify-center rounded-full bg-gray-100 text-gray-600 transition-colors hover:bg-gray-200 hover:text-gray-900"
-              >
-                <EllipsisVertical className="h-4 w-4" aria-hidden="true" />
-              </button>
-              {actionsOpen ? actionsMenu("end") : null}
-            </div>,
+            <button
+              type="button"
+              aria-expanded={sheetOpen}
+              aria-haspopup="dialog"
+              aria-label={copy.conversationActions}
+              onClick={() => {
+                setSheetStep("actions");
+                setSheetOpen(true);
+              }}
+              className="flex h-7 w-7 cursor-pointer items-center justify-center rounded-full bg-[#edeef0] text-gray-600 transition-colors hover:bg-[#e4e5e7] hover:text-gray-900"
+            >
+              <EllipsisVertical className="h-4 w-4" aria-hidden="true" />
+            </button>,
             mobileActionsSlot,
+          )
+        : null}
+      {sheetOpen
+        ? createPortal(
+            <div className="fixed inset-0 z-50 lg:hidden">
+              <button type="button" aria-label={copy.close} className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={closeSheet} />
+              <div
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby={sheetTitleId}
+                className="absolute inset-x-0 bottom-0 flex max-h-full flex-col overflow-hidden rounded-t-2xl border-t border-gray-200 bg-white text-gray-900"
+              >
+                <div
+                  className={`relative overflow-hidden ${
+                    subStep === "details" ? "" : "transition-[height] duration-300 ease-out motion-reduce:transition-none"
+                  }`}
+                  style={sheetHeight == null ? undefined : { height: sheetHeight }}
+                >
+                  <div
+                    ref={actionsPane}
+                    className={`max-h-[100dvh] overflow-y-auto pb-[45px] ${
+                      subStep === "details" ? "" : "transition-transform duration-300 ease-out motion-reduce:transition-none"
+                    } ${sheetStep === "actions" ? "translate-x-0" : "-translate-x-full"}`}
+                  >
+                    <div className="border-b border-gray-200 px-3 py-3">
+                      <div className="flex items-start gap-2">
+                        <div className="min-w-0 flex-1">
+                          <h2 id={sheetStep === "actions" ? sheetTitleId : undefined} className="truncate font-serif text-sm font-semibold text-gray-900">
+                            {title || copy.quote}
+                          </h2>
+                          <div className="mt-1.5">
+                            <DealStatusBadge status={selectedStage} />
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          aria-label={copy.close}
+                          onClick={closeSheet}
+                          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-gray-100 text-gray-500 transition-colors hover:bg-gray-200 hover:text-gray-900"
+                        >
+                          <X className="h-4 w-4" aria-hidden="true" />
+                        </button>
+                      </div>
+                      <div className="mt-3">
+                        <SheetRow
+                          icon={<Info className="h-[18px] w-[18px] shrink-0 text-gray-500" aria-hidden="true" />}
+                          label={copy.viewDetails}
+                          chevron
+                          filled
+                          onClick={() => {
+                            onViewDetails();
+                            openSheetStep("details");
+                          }}
+                        />
+                      </div>
+                    </div>
+                    <div className="flex flex-col gap-3 px-3 py-3">
+                      <section className="flex flex-col gap-1">
+                        <h3 className="px-2 text-[11px] font-semibold text-gray-500">{copy.dealsSection}</h3>
+                        {items.length > 1 ? (
+                          <SheetRow
+                            icon={<ArrowLeftRight className="h-[18px] w-[18px] shrink-0 text-gray-500" aria-hidden="true" />}
+                            label={copy.switchActiveDeal}
+                            chevron
+                            onClick={() => {
+                              setShowLost(selectedStage === "deal_lost");
+                              openSheetStep("deals");
+                            }}
+                          />
+                        ) : null}
+                        <SheetRow
+                          icon={<Pencil className="h-[18px] w-[18px] shrink-0 text-gray-500" aria-hidden="true" />}
+                          label={copy.renameDeal}
+                          onClick={beginRename}
+                        />
+                        <SheetRow
+                          icon={<SwitchCustomersIcon className="h-[18px] w-[18px] shrink-0 text-gray-500" />}
+                          label={copy.addPersonToDeal}
+                          chevron
+                          onClick={() => {
+                            onLoadCustomers();
+                            openSheetStep("people");
+                          }}
+                        />
+                        <SheetRow
+                          icon={<Plus className="h-[18px] w-[18px] shrink-0 text-gray-500" strokeWidth={2} aria-hidden="true" />}
+                          label={copy.createDeal}
+                          disabled={creating}
+                          onClick={() => {
+                            closeSheet();
+                            onCreateDeal();
+                          }}
+                        />
+                        {canMarkLost || lost ? (
+                          <SheetRow
+                            icon={
+                              lost ? (
+                                <RotateCcw className="h-[18px] w-[18px] shrink-0 text-gray-500" aria-hidden="true" />
+                              ) : (
+                                <X className="h-[18px] w-[18px] shrink-0" aria-hidden="true" />
+                              )
+                            }
+                            label={lost ? copy.reopenDeal : copy.markAsLost}
+                            destructive={!lost}
+                            disabled={pending}
+                            onClick={() => {
+                              closeSheet();
+                              if (lost) onReopen();
+                              else onMarkLost();
+                            }}
+                          />
+                        ) : null}
+                      </section>
+                      {quoteActions ? (
+                        <section className="flex flex-col gap-1 border-t border-gray-200 pt-3">
+                          <h3 className="px-2 text-[11px] font-semibold text-gray-500">{copy.quotesMenu}</h3>
+                          <SheetRow
+                            icon={<ExternalLink className="h-[18px] w-[18px] shrink-0 text-gray-500" aria-hidden="true" />}
+                            label={copy.openQuote}
+                            onClick={() => {
+                              const quoteId = quoteActions.quoteId;
+                              closeSheet();
+                              window.open(`/quote/${quoteId}?mode=internal`, "_blank", "noopener,noreferrer");
+                            }}
+                          />
+                          {quoteActions.published ? (
+                            <SheetRow
+                              icon={<Link className="h-[18px] w-[18px] shrink-0 text-gray-500" aria-hidden="true" />}
+                              label={copy.copyPublishLink}
+                              onClick={() => void copyQuoteLink()}
+                            />
+                          ) : null}
+                          <SheetRow
+                            icon={<Plus className="h-[18px] w-[18px] shrink-0 text-gray-500" strokeWidth={2} aria-hidden="true" />}
+                            label={quoteActions.adding ? copy.addingQuote : copy.addQuote}
+                            disabled={quoteActions.adding || quoteActions.pending}
+                            onClick={() => runQuoteAction(quoteActions.onAddQuote)}
+                          />
+                          <SheetRow
+                            icon={<CopyPlus className="h-[18px] w-[18px] shrink-0 text-gray-500" aria-hidden="true" />}
+                            label={copy.duplicateQuote}
+                            disabled={quoteActions.pending}
+                            onClick={() => runQuoteAction(quoteActions.onDuplicate)}
+                          />
+                          {quoteActions.canMove ? (
+                            <SheetRow
+                              icon={<FolderOutput className="h-[18px] w-[18px] shrink-0 text-gray-500" aria-hidden="true" />}
+                              label={copy.moveQuoteToNewDeal}
+                              disabled={quoteActions.pending}
+                              onClick={() => runQuoteAction(quoteActions.onMove)}
+                            />
+                          ) : null}
+                          {quoteActions.menuAction ? (
+                            <SheetRow
+                              icon={
+                                quoteActions.menuAction.id === "delete_draft" ? (
+                                  <Trash2 className="h-[18px] w-[18px] shrink-0" aria-hidden="true" />
+                                ) : (
+                                  <Ban className="h-[18px] w-[18px] shrink-0" aria-hidden="true" />
+                                )
+                              }
+                              label={quoteActions.menuAction.label}
+                              destructive
+                              disabled={quoteActions.pending}
+                              onClick={() => runQuoteAction(quoteActions.onMenuAction)}
+                            />
+                          ) : null}
+                        </section>
+                      ) : null}
+                    </div>
+                  </div>
+                  <div
+                    ref={subPane}
+                    className={`absolute inset-x-0 top-0 flex max-h-[100dvh] min-h-0 flex-col pb-[45px] ${
+                      subStep === "details" ? "" : "transition-transform duration-300 ease-out motion-reduce:transition-none"
+                    } ${sheetStep === "actions" ? "translate-x-full" : "translate-x-0"}`}
+                  >
+                    <div className="flex shrink-0 items-center gap-2 border-b border-gray-200 px-3 py-3">
+                      <button
+                        type="button"
+                        aria-label={copy.goBack}
+                        onClick={() => setSheetStep("actions")}
+                        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-gray-900 transition-colors hover:bg-gray-100"
+                      >
+                        <ChevronLeft className="h-5 w-5" strokeWidth={2} aria-hidden="true" />
+                      </button>
+                      <h2 id={sheetStep === "actions" ? undefined : sheetTitleId} className="min-w-0 truncate font-serif text-base font-semibold text-gray-900">
+                        {subStep === "deals" ? copy.switchActiveDeal : subStep === "people" ? copy.addPersonToDeal : copy.dealDetails}
+                      </h2>
+                    </div>
+                    <div className="min-h-0 flex-1 overflow-y-auto">
+                      {subStep === "deals" ? (
+                        <DealSwitchList
+                          deals={visible}
+                          selectedId={selectedId}
+                          showLost={showLost}
+                          lostCount={lostCount}
+                          expanded
+                          onShowLost={() => setShowLost((value) => !value)}
+                          onChoose={choose}
+                        />
+                      ) : subStep === "people" ? (
+                        <DealPeopleList
+                          customers={customers}
+                          linkedIds={linkedCustomerIds}
+                          primaryId={primaryCustomerId}
+                          loading={customersLoading}
+                          error={customersError}
+                          pendingId={pendingCustomerId}
+                          expanded
+                          onToggle={onToggleCustomer}
+                        />
+                      ) : (
+                        details
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>,
+            document.body,
           )
         : null}
     </div>

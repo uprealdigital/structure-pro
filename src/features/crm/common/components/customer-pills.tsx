@@ -49,11 +49,11 @@ function CustomerLine({ children }: { children: ReactNode }) {
   return <span className="col-start-1 row-start-1 flex items-center gap-2 text-xs whitespace-nowrap">{children}</span>;
 }
 
-function CustomerPillItem({ person, startOpen }: { person: CustomerPill; startOpen: boolean }) {
+function CustomerPillItem({ person, startOpen, fullWidth }: { person: CustomerPill; startOpen: boolean; fullWidth?: boolean }) {
   const [open, setOpen] = useState(startOpen);
 
   return (
-    <div className="inline-grid max-w-full">
+    <div className={fullWidth ? "inline-grid max-w-full max-lg:grid max-lg:w-full max-lg:grid-cols-1" : "inline-grid max-w-full"}>
       <div className="invisible col-start-1 row-start-1 grid px-3.5" aria-hidden="true">
         <span className="col-start-1 row-start-1">
           <CustomerFace person={person} />
@@ -103,16 +103,18 @@ function CustomerPillItem({ person, startOpen }: { person: CustomerPill; startOp
 export function CustomerPills({
   people,
   openId,
+  fullWidth,
 }: {
   people: CustomerPill[];
   openId?: string;
+  fullWidth?: boolean;
 }) {
   if (people.length === 0) return null;
 
   return (
-    <div className="flex flex-wrap items-start gap-2">
+    <div className={fullWidth ? "flex flex-wrap items-start gap-2 max-lg:flex-col max-lg:items-stretch" : "flex flex-wrap items-start gap-2"}>
       {people.map((person) => (
-        <CustomerPillItem key={person.id} person={person} startOpen={person.id === openId} />
+        <CustomerPillItem key={person.id} person={person} startOpen={person.id === openId} fullWidth={fullWidth} />
       ))}
     </div>
   );

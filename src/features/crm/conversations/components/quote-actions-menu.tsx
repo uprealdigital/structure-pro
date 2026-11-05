@@ -68,7 +68,7 @@ export function QuoteActionsMenu({
   }
 
   return (
-    <div ref={menu} className="relative self-center">
+    <div ref={menu} className="relative hidden self-center lg:block">
       <button
         type="button"
         aria-expanded={open}
