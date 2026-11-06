@@ -219,6 +219,20 @@ function quoteLogName(quote: QuoteRecord): string {
   return quoteDisplayName(quote.quoteNumber, describeSelections(quote.selections).specs);
 }
 
+async function quoteStatusActivity(
+  id: string,
+  current: QuoteStatus | undefined,
+  next: QuoteStatus,
+): Promise<{ quoteId: string; name: string; status: string } | undefined> {
+  if (!current || current === next) return undefined;
+  const quote = await readQuote(id);
+  return {
+    quoteId: id,
+    name: quote ? quoteLogName(quote) : portalCopy.quote,
+    status: quoteStatuses[next].label,
+  };
+}
+
 export async function updateQuote(
   id: string,
   patch: { invoiceId?: string; activeRevisionId?: string; status?: QuoteStatus },
@@ -231,14 +245,7 @@ export async function updateQuote(
     const next = quoteStatusSchema.parse(patch.status);
     const current = await readQuoteStatus(id);
     row.status = next;
-    if (current && current !== next) {
-      const quote = await readQuote(id);
-      statusActivity = {
-        quoteId: id,
-        name: quote ? quoteLogName(quote) : portalCopy.quote,
-        status: quoteStatuses[next].label,
-      };
-    }
+    statusActivity = await quoteStatusActivity(id, current, next);
   }
   const { error } = await crm().from("quotes").update(row).eq("id", id);
   throwIfError(error);
@@ -255,6 +262,8 @@ export async function setQuoteStatus(id: string, status: QuoteStatus): Promise<v
 
 export async function writeQuoteStatus(id: string, status: QuoteStatus): Promise<void> {
   const next = quoteStatusSchema.parse(status);
+  const current = await readQuoteStatus(id);
+  const statusActivity = await quoteStatusActivity(id, current, next);
   const { data, error } = await crm()
     .from("quotes")
     .update({ status: next, updated_at: new Date().toISOString() })
@@ -263,6 +272,7 @@ export async function writeQuoteStatus(id: string, status: QuoteStatus): Promise
     .maybeSingle();
   throwIfError(error);
   if (!data) throw new Error("Quote was not found");
+  if (statusActivity) await recordQuoteStatusActivity(statusActivity);
   if (typeof data.active_revision_id !== "string") return;
   await updateQuoteRevisionStatus(data.active_revision_id, next);
 }
