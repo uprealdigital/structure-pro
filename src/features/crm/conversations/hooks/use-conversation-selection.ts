@@ -37,11 +37,21 @@ export function useConversationSelection({
     initialSelectedId && !initialConversation ? "missing" : "ready",
   );
   const request = useRef(0);
+  const mobileThread = useRef(false);
   const serverConversation = useRef(initialConversation);
   serverConversation.current = initialConversation;
 
+  function mobileLayout(): boolean {
+    return typeof window !== "undefined" && !window.matchMedia("(min-width: 1024px)").matches;
+  }
+
   useLayoutEffect(() => {
-    if (!showMobileInbox()) return;
+    if (!mobileLayout()) return;
+    if (mobileThread.current) return;
+    if (!showMobileInbox()) {
+      mobileThread.current = true;
+      return;
+    }
     request.current += 1;
     setSelectedId(undefined);
     setConversation(undefined);
@@ -49,13 +59,21 @@ export function useConversationSelection({
   }, [initialSelectedId, initialConversation?.id, initialDealId]);
 
   useEffect(() => {
-    request.current += 1;
-    if (showMobileInbox()) {
-      setSelectedId(undefined);
-      setConversation(undefined);
-      setStatus("ready");
-      return;
+    if (mobileLayout()) {
+      if (mobileThread.current) {
+        if (showMobileInbox() && selectedId) replaceUrl(selectedId, dealId);
+        return;
+      }
+      if (showMobileInbox()) {
+        request.current += 1;
+        setSelectedId(undefined);
+        setConversation(undefined);
+        setStatus("ready");
+        return;
+      }
+      mobileThread.current = true;
     }
+    request.current += 1;
     setSelectedId(initialSelectedId);
     setConversation(serverConversation.current);
     setDealId(initialDealId);
@@ -95,6 +113,7 @@ export function useConversationSelection({
 
   async function selectConversation(id: string, nextDealId?: string) {
     if (id === selectedId && (status === "ready" || status === "pending")) return;
+    if (mobileLayout()) mobileThread.current = true;
 
     const ticket = request.current + 1;
     request.current = ticket;
@@ -125,6 +144,7 @@ export function useConversationSelection({
 
   function clearConversation() {
     request.current += 1;
+    if (mobileLayout()) mobileThread.current = false;
     setSelectedId(undefined);
     setConversation(undefined);
     setDealId(undefined);

@@ -39,8 +39,9 @@ export function useActivityStream(
       const url = since
         ? `/api/crm/conversations/events?since=${encodeURIComponent(since)}`
         : "/api/crm/conversations/events";
-      source = new EventSource(url);
-      source.onmessage = (message) => {
+      const current = new EventSource(url);
+      source = current;
+      current.onmessage = (message) => {
         let payload: unknown;
         try {
           payload = JSON.parse(message.data);
@@ -57,7 +58,7 @@ export function useActivityStream(
         if (createdAt && (!sinceRef.current || createdAt > sinceRef.current)) sinceRef.current = createdAt;
         onEventRef.current(event);
       };
-      source.addEventListener("read", (message) => {
+      current.addEventListener("read", (message) => {
         let payload: unknown;
         try {
           payload = JSON.parse((message as MessageEvent).data);
@@ -68,18 +69,49 @@ export function useActivityStream(
         if (!parsed.success) return;
         onReadRef.current(parsed.data);
       });
-      source.onerror = () => {
-        source?.close();
+      current.onerror = () => {
+        if (source !== current) return;
+        current.close();
         source = undefined;
         if (!stopped) timer = window.setTimeout(connect, reconnectDelayMs);
       };
     }
 
+    function resumeAfterBackground() {
+      if (stopped || window.matchMedia("(min-width: 1024px)").matches) return;
+      if (document.visibilityState !== "visible") return;
+      if (timer) window.clearTimeout(timer);
+      timer = undefined;
+      const previous = source;
+      source = undefined;
+      previous?.close();
+      connect();
+    }
+
+    let resumeTimer: number | undefined;
+    function scheduleResume() {
+      window.clearTimeout(resumeTimer);
+      resumeTimer = window.setTimeout(resumeAfterBackground, 150);
+    }
+
+    function onVisibility() {
+      if (document.visibilityState === "visible") scheduleResume();
+    }
+
+    function onPageShow(event: PageTransitionEvent) {
+      if (event.persisted) scheduleResume();
+    }
+
     connect();
+    document.addEventListener("visibilitychange", onVisibility);
+    window.addEventListener("pageshow", onPageShow);
     return () => {
       stopped = true;
+      window.clearTimeout(resumeTimer);
       if (timer) window.clearTimeout(timer);
       source?.close();
+      document.removeEventListener("visibilitychange", onVisibility);
+      window.removeEventListener("pageshow", onPageShow);
     };
   }, []);
 }
