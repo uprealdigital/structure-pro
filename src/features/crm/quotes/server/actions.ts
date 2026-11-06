@@ -434,6 +434,14 @@ export async function activateQuoteRevision(input: {
   }
 }
 
+async function markQuoteDealWon(quoteId: string): Promise<void> {
+  const links = await readDealQuotesForQuote(quoteId);
+  const linked = links[0] ? await readDeal(links[0].dealId) : undefined;
+  const deal = linked ?? (await readDealsByQuoteId(quoteId))[0];
+  if (!deal || deal.status === "deal_won") return;
+  await updateDeal(deal.id, { status: "deal_won" });
+}
+
 export async function payQuoteDeposit(
   input: unknown,
 ): Promise<{ success: true } | { error: string }> {
@@ -442,6 +450,8 @@ export async function payQuoteDeposit(
 
   try {
     await writeQuoteStatus(parsed.data.quoteId, "deposit_paid");
+    await markQuoteDealWon(parsed.data.quoteId);
+    revalidateQuote(parsed.data.quoteId);
     return { success: true };
   } catch (error) {
     void recordCrmLog({ feature: "quotes", error });

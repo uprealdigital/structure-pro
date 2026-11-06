@@ -1503,6 +1503,7 @@ export function ConversationDetail({
       return;
     }
     patchQuoteStatus(quote, "deposit_paid");
+    setDealStatusPatches((current) => ({ ...current, [dealId]: "deal_won" }));
   }
 
   function runQuoteStatusAction(id: QuoteStatusActionId) {
