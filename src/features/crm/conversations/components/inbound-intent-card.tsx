@@ -81,7 +81,7 @@ export function InboundIntentCard({
       {loading && draft && changes.length === 0 ? (
         <SuggestionSkeleton />
       ) : draft ? (
-        <div className="mt-3 w-5/8 rounded-lg border border-gray-200 bg-gray-50 p-2.5">
+        <div className="mt-3 w-full min-w-0 rounded-lg border border-gray-200 bg-gray-50 p-2.5 lg:w-5/8">
           {quotes && quotes.length > 0 && selectedQuoteId ? (
             <QuoteTarget
               quotes={quotes}
@@ -90,8 +90,8 @@ export function InboundIntentCard({
               onSelect={onSelectQuote}
             />
           ) : null}
-          <div className="mt-2 flex items-start gap-4">
-            <div className="flex items-center gap-3">
+          <div className="mt-2 flex min-w-0 items-start gap-4">
+            <div className="flex min-w-0 items-center gap-3">
               <div className="h-20 w-24 shrink-0 overflow-hidden rounded-lg bg-white">
                 {draft.image ??
                   (draft.imageUrl ? (
@@ -134,14 +134,16 @@ export function InboundIntentCard({
       ) : loading ? (
         <p className="mt-3 text-xs text-gray-500">{copy.loadingSuggestion}</p>
       ) : null}
-      <div className="mt-3 flex flex-wrap items-center gap-2">
-        <IntentShareMenu label={actionLabel} pending={pending} onSharePhotos={onSharePhotos} onShareQuote={onShareQuote} />
+      <div className="mt-3 flex flex-wrap items-center justify-end gap-2 lg:justify-start">
+        <div className="order-3 shrink-0 lg:order-1">
+          <IntentShareMenu label={actionLabel} pending={pending} onSharePhotos={onSharePhotos} onShareQuote={onShareQuote} />
+        </div>
         {onApply ? (
           <button
             type="button"
             disabled={pending}
             onClick={onApply}
-            className="inline-flex shrink-0 items-center rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs font-medium whitespace-nowrap text-gray-900 shadow-xs hover:bg-gray-50 disabled:opacity-60"
+            className="order-2 inline-flex shrink-0 items-center rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs font-medium whitespace-nowrap text-gray-900 shadow-xs hover:bg-gray-50 disabled:opacity-60 lg:order-2"
           >
             {copy.applySuggestion}
           </button>
@@ -151,7 +153,7 @@ export function InboundIntentCard({
             type="button"
             disabled={pending}
             onClick={onReview}
-            className="inline-flex shrink-0 items-center gap-1.5 rounded-lg px-2 py-2 text-xs font-medium whitespace-nowrap text-gray-700 transition-colors hover:bg-gray-100 disabled:opacity-60"
+            className="order-1 inline-flex shrink-0 items-center gap-1.5 rounded-lg px-2 py-2 text-xs font-medium whitespace-nowrap text-gray-700 transition-colors hover:bg-gray-100 disabled:opacity-60 lg:order-3"
           >
             <Pencil className="h-3.5 w-3.5 shrink-0 text-gray-500" strokeWidth={1.8} aria-hidden="true" />
             {copy.reviewSuggestedChanges}
@@ -164,7 +166,7 @@ export function InboundIntentCard({
 
 function SuggestionSkeleton() {
   return (
-    <div className="mt-3 w-5/8 animate-pulse rounded-lg border border-gray-200 bg-gray-50 p-2.5">
+    <div className="mt-3 w-full animate-pulse rounded-lg border border-gray-200 bg-gray-50 p-2.5 lg:w-5/8">
       <div className="h-3 w-28 rounded bg-gray-200" />
       <div className="mt-3 flex items-start gap-4">
         <div className="h-20 w-24 shrink-0 rounded-lg bg-gray-200" />
@@ -346,7 +348,7 @@ function IntentShareMenu({
       {open ? (
         <div
           role="menu"
-          className="absolute left-0 bottom-full z-40 mb-1 w-max min-w-full overflow-hidden rounded-lg border border-gray-200 bg-white py-1 text-left shadow-lg"
+          className="absolute right-0 bottom-full z-40 mb-1 w-max min-w-full overflow-hidden rounded-lg border border-gray-200 bg-white py-1 text-left shadow-lg lg:right-auto lg:left-0"
         >
           <button
             type="button"

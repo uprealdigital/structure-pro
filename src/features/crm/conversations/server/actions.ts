@@ -101,6 +101,7 @@ import { defaultDealName } from "@/src/features/crm/deals/utils/naming";
 import { canMarkDealLost } from "@/src/features/crm/deals/utils/status";
 import { canMoveQuoteToNewDeal } from "@/src/features/crm/quotes/config/status";
 import { markQuoteSent, readQuoteStatus, setQuoteStatus } from "@/src/features/crm/quotes/db/quote";
+import { quoteDisplayName } from "@/src/features/crm/quotes/utils/formatting";
 import { readQuoteRevision, updateQuoteRevision } from "@/src/features/crm/quotes/db/quote-revision";
 import { recordCrmLog } from "@/src/features/crm/common/db/log";
 
@@ -229,6 +230,9 @@ export async function sendWebsiteQuoteMessage(input: {
   if (!quote) throw new Error("Quote was not found");
 
   const described = describeSelections(quote.selections);
+  const quoteName = quote.quoteNumber
+    ? quoteDisplayName(quote.quoteNumber, described.specs)
+    : copy.quote;
   const delivery = prepareNewQuoteMessage({
     fullName: customer.fullName,
     width: quote.selections.width,
@@ -239,7 +243,8 @@ export async function sendWebsiteQuoteMessage(input: {
   });
   const loggedAt = deal.createdAt ?? new Date().toISOString();
   const leadAt = new Date(loggedAt).toISOString();
-  const sentAt = new Date(Date.parse(leadAt) + 1).toISOString();
+  const quoteAt = new Date(Date.parse(leadAt) + 1).toISOString();
+  const sentAt = new Date(Date.parse(leadAt) + 2).toISOString();
   const dealName = deal.name?.trim() || defaultDealName(deal.source, loggedAt);
   const channelKey = delivery.chatId ?? customer.phone;
   const opened = await openConversation({
@@ -259,6 +264,14 @@ export async function sendWebsiteQuoteMessage(input: {
       },
       {
         role: "model",
+        channel: "system",
+        text: systemEventBody("duplicatedQuote", quoteName),
+        generatedBy: "manual",
+        createdAt: quoteAt,
+        readAt: quoteAt,
+      },
+      {
+        role: "model",
         channel: delivery.channel,
         text: delivery.text,
         generatedBy: "ai",
@@ -273,6 +286,7 @@ export async function sendWebsiteQuoteMessage(input: {
     void recordCrmLog({ feature: "conversations", error });
     if (opened.created) await removeConversation(channelKey);
     else {
+      await removeLatestActivity(opened.id);
       await removeLatestActivity(opened.id);
       await removeLatestActivity(opened.id);
     }
