@@ -867,7 +867,7 @@ function QuoteModal({
   }
 
   function fillSample() {
-    setFullName("Daniel Rainville");
+    setFullName("John Smith");
     setPhone("646-284-0831");
     setEmail("arthamas@gmail.com");
     setAgreedToTerms(true);
